@@ -4,8 +4,12 @@
 // пора обновиться (findDueObjects), и прогоняет их последовательно
 // (runObjectMonitor). Ошибка одного объекта не валит остальные.
 //
-// Защищён X-Cron-Secret + pg_try_advisory_lock (ключ 7470002 — по аналогии с
-// hh-import 7470001), чтобы параллельные тики не пересекались.
+// Защищён X-Cron-Secret + pg_try_advisory_lock, чтобы параллельные тики не
+// пересекались. Аудит 10.07: ключ был 7470002 — ТОТ ЖЕ, что у
+// pending-rejections (скопирован «по аналогии» без смены значения); сетки
+// кронов совпадали каждые 15 мин и глушили друг друга (57%/81% успешных
+// прогонов вместо ~100%). Реестр занятых ключей: 7470001 hh-import,
+// 7470002 pending-rejections, 7470003 price-monitor-tick.
 import { NextRequest, NextResponse } from "next/server"
 import { pgClient } from "@/lib/db"
 import { checkCronAuth } from "@/lib/cron/auth"
@@ -14,7 +18,7 @@ import { findDueObjects, runObjectMonitor } from "@/lib/price-monitor/run-monito
 
 export const maxDuration = 300
 
-const LOCK_KEY = 7470002
+const LOCK_KEY = 7470003
 const DUE_LIMIT = 5
 
 async function handle(req: NextRequest) {

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -20,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { AlertCircle, Trash2, Users, UserPlus, X } from "lucide-react"
+import { AlertCircle, Trash2, Users, UserPlus, X, Video, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import type { CalendarEvent } from "./week-view"
 
 interface Room {
@@ -58,6 +60,8 @@ export interface EventFormData {
   // #14: адрес (Офис) или ссылка на видео-звонок (Онлайн)
   location?: string
   meetingUrl?: string
+  // Юрий 10.07: авто-уведомление кандидата ссылкой на встречу при её вставке/смене.
+  notifyMeetingLink?: boolean
 }
 
 const INTERVIEW_TYPES = ["Техническое", "HR", "Финальное"]
@@ -111,7 +115,12 @@ export function EventModal({
   const [interviewFormat, setInterviewFormat] = useState("Онлайн")
   const [location, setLocation] = useState("")
   const [meetingUrl, setMeetingUrl] = useState("")
+  const [initialMeetingUrl, setInitialMeetingUrl] = useState("")
+  const [notifyMeetingLink, setNotifyMeetingLink] = useState(true)
   const [vacancies, setVacancies] = useState<{ id: string; title: string }[]>([])
+  // Личный Zoom текущего пользователя (Юрий 10.07) — кнопка «Создать Zoom-встречу».
+  const [zoomConnected, setZoomConnected] = useState(false)
+  const [creatingZoomMeeting, setCreatingZoomMeeting] = useState(false)
 
   // Список вакансий и пользователей компании (подгружаем при открытии).
   useEffect(() => {
@@ -126,7 +135,36 @@ export function EventModal({
         if (Array.isArray(j)) setCompanyUsers(j.map(u => ({ id: u.id, name: u.name })))
       })
       .catch(() => {})
+    fetch("/api/integrations/zoom/status")
+      .then(r => r.ok ? r.json() : null)
+      .then((j: { data?: { connected: boolean } } | null) => setZoomConnected(!!j?.data?.connected))
+      .catch(() => {})
   }, [open])
+
+  const handleCreateZoomMeeting = async () => {
+    if (!startAt || !endAt) { return }
+    setCreatingZoomMeeting(true)
+    try {
+      const res = await fetch("/api/modules/hr/calendar/zoom/create-meeting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title || "Интервью",
+          startAt: new Date(startAt).toISOString(),
+          endAt: new Date(endAt).toISOString(),
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(json.error ?? "Не удалось создать встречу в Zoom"); return }
+      setMeetingUrl(json.data?.joinUrl ?? json.joinUrl ?? "")
+      setNotifyMeetingLink(true)
+      toast.success("Zoom-встреча создана")
+    } catch {
+      toast.error("Ошибка сети")
+    } finally {
+      setCreatingZoomMeeting(false)
+    }
+  }
 
   useEffect(() => {
     if (event) {
@@ -143,6 +181,8 @@ export function EventModal({
       setInterviewFormat(event.interviewFormat ?? "Онлайн")
       setLocation(event.location ?? "")
       setMeetingUrl(event.meetingUrl ?? "")
+      setInitialMeetingUrl(event.meetingUrl ?? "")
+      setNotifyMeetingLink(true)
     } else if (defaultDate) {
       const start = defaultDate
       const end = new Date(start.getTime() + 60 * 60 * 1000)
@@ -159,6 +199,8 @@ export function EventModal({
       setInterviewFormat("Онлайн")
       setLocation("")
       setMeetingUrl("")
+      setInitialMeetingUrl("")
+      setNotifyMeetingLink(true)
     }
     setConflict(null)
     setExternalInput("")
@@ -242,6 +284,9 @@ export function EventModal({
         interviewFormat: isInterview ? interviewFormat : "",
         location:        isInterview && interviewFormat === "Офис" ? location : "",
         meetingUrl:      isInterview && interviewFormat === "Онлайн" ? meetingUrl : "",
+        notifyMeetingLink: isInterview && interviewFormat === "Онлайн"
+          ? (meetingUrl.trim() !== initialMeetingUrl.trim() ? notifyMeetingLink : false)
+          : false,
       })
       onClose()
     } finally {
@@ -363,7 +408,42 @@ export function EventModal({
               {interviewFormat === "Онлайн" && (
                 <div className="space-y-1">
                   <Label htmlFor="iv-meeting-url">Ссылка на видео-звонок</Label>
-                  <Input id="iv-meeting-url" value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." />
+                  <div className="flex gap-2">
+                    <Input id="iv-meeting-url" value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." className="flex-1" />
+                    {zoomConnected ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shrink-0"
+                        onClick={handleCreateZoomMeeting}
+                        disabled={creatingZoomMeeting || !startAt || !endAt}
+                      >
+                        {creatingZoomMeeting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
+                        Zoom
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" className="gap-1.5 shrink-0" asChild>
+                        <a href="/api/integrations/zoom/auth" target="_blank" rel="noopener noreferrer">
+                          <Video className="h-3.5 w-3.5" />
+                          Подключить
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                  {meetingUrl.trim() && meetingUrl.trim() !== initialMeetingUrl.trim() && (
+                    <label className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
+                      <Checkbox
+                        checked={notifyMeetingLink}
+                        onCheckedChange={(v) => setNotifyMeetingLink(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Отправить кандидату сообщение со ссылкой и просьбой подтвердить получение
+                        (+ ваши контакты из Профиля, если заполнены)
+                      </span>
+                    </label>
+                  )}
                 </div>
               )}
             </div>

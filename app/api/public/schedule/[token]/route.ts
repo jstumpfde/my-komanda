@@ -12,10 +12,17 @@ import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
+import { createNotification } from "@/lib/notifications"
 import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
 import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
+
+// Экранирование для Telegram parse_mode=HTML: спецсимвол в имени кандидата
+// (например «<Иван>») ломал разбор всего сообщения и уведомление молча терялось.
+function escapeTgHtml(s: string): string {
+  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+}
 
 // ─── Константы / дефолты ──────────────────────────────────────────────────────
 
@@ -236,7 +243,11 @@ export async function GET(
       sched,
     )
     const step      = sched.slotStep ?? DEFAULT_STEP
-    const maxPerDay = Number(sched.maxPerDay ?? DEFAULT_MAX) || DEFAULT_MAX
+    // Аудит 10.07: `|| DEFAULT_MAX` молча превращал явный 0 («временно закрыть
+    // запись») в 8 слотов. 0 — валидное значение; дефолт — только для
+    // отсутствующего/некорректного.
+    const maxPerDayRaw = Number(sched.maxPerDay ?? DEFAULT_MAX)
+    const maxPerDay = Number.isFinite(maxPerDayRaw) && maxPerDayRaw >= 0 ? maxPerDayRaw : DEFAULT_MAX
     const timezone  = sched.timezone ?? "Europe/Moscow"
 
     // 4. Методы интервью
@@ -422,6 +433,13 @@ export async function POST(
       return apiError("Обязательные поля: date, time, method", 400)
     }
 
+    // Аудит 10.07: method — только из известного перечня. Раньше произвольная
+    // строка клиента попадала в interviewFormat/methodLabel и уходила как есть
+    // в Telegram HR и карточку календаря.
+    if (!(body.method in METHOD_LABELS)) {
+      return apiError("Неизвестный способ интервью", 400)
+    }
+
     // Проверяем формат
     const dateRx = /^\d{4}-\d{2}-\d{2}$/
     const timeRx = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -435,12 +453,20 @@ export async function POST(
         id:        candidates.id,
         name:      candidates.name,
         vacancyId: candidates.vacancyId,
+        stage:     candidates.stage,
       })
       .from(candidates)
       .where(isShortId(token) ? eq(candidates.shortId, token) : eq(candidates.token, token))
       .limit(1)
 
     if (!candidate) return apiError("Кандидат не найден", 404)
+
+    // Аудит 10.07: отклонённый/нанятый кандидат не должен занимать реальный
+    // слот по валидной старой ссылке (стадию гардил только апдейт stage ниже,
+    // но само calendar-событие создавалось всегда).
+    if (candidate.stage === "rejected" || candidate.stage === "hired") {
+      return apiError("Запись на интервью по этой ссылке больше недоступна.", 403)
+    }
 
     // 2. Вакансия + компания + первый user компании (для createdBy)
     const [row] = await db
@@ -556,43 +582,12 @@ export async function POST(
       })
     }
 
-    // 5.5 Анти-двойная-запись (company-wide, все вакансии): слот не должен
-    // пересекаться с ЧУЖИМ подтверждённым интервью этой компании. Закрывает
-    // гонку двух кандидатов на один слот. Свои события исключаем (их перенос —
-    // ниже). Пересечение: existing.startAt < endAt И existing.endAt > startAt.
-    const [slotTaken] = await db
-      .select({ id: calendarEvents.id })
-      .from(calendarEvents)
-      .where(and(
-        eq(calendarEvents.companyId,   row.companyId),
-        eq(calendarEvents.type,        "interview"),
-        eq(calendarEvents.status,      "confirmed"),
-        ne(calendarEvents.candidateId, candidate.id),
-        lt(calendarEvents.startAt,     endAt),
-        gt(calendarEvents.endAt,       startAt),
-      ))
-      .limit(1)
-    if (slotTaken) {
-      return apiError("Это время уже занято — выберите, пожалуйста, другой слот.", 409)
-    }
-
-    // #3.3 Перенос: если у кандидата уже есть будущий interview-event — отменяем его.
-    // Идемпотентно: не трогаем прошедшие события и только что созданный (выше проверено).
-    const nowForCancel = new Date()
-    await db
-      .update(calendarEvents)
-      .set({ status: "cancelled" })
-      .where(and(
-        eq(calendarEvents.companyId,   row.companyId),
-        eq(calendarEvents.candidateId, candidate.id),
-        eq(calendarEvents.type,        "interview"),
-        eq(calendarEvents.status,      "confirmed"),
-        gt(calendarEvents.startAt,     nowForCancel),
-      ))
-
     // 6. Создаём новое событие
+    // Юрий 10.07: "phone" ошибочно попадал в "Онлайн" (иконка/фильтры в
+    // Интервью-модуле показывали видео-звонок вместо телефонной трубки) —
+    // interviewFormat поддерживает "Звонок"|"Онлайн"|"Офис", а не только 2 значения.
     const methodLabel    = METHOD_LABELS[body.method] ?? body.method
-    const interviewFormat = body.method === "office" ? "Офис" : "Онлайн"
+    const interviewFormat = body.method === "office" ? "Офис" : body.method === "phone" ? "Звонок" : "Онлайн"
 
     // #3.4 Fallback адреса: сначала из настроек расписания, потом из профиля компании.
     // Для онлайн-методов адрес не нужен (там нужна ссылка на конфу, которую HR ставит вручную).
@@ -600,26 +595,81 @@ export async function POST(
       ? (sched.officeAddress ?? row.companyOfficeAddress ?? null)
       : null
 
-    const [event] = await db
-      .insert(calendarEvents)
-      .values({
-        companyId:       row.companyId,
-        title:           `Интервью — ${candidate.name ?? "Кандидат"}`,
-        description:     `Кандидат записался самостоятельно через страницу выбора времени. Способ: ${methodLabel}.`,
-        type:            "interview",
-        startAt,
-        endAt,
-        createdBy:       companyUser.id,
-        status:          "confirmed",
-        candidateId:     candidate.id,
-        vacancyId:       candidate.vacancyId,
-        interviewFormat,
-        interviewStatus: "Подтверждено",
-        location,
-        meetingUrl:      null,
-        scope:           "company",
-      })
-      .returning({ id: calendarEvents.id })
+    // 5.5 + 6 в ОДНОЙ транзакции под advisory-lock компании (аудит 10.07).
+    // Раньше проверка «слот свободен» и insert шли отдельными запросами без
+    // блокировки — два кандидата, отправившие бронь почти одновременно, оба
+    // проходили проверку до того, как любой из них занял слот (живой инцидент
+    // «один человек занял 2 слота» — 10.07). pg_advisory_xact_lock сериализует
+    // ВСЕ брони одной компании (частота — единицы в день, лок держится
+    // миллисекунды) и не трогает ручное создание интервью HR-ом (там пересечения
+    // легальны: два интервьюера параллельно). Лок снимается автоматически на
+    // commit/rollback транзакции.
+    const bookingResult = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('schedule-booking'), hashtext(${row.companyId}::text))`)
+
+      // Анти-двойная-запись (company-wide, все вакансии): слот не должен
+      // пересекаться с ЧУЖИМ подтверждённым интервью этой компании. Свои
+      // события исключаем (их перенос — ниже). Пересечение:
+      // existing.startAt < endAt И existing.endAt > startAt.
+      const [slotTaken] = await tx
+        .select({ id: calendarEvents.id })
+        .from(calendarEvents)
+        .where(and(
+          eq(calendarEvents.companyId,   row.companyId),
+          eq(calendarEvents.type,        "interview"),
+          eq(calendarEvents.status,      "confirmed"),
+          ne(calendarEvents.candidateId, candidate.id),
+          lt(calendarEvents.startAt,     endAt),
+          gt(calendarEvents.endAt,       startAt),
+        ))
+        .limit(1)
+      if (slotTaken) return { taken: true as const, eventId: null }
+
+      // #3.3 Перенос: если у кандидата уже есть будущий interview-event — отменяем его.
+      // Идемпотентно: не трогаем прошедшие события и только что созданный (выше проверено).
+      // Юрий 10.07: interviewStatus (текстовый бейдж в списке интервью) обязательно
+      // синхронизируем с status — иначе список HR показывал ДВЕ «Подтверждено»
+      // карточки на одного кандидата. Теперь отмена старого и создание нового —
+      // атомарны: сбой между ними больше не оставляет кандидата без брони вовсе.
+      const nowForCancel = new Date()
+      await tx
+        .update(calendarEvents)
+        .set({ status: "cancelled", interviewStatus: "Отменено" })
+        .where(and(
+          eq(calendarEvents.companyId,   row.companyId),
+          eq(calendarEvents.candidateId, candidate.id),
+          eq(calendarEvents.type,        "interview"),
+          eq(calendarEvents.status,      "confirmed"),
+          gt(calendarEvents.startAt,     nowForCancel),
+        ))
+
+      const [created] = await tx
+        .insert(calendarEvents)
+        .values({
+          companyId:       row.companyId,
+          title:           `Интервью — ${candidate.name ?? "Кандидат"}`,
+          description:     `Кандидат записался самостоятельно через страницу выбора времени. Способ: ${methodLabel}.`,
+          type:            "interview",
+          startAt,
+          endAt,
+          createdBy:       companyUser.id,
+          status:          "confirmed",
+          candidateId:     candidate.id,
+          vacancyId:       candidate.vacancyId,
+          interviewFormat,
+          interviewStatus: "Подтверждено",
+          location,
+          meetingUrl:      null,
+          scope:           "company",
+        })
+        .returning({ id: calendarEvents.id })
+      return { taken: false as const, eventId: created?.id ?? null }
+    })
+
+    if (bookingResult.taken) {
+      return apiError("Это время уже занято — выберите, пожалуйста, другой слот.", 409)
+    }
+    const event = { id: bookingResult.eventId }
 
     // 7. Переводим кандидата в стадию scheduled (только если ещё не дальше по воронке)
     await db
@@ -630,17 +680,31 @@ export async function POST(
         sql`${candidates.stage} NOT IN ('scheduled','interview','interviewed','final_decision','offer','hired','rejected')`,
       ))
 
-    // 8. #3.2 Уведомление HR в Telegram при брони
+    // 8. #3.2 Уведомление HR: надёжное in-app (аудит 10.07 — раньше был только
+    // best-effort Telegram: сбой TG = HR вовсе не узнаёт о брони) + Telegram.
+    // Имя кандидата экранируем: спецсимволы (<, &) в имени ломали HTML-parse
+    // всего TG-сообщения, и это молча глотал catch.
     const localStart = utcToLocalDateTime(startAt, timezone)
     const tzLabel    = timezone === "Europe/Moscow" ? "МСК" : timezone
+    const whenLabel  = `${localStart.ymd} ${localStart.hhmm} (${tzLabel})`
+    void createNotification({
+      tenantId:   row.companyId,
+      type:       "interview_booked",
+      title:      `📅 Запись на интервью: ${candidate.name ?? "Кандидат"}`,
+      body:       `${row.vacancyTitle} · ${whenLabel} · ${methodLabel}`,
+      severity:   "info",
+      href:       `/hr/candidates/${candidate.id}`,
+      sourceType: "candidate",
+      sourceId:   candidate.id,
+    })
     void sendToCompanyChannel(
       row.companyId,
       `📅 <b>Новая запись на интервью</b>\n` +
-      `👤 Кандидат: ${candidate.name ?? "—"}\n` +
-      `💼 Вакансия: ${row.vacancyTitle}\n` +
-      `🕐 Дата и время: ${localStart.ymd} ${localStart.hhmm} (${tzLabel})\n` +
+      `👤 Кандидат: ${escapeTgHtml(candidate.name ?? "—")}\n` +
+      `💼 Вакансия: ${escapeTgHtml(row.vacancyTitle)}\n` +
+      `🕐 Дата и время: ${whenLabel}\n` +
       `📍 Способ: ${methodLabel}` +
-      (location ? `\n🏢 Адрес: ${location}` : ""),
+      (location ? `\n🏢 Адрес: ${escapeTgHtml(location)}` : ""),
     ).catch(() => {})
 
     // 9. #26.4 Настраиваемые тексты экрана "Вы записаны" (platform-дефолт в коде,
@@ -715,11 +779,22 @@ export async function DELETE(
 
     if (cancelled.length === 0) return apiError("Активная запись не найдена", 404)
 
+    // Аудит 10.07: in-app надёжно + TG с экранированием (см. POST выше).
+    void createNotification({
+      tenantId:   vac.companyId,
+      type:       "interview_booking_cancelled",
+      title:      `❌ Кандидат отменил запись: ${candidate.name ?? "Кандидат"}`,
+      body:       vac.vacancyTitle,
+      severity:   "warning",
+      href:       `/hr/candidates/${candidate.id}`,
+      sourceType: "candidate",
+      sourceId:   candidate.id,
+    })
     void sendToCompanyChannel(
       vac.companyId,
       `❌ <b>Кандидат отменил запись на интервью</b>\n` +
-      `👤 Кандидат: ${candidate.name ?? "—"}\n` +
-      `💼 Вакансия: ${vac.vacancyTitle}`,
+      `👤 Кандидат: ${escapeTgHtml(candidate.name ?? "—")}\n` +
+      `💼 Вакансия: ${escapeTgHtml(vac.vacancyTitle)}`,
     ).catch(() => {})
 
     return apiSuccess({ cancelled: true })

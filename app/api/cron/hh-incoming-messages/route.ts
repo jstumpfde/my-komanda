@@ -10,12 +10,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { scanIncomingMessages } from "@/lib/hh/scan-incoming"
 
-// LIMIT_PER_RUN ограничен 30, потому что nginx на проде имеет proxy timeout
-// 60 сек, а каждый отклик может делать до 2 fetch к hh API + до 1 вызов
-// AI (Anthropic). Для 30 откликов это укладывается в окно даже при пиковых
-// задержках. При нагрузке выше 30 откликов / 15 мин — поднять прокси-таймаут
-// nginx или запускать cron чаще (каждые 5 мин).
-const LIMIT_PER_RUN = 30
+// Аудит 10.07: при LIMIT=30 и кроне */10 пропускная способность ~180/час —
+// очередь из 4.4k откликов делала полный круг ~за сутки, входящее «стоп» от
+// кандидата могло лежать непрочитанным до 24ч. Подняли LIMIT до 50 и крон до
+// */5 (crontab) → ~600/час, полный круг ~1.5 часа. Наложение прогонов теперь
+// безопасно: в scanIncomingMessages есть атомарный CAS-claim отклика. nginx
+// proxy timeout 60с может оборвать HTTP-ответ длинного прогона — Node при
+// этом ДОДЕЛЫВАЕТ работу (обрыв клиента не убивает обработчик), а клейм
+// исключает дубли на следующем тике.
+const LIMIT_PER_RUN = 50
 const STALE_MINUTES = 14
 
 export async function POST(req: NextRequest) {

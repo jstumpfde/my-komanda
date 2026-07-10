@@ -10,10 +10,31 @@
 //   }
 import { db } from "@/lib/db"
 import { cronRuns } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { and, eq, lt } from "drizzle-orm"
 
 export async function startCronRun(cronName: string): Promise<{ id: string; startedAt: Date }> {
   const startedAt = new Date()
+
+  // Аудит 10.07: самоочистка зависших строк. Если процесс умер (деплой/OOM)
+  // до finishCronRun, строка оставалась 'running' навсегда (на проде успело
+  // накопиться 24, старейшая 38 дней) — и мониторинг поверх cron_runs врал.
+  // Закрываем осиротевшие прогоны ЭТОГО крона старше 6 часов при каждом новом
+  // старте — дёшево и без отдельного уборщика.
+  try {
+    await db
+      .update(cronRuns)
+      .set({
+        status: "failed",
+        finishedAt: startedAt,
+        errorMessage: "stale: process died before finishCronRun (auto-closed by next run)",
+      })
+      .where(and(
+        eq(cronRuns.cronName, cronName),
+        eq(cronRuns.status, "running"),
+        lt(cronRuns.startedAt, new Date(startedAt.getTime() - 6 * 3600_000)),
+      ))
+  } catch { /* самоочистка не должна мешать запуску */ }
+
   const [row] = await db
     .insert(cronRuns)
     .values({ cronName, startedAt, status: "running" })

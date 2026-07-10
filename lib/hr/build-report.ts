@@ -79,6 +79,21 @@ function dateFilter<T extends { createdAt: unknown }>(
   return filters
 }
 
+// SQL-условие «выражение попадает в период» для пер-метричных фильтров
+// (аудит 10.07: у каждой метрики своя дата события — нанят/отказан/сдал тест).
+// Без периода (from=to=null) → TRUE, поведение «за всё время» не меняется.
+function inPeriod(expr: unknown, from: Date | null, to: Date | null) {
+  const e = expr as Parameters<typeof gte>[0]
+  // Date → ISO-строка + явный ::timestamptz: в сыром sql-фрагменте внутри
+  // count(*) FILTER драйвер postgres.js не выводит тип Date-параметра сам.
+  const f = from ? from.toISOString() : null
+  const t = to ? to.toISOString() : null
+  if (f && t) return sql`(${e} >= ${f}::timestamptz and ${e} <= ${t}::timestamptz)`
+  if (f)      return sql`${e} >= ${f}::timestamptz`
+  if (t)      return sql`${e} <= ${t}::timestamptz`
+  return sql`true`
+}
+
 export interface BuildReportOptions {
   period?: ReportPeriod
   vacancyId?: string | null
@@ -116,7 +131,6 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
     ? { from: opts.from ? startOfDay(opts.from) : null, to: opts.to ? endOfDay(opts.to) : null }
     : periodRange(period)
 
-  const candidateDateFilters = dateFilter(candidates, from, to)
   const eventDateFilters = dateFilter(calendarEvents, from, to)
   const contactDateFilters = dateFilter(candidateContacts, from, to)
 
@@ -163,7 +177,22 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
       ))
       .groupBy(candidates.stage),
 
-    // 3. По вакансиям: откликов / нанято / интервью / отказов — за период
+    // 3. По вакансиям: откликов / нанято / интервью / отказов — за период.
+    //
+    // Аудит 10.07 — метрики по ДАТАМ СОБЫТИЙ, а не по дате отклика.
+    // Раньше весь блок резался одним WHERE по candidates.created_at: «за
+    // сегодня нанято 3» означало «сегодня откликнулись трое, кто когда-либо
+    // будет нанят» — цифрам нельзя было верить. Теперь:
+    //   · Анкет (total), Собес., Решение — пайплайн НОВЫХ откликов периода
+    //     (по created_at, как раньше — это метрики объёма/состояния);
+    //   · Нанято/Отказов/Сам отказ — по датам событий hired_at/rejection_at
+    //     (fallback на created_at для старых записей, где дата события не
+    //     писалась, чтобы история не пропала из отчёта);
+    //   · Демо — по дате события прохождения (completedAt из
+    //     demo_progress_json ЛИБО second_demo_invited_at — «склеенный» переход
+    //     часть1→часть2; override без даты — fallback created_at);
+    //   · Тест — только реально СДАННЫЕ (submitted_at not null; раньше
+    //     засчитывались и незавершённые попытки) по дате сдачи.
     db.select({
       vacancyId:    vacancies.id,
       vacancyTitle: vacancies.title,
@@ -174,15 +203,16 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
       hhExpiresAt:  vacancies.hhExpiresAt,
       hhFunnel:     vacancies.hhFunnelJson,
       // Платформенные подсчёты (fallback для вакансий без hh-счётчиков).
-      total:        count(),
-      hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired')`.mapWith(Number),
-      rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} is distinct from 'candidate')`.mapWith(Number),
-      selfRejected: sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} = 'candidate')`.mapWith(Number),
-      interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed'))`.mapWith(Number),
-      decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision'))`.mapWith(Number),
-      // Демо и Тест — отдельные платформенные показатели (по факту завершённости).
-      demoCompleted: sql<number>`count(*) filter (where ${candidates.demoProgressJson} ->> 'completedAt' is not null)`.mapWith(Number),
-      testDone:      sql<number>`count(*) filter (where exists (select 1 from test_submissions ts where ts.candidate_id = ${candidates.id}))`.mapWith(Number),
+      total:        sql<number>`count(*) filter (where ${inPeriod(candidates.createdAt, from, to)})`.mapWith(Number),
+      hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired' and ${inPeriod(sql`coalesce(${candidates.hiredAt}, ${candidates.createdAt})`, from, to)})`.mapWith(Number),
+      rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} is distinct from 'candidate' and ${inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to)})`.mapWith(Number),
+      selfRejected: sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} = 'candidate' and ${inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to)})`.mapWith(Number),
+      interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed') and ${inPeriod(candidates.createdAt, from, to)})`.mapWith(Number),
+      decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision') and ${inPeriod(candidates.createdAt, from, to)})`.mapWith(Number),
+      // Гейт «событие было» (coalesce is not null) обязателен: без периода
+      // inPeriod() = true, и без гейта в «Демо» засчитались бы ВСЕ кандидаты.
+      demoCompleted: sql<number>`count(*) filter (where coalesce((${candidates.demoProgressJson} ->> 'completedAt')::timestamptz, ${candidates.secondDemoInvitedAt}, case when ${candidates.overrideContentBlockId} is not null then ${candidates.createdAt} end) is not null and ${inPeriod(sql`coalesce((${candidates.demoProgressJson} ->> 'completedAt')::timestamptz, ${candidates.secondDemoInvitedAt}, case when ${candidates.overrideContentBlockId} is not null then ${candidates.createdAt} end)`, from, to)})`.mapWith(Number),
+      testDone:      sql<number>`count(*) filter (where exists (select 1 from test_submissions ts where ts.candidate_id = ${candidates.id} and ts.submitted_at is not null and ${inPeriod(sql`ts.submitted_at`, from, to)}))`.mapWith(Number),
     })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -191,7 +221,6 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
         isNull(vacancies.deletedAt),
         isNull(candidates.deletedAt),
         ...vacancyFilter,
-        ...candidateDateFilters,
       ))
       .groupBy(vacancies.id, vacancies.title, vacancies.createdAt, vacancies.status, vacancies.closedAt, vacancies.hhArchived, vacancies.hhExpiresAt, vacancies.hhFunnelJson),
 
@@ -210,7 +239,8 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
       ))
       .groupBy(calendarEvents.interviewStatus, sql`(${calendarEvents.meetingUrl} is not null and ${calendarEvents.meetingUrl} != '')`),
 
-    // 5. Причины отказа — за период
+    // 5. Причины отказа — за период (аудит 10.07: по дате СОБЫТИЯ отказа,
+    // fallback created_at для старых записей без rejection_at).
     db.select({
       category: candidates.rejectionReasonCategory,
       cnt: count(),
@@ -223,11 +253,11 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
         isNull(vacancies.deletedAt),
         isNull(candidates.deletedAt),
         ...vacancyFilter,
-        ...candidateDateFilters,
+        inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to),
       ))
       .groupBy(candidates.rejectionReasonCategory),
 
-    // 6. Инициатор отказа — за период
+    // 6. Инициатор отказа — за период (по дате события отказа, см. блок 5)
     db.select({
       initiator: candidates.rejectionInitiator,
       cnt: count(),
@@ -240,7 +270,7 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
         isNull(vacancies.deletedAt),
         isNull(candidates.deletedAt),
         ...vacancyFilter,
-        ...candidateDateFilters,
+        inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to),
       ))
       .groupBy(candidates.rejectionInitiator),
 
@@ -299,7 +329,8 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
         isNull(candidates.deletedAt),
         sql`${candidates.autoProcessingStoppedReason} is not null`,
         ...vacancyFilter,
-        ...candidateDateFilters,
+        // Аудит 10.07: по дате события остановки (fallback created_at).
+        inPeriod(sql`coalesce(${candidates.autoProcessingStoppedAt}, ${candidates.createdAt})`, from, to),
       ))
       .groupBy(candidates.autoProcessingStoppedReason),
 
@@ -388,7 +419,12 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
   const nowMs = Date.now()
   const vacancyTable = vacancyRows.map(r => {
     // hh-счётчики (точные числа из hh UI), если синканы. Иначе платформенные.
-    const hh = (r.hhFunnel && typeof r.hhFunnel === "object") ? r.hhFunnel as Record<string, number> : null
+    // Аудит 10.07: hh-счётчики — всегда «за всё время публикации», поэтому
+    // применяем их ТОЛЬКО без фильтра периода; при выбранном периоде показываем
+    // платформенные событийные числа (иначе «за сегодня» показывал полный
+    // hh-тотал вакансии).
+    const hhAllowed = !from && !to
+    const hh = (hhAllowed && r.hhFunnel && typeof r.hhFunnel === "object") ? r.hhFunnel as Record<string, number> : null
     const hhSum = hh ? Object.values(hh).reduce((s, v) => s + (Number(v) || 0), 0) : 0
     return {
       vacancyId: r.vacancyId,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -90,7 +90,10 @@ interface Props {
 }
 
 export function ScheduleClientPage({ token, initialData, initialError }: Props) {
-  const [data]                      = useState<SchedulePageData | null>(initialData)
+  // Аудит 10.07: data перезапрашиваемая — после 409 «слот занят» список слотов
+  // надо обновить, иначе занятый слот остаётся кликабельным и кандидат
+  // упирается в тот же 409 повторно.
+  const [data, setData]             = useState<SchedulePageData | null>(initialData)
   // Способ встречи задан вакансией/настройками — кандидат его НЕ выбирает.
   const method = initialData?.defaultMethod ?? "phone"
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null)
@@ -98,6 +101,14 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
   const [booking, setBooking]       = useState<BookingResponse | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  // Юрий 10.07: часовой пояс браузера кандидата — определяем ТОЛЬКО на клиенте
+  // (после монтирования), иначе на SSR-проходе вернуло бы пояс сервера, а не
+  // кандидата. Пока не определён — считаем совпадающим с поясом вакансии,
+  // подсказка не показывается (безопасный дефолт, без «моргания» на разметке).
+  const [browserTz, setBrowserTz] = useState<string | null>(null)
+  useEffect(() => {
+    try { setBrowserTz(Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { /* noop */ }
+  }, [])
 
   // ─── Error / no-data state ─────────────────────────────────────────────────
 
@@ -138,6 +149,19 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
 
       if (!res.ok) {
         toast.error(json.error ?? "Не удалось забронировать время")
+        // Слот заняли раньше нас — обновляем сетку и сбрасываем выбор, чтобы
+        // занятый слот исчез, а не оставался кликабельным с вечным 409.
+        if (res.status === 409) {
+          setSelectedSlot(null)
+          try {
+            const fresh = await fetch(`/api/public/schedule/${token}`)
+            if (fresh.ok) {
+              const freshJson = await fresh.json().catch(() => null)
+              const freshData = (freshJson?.data ?? freshJson) as SchedulePageData | null
+              if (freshData && Array.isArray(freshData.days)) setData(freshData)
+            }
+          } catch { /* не критично — кандидат может перезагрузить страницу */ }
+        }
         return
       }
 
@@ -232,6 +256,13 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
                 <Globe className="w-4 h-4 text-slate-400 shrink-0" />
                 <span className="text-slate-700">Время указано в часовом поясе {data.timezoneLabel}</span>
               </div>
+              {browserTz && browserTz !== data.timezone && (
+                <div className="flex items-center gap-2.5 text-sm pl-[26px] -mt-1">
+                  <span className="text-xs text-amber-600 font-medium">
+                    У вас (по времени браузера): {formatDayLabel(booking.startAt, browserTz)} · {formatTimeLabel(booking.startAt, browserTz)}
+                  </span>
+                </div>
+              )}
 
               {method === "phone" && (
                 <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
@@ -402,10 +433,19 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
             </div>
           )}
 
-          {/* Часовой пояс — только информация, кандидат его не меняет */}
-          <div className="flex items-center gap-1.5 text-sm text-slate-500 justify-center mb-4">
-            <Globe className="w-4 h-4 shrink-0" />
-            <span>Время указано в часовом поясе {data.timezoneLabel}</span>
+          {/* Часовой пояс — только информация, кандидат его не меняет.
+              Юрий 10.07: если пояс браузера отличается от пояса вакансии —
+              явно показываем и это (кандидаты путали московское время со своим). */}
+          <div className="flex flex-col items-center gap-0.5 text-sm text-slate-500 mb-4">
+            <div className="flex items-center gap-1.5">
+              <Globe className="w-4 h-4 shrink-0" />
+              <span>Время указано в часовом поясе {data.timezoneLabel}</span>
+            </div>
+            {browserTz && browserTz !== data.timezone && (
+              <span className="text-xs text-amber-600 font-medium">
+                Ваш часовой пояс отличается — под каждым временем указано, сколько будет у вас
+              </span>
+            )}
           </div>
 
           {/* Слоты */}
@@ -417,18 +457,26 @@ export function ScheduleClientPage({ token, initialData, initialError }: Props) 
                   <div className="grid grid-cols-4 gap-2">
                     {day.slots.map(time => {
                       const isSelected = selectedSlot?.date === day.date && selectedSlot?.time === time
+                      const localTime = browserTz && browserTz !== data.timezone
+                        ? slotTimeInBrowserTz(day.date, time, data.timezone, browserTz)
+                        : null
                       return (
                         <button
                           key={time}
                           className={cn(
-                            "py-3 rounded-lg border text-sm font-medium transition-all",
+                            "py-2.5 rounded-lg border text-sm font-medium transition-all",
                             isSelected
                               ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
                               : "border-slate-200 hover:border-primary/30 text-slate-900"
                           )}
                           onClick={() => setSelectedSlot({ date: day.date, time })}
                         >
-                          {time}
+                          <span className="block">{time}</span>
+                          {localTime && (
+                            <span className={cn("block text-[10px] font-normal mt-0.5", isSelected ? "text-primary/70" : "text-slate-400")}>
+                              {localTime} у вас
+                            </span>
+                          )}
                         </button>
                       )
                     })}
@@ -487,4 +535,33 @@ function formatTimeLabel(iso: string, tz: string): string {
   const d = new Date(iso)
   const fmt = new Intl.DateTimeFormat("ru-RU", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false })
   return fmt.format(d)
+}
+
+// ─── Часовой пояс кандидата vs пояс вакансии (Юрий 10.07) ────────────────────
+// Кандидат путался: «18:00» на странице читал как своё локальное время, хотя
+// это московское. Разница в часах — для баннера над слотами (не грузим каждую
+// кнопку вторым временем); точное время — для экрана подтверждения (там оно одно).
+
+function tzOffsetHours(tz: string, at: Date): number {
+  try {
+    const part = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+      .formatToParts(at).find(p => p.type === "timeZoneName")?.value ?? ""
+    const m = part.match(/GMT([+-]\d+)(?::(\d+))?/)
+    if (!m) return 0
+    const sign = m[1]!.startsWith("-") ? -1 : 1
+    return parseInt(m[1]!, 10) + sign * (m[2] ? parseInt(m[2], 10) / 60 : 0)
+  } catch { return 0 }
+}
+
+/** Локальный (браузерный) эквивалент "HH:MM" слота, заданного в поясе вакансии. */
+function slotTimeInBrowserTz(ymd: string, hhmm: string, vacancyTz: string, browserTz: string): string {
+  const [year, month, day] = ymd.split("-").map(Number)
+  const [hour, minute]     = hhmm.split(":").map(Number)
+  // Слот трактуем как локальную стену времени в vacancyTz; берём офсет на эту
+  // дату (учитывает переход на летнее/зимнее, если он вдруг где-то есть) и
+  // получаем UTC-момент, затем форматируем его в поясе браузера.
+  const approxUtc = new Date(Date.UTC(year!, month! - 1, day!, hour!, minute!, 0))
+  const offset = tzOffsetHours(vacancyTz, approxUtc)
+  const utcMs = approxUtc.getTime() - offset * 3_600_000
+  return formatTimeLabel(new Date(utcMs).toISOString(), browserTz)
 }

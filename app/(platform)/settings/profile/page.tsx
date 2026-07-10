@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useSession } from "next-auth/react"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, Clock, Send } from "lucide-react"
+import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, Clock, Send, MessageCircle, Video } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -61,9 +62,20 @@ interface UserProfile {
   avatarUrl: string | null
   customSchedule?: UserCustomSchedule | null
   managerReminderChatId?: string | null
+  contactTelegram?: string | null
+  contactMax?: string | null
+  contactPhone?: string | null
 }
 
 export default function ProfileSettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProfileSettingsPageInner />
+    </Suspense>
+  )
+}
+
+function ProfileSettingsPageInner() {
   const { data: session, update: updateSession } = useSession()
   const { role } = useAuth()
   const isOwner = role === "director"
@@ -134,6 +146,68 @@ export default function ProfileSettingsPage() {
     finally { setUnlinkingReminder(false) }
   }
 
+  // Контакты для оперативной связи с кандидатом (Юрий 10.07) — подставляются
+  // в сообщение со ссылкой на встречу («подтвердите получение»).
+  const [contactTelegram, setContactTelegram] = useState("")
+  const [contactMax, setContactMax] = useState("")
+  const [contactPhone, setContactPhone] = useState("")
+  const [savingContacts, setSavingContacts] = useState(false)
+  const handleSaveContacts = async () => {
+    setSavingContacts(true)
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactTelegram, contactMax, contactPhone }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Контакты сохранены")
+    } catch { toast.error("Не удалось сохранить") }
+    finally { setSavingContacts(false) }
+  }
+
+  // Личный Zoom менеджера (Юрий 10.07: «каждый менеджер имеет свой Зум») —
+  // используется в интервью для авто-создания встречи (event-modal.tsx).
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const [zoomConnected, setZoomConnected] = useState(false)
+  const [zoomEmail, setZoomEmail] = useState<string | null>(null)
+  const [loadingZoom, setLoadingZoom] = useState(true)
+  const [disconnectingZoom, setDisconnectingZoom] = useState(false)
+
+  const loadZoomStatus = () => {
+    fetch("/api/integrations/zoom/status")
+      .then(r => r.ok ? r.json() : null)
+      .then((j: { data?: { connected: boolean; email: string | null } } | null) => {
+        const d = j?.data
+        setZoomConnected(!!d?.connected)
+        setZoomEmail(d?.email ?? null)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingZoom(false))
+  }
+
+  useEffect(() => {
+    loadZoomStatus()
+    const zoomConnectedParam = searchParams.get("zoomConnected")
+    const zoomError = searchParams.get("zoomError")
+    if (zoomConnectedParam) { toast.success("Zoom подключён"); router.replace(pathname) }
+    if (zoomError) { toast.error("Не удалось подключить Zoom"); router.replace(pathname) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleDisconnectZoom = async () => {
+    setDisconnectingZoom(true)
+    try {
+      const res = await fetch("/api/integrations/zoom/disconnect", { method: "POST" })
+      if (!res.ok) throw new Error()
+      setZoomConnected(false)
+      setZoomEmail(null)
+      toast.success("Zoom отключён")
+    } catch { toast.error("Не удалось отключить") }
+    finally { setDisconnectingZoom(false) }
+  }
+
   const handleSaveSchedule = async () => {
     setSavingSchedule(true)
     try {
@@ -190,6 +264,9 @@ export default function ProfileSettingsPage() {
         setLastName(p.lastName ?? "")
         setAvatarUrl((p as unknown as { avatarUrl?: string }).avatarUrl ?? null)
         setManagerChatId(p.managerReminderChatId ?? null)
+        setContactTelegram(p.contactTelegram ?? "")
+        setContactMax(p.contactMax ?? "")
+        setContactPhone(p.contactPhone ?? "")
         if (p.customSchedule?.days) {
           setScheduleDays({ ...DEFAULT_DAYS, ...p.customSchedule.days })
           if (p.customSchedule.lunch) setLunch(p.customSchedule.lunch)
@@ -708,6 +785,80 @@ export default function ProfileSettingsPage() {
                       Подключить Telegram
                     </Button>
                   )}
+                </CardContent>
+              </Card>
+
+              {/* ═══ Zoom (личный, Юрий 10.07) ══════════════════════════
+                  Каждый менеджер подключает СВОЙ Zoom-аккаунт — используется
+                  в интервью для кнопки «Создать Zoom-встречу» (event-modal.tsx). */}
+              <Card>
+                <CardHeader className="pb-2 pt-4 px-5">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Video className="w-4 h-4" />
+                    Zoom
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-4 pt-0 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Подключите свой Zoom, чтобы создавать ссылку на встречу прямо из карточки интервью — от вашего имени.
+                  </p>
+                  {loadingZoom ? (
+                    <div className="h-8 w-40 rounded bg-muted animate-pulse" />
+                  ) : zoomConnected ? (
+                    <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+                      <span className="text-sm flex items-center gap-2">
+                        <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">Подключено</Badge>
+                        {zoomEmail && <span className="text-muted-foreground">{zoomEmail}</span>}
+                      </span>
+                      <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={handleDisconnectZoom} disabled={disconnectingZoom}>
+                        {disconnectingZoom ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Отключить"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" className="gap-2" asChild>
+                      <a href="/api/integrations/zoom/auth">
+                        <Video className="w-3.5 h-3.5" />
+                        Подключить Zoom
+                      </a>
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* ═══ Контакты для оперативной связи с кандидатом ══════════════
+                  Юрий 10.07: подставляются в сообщение со ссылкой на встречу
+                  («подтвердите получение» + как связаться, если что-то не так). */}
+              <Card>
+                <CardHeader className="pb-2 pt-4 px-5">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <MessageCircle className="w-4 h-4" />
+                    Контакты для кандидатов
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-4 pt-0 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Подставляются в сообщение со ссылкой на встречу — чтобы кандидат мог оперативно связаться, если что-то не получается. Пустое поле не показывается.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="space-y-1">
+                      <Label htmlFor="contact-telegram" className="text-xs text-muted-foreground">Telegram</Label>
+                      <Input id="contact-telegram" value={contactTelegram} onChange={e => setContactTelegram(e.target.value)} placeholder="@username" className="h-8 text-sm bg-[var(--input-bg)]" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="contact-max" className="text-xs text-muted-foreground">Max</Label>
+                      <Input id="contact-max" value={contactMax} onChange={e => setContactMax(e.target.value)} placeholder="+7 900 000-00-00" className="h-8 text-sm bg-[var(--input-bg)]" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="contact-phone" className="text-xs text-muted-foreground">Телефон</Label>
+                      <Input id="contact-phone" value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+7 900 000-00-00" className="h-8 text-sm bg-[var(--input-bg)]" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button size="sm" className="gap-1.5" onClick={handleSaveContacts} disabled={savingContacts}>
+                      {savingContacts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Сохранить
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 

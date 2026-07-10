@@ -22,7 +22,7 @@ import { vacancies, companies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getStageHhAction, parsePipeline } from "@/lib/stages"
-import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE } from "@/lib/hh/default-messages"
+import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE, DEFAULT_INTERVIEW_CANCELLED_MESSAGE } from "@/lib/hh/default-messages"
 import { DEFAULT_SCHEDULE_INVITE_TEXT } from "@/lib/messaging/schedule-invite"
 
 export async function GET(req: NextRequest) {
@@ -69,6 +69,20 @@ export async function GET(req: NextRequest) {
     )
     const hhAction = getStageHhAction(stage, pipeline)
     const settings = (vac.aiProcessSettings as VacancyAiProcessSettings | null) ?? {}
+
+    // ── Виртуальная «стадия» (не из pipeline): менеджер отменяет уже
+    // назначенное интервью — кандидату уходит приглашение перезаписаться.
+    // Юрий 10.07. {{schedule_link}} подставляется на отправке (cancel-and-notify),
+    // не здесь — тот же принцип, что и у остальных веток превью.
+    if (stage === "interview_cancelled") {
+      const tpl = settings.interviewCancelledMessage?.trim() || DEFAULT_INTERVIEW_CANCELLED_MESSAGE
+      return apiSuccess({
+        hasMessage: true,
+        channel:    "hh",
+        text:       tpl,
+        note:       "Отправляется в hh-чат сразу при отмене интервью. Переменные: {{name}}, {{vacancy}}, {{schedule_link}}.",
+      })
+    }
 
     // ── interview → follow_up schedule_invite ──────────────────────────────
     if (stage === "interview") {

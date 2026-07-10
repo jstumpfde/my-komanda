@@ -143,14 +143,19 @@ const ResumeThresholdsObjectSchema = z.object({
   /**
    * На какую стадию воронки hh переводить кандидата при авто-приглашении
    * (по одной чистой метке, см. UI):
-   *   consider        — Первичный контакт (ДЕФОЛТ — решение Юрия)
-   *   phone_interview — Телефонное интервью
+   *   phone_interview — «Первичный контакт» на hh (ДЕФОЛТ)
+   *   consider        — «Подумать» на hh
    *   interview       — Собеседование
    *   assessment      — Тестовое задание
    * Маппится на действие changeNegotiationState в lib/hh/process-queue.ts
    * (phone_interview → "invitation", остальные 1:1).
+   *
+   * Отложенный фикс 29.06 (влит 11.07, HANDOFF-funnel-hh): семантика по hh API —
+   * phone_interview = «Первичный контакт», consider = «Подумать». Старые подписи
+   * были перепутаны, и дефолт consider отправлял приглашённых в «Подумать» —
+   * выглядело как игнор и снижало индекс вежливости работодателя.
    */
-  inviteHhStage: z.enum(["phone_interview", "consider", "interview", "assessment"]).default("consider"),
+  inviteHhStage: z.enum(["phone_interview", "consider", "interview", "assessment"]).default("phone_interview"),
   /**
    * Какой контент-блок показать приглашённому кандидату (id строки demos,
    * kind='block:<id>'). null = «боевой» блок вакансии (kind='demo'/'test',

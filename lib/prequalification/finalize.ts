@@ -44,11 +44,14 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
     const [cand] = await db
       .select({
         id:               candidates.id,
+        name:             candidates.name,
         stage:            candidates.stage,
         stageHistory:     candidates.stageHistory,
         vacancyId:        candidates.vacancyId,
         prequalStatus:    candidates.prequalificationStatus,
         aiSettings:       vacancies.aiProcessSettings,
+        companyId:        vacancies.companyId,
+        vacancyTitle:     vacancies.title,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
@@ -91,7 +94,19 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
       // останавливаем автообработку, НО stage='rejected' и сообщение в hh
       // ставит cron pending-rejections, когда истечёт задержка вакансии
       // (в рабочее время). delay=0 → cron исполнит на ближайшем прогоне.
+      //
+      // Аудит 10.07 — ПОРЯДОК: scheduleRejection ДО коммита статуса. Раньше
+      // статус 'failed' коммитился первым, и если scheduleRejection падал —
+      // повторный finalize возвращал «already_failed», отказ не ставился
+      // никогда, кандидат зависал без движения. scheduleRejection идемпотентен
+      // (гварды pendingRejectionAt/stage внутри), поэтому переупорядочивание
+      // безопасно.
       const aiSettings = (cand.aiSettings as VacancyAiProcessSettings | null) ?? null
+      await scheduleRejection({
+        candidateId:  args.candidateId,
+        reason:       "prequalification_failed",
+        delayMinutes: rejectionDelayMinutes(aiSettings),
+      })
       await db.update(candidates).set({
         autoProcessingStopped:       true,
         autoProcessingStoppedReason: "prequalification_failed",
@@ -101,11 +116,6 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
         stageHistory: [...history, { from: fromStage, to: fromStage, at: nowIso, reason }],
         updatedAt: now,
       }).where(eq(candidates.id, args.candidateId))
-      await scheduleRejection({
-        candidateId:  args.candidateId,
-        reason:       "prequalification_failed",
-        delayMinutes: rejectionDelayMinutes(aiSettings),
-      })
     } else {
       // passed или no_answer:
       //   • prequal_only — demo не отправляется, кандидат → anketa_filled,
@@ -118,6 +128,14 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
       const skipDemo = mode === "prequal_only"
       const toStage = skipDemo ? "anketa_filled" : fromStage
 
+      // Аудит 10.07 (ревизия по predeploy-guard 11.07) — ПОРЯДОК: вердикт
+      // коммитится ПЕРВЫМ, отправка приглашения — после, best-effort.
+      // Обратный порядок (отправка до коммита, finalized:false при сбое)
+      // ломал ответившего кандидата: он застревал в pending, и fallback-крон
+      // по таймауту перезаписывал его вердиктом no_answer, хотя все ответы
+      // получены. Вердикт — факт, он фиксируется всегда; сбой отправки
+      // (протухший hh-токен/сеть) не должен его отменять — вместо этого HR
+      // получает уведомление и отправляет ссылку вручную.
       await db.update(candidates).set({
         prequalificationStatus:      verdict,
         prequalificationCompletedAt: now,
@@ -126,10 +144,6 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
         updatedAt: now,
       }).where(eq(candidates.id, args.candidateId))
 
-      if (!skipDemo) {
-        await trySyncInviteToHh(args.candidateId)
-      }
-
       // hh_responses из очереди (если ещё лежит как response) → invited.
       // Делаем и для prequal_only — отклик из очереди ушёл, решение принято.
       await db.update(hhResponses).set({ status: "invited" })
@@ -137,6 +151,26 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
           eq(hhResponses.localCandidateId, args.candidateId),
           eq(hhResponses.status, "response"),
         ))
+
+      if (!skipDemo) {
+        const sent = await trySyncInviteToHh(args.candidateId)
+        if (!sent) {
+          console.warn("[prequalification] invite send failed after finalize", { candidateId: args.candidateId })
+          try {
+            const { createNotification } = await import("@/lib/notifications")
+            await createNotification({
+              tenantId:   cand.companyId,
+              type:       "hh_invite_send_failed",
+              title:      `⚠️ Приглашение не ушло: ${cand.name ?? "кандидат"}`,
+              body:       `${cand.vacancyTitle ?? ""} · предквалификация пройдена (${verdict}), но приглашение с демо-ссылкой не отправилось в hh. Отправьте кандидату ссылку вручную.`,
+              severity:   "warning",
+              href:       `/hr/candidates/${args.candidateId}`,
+              sourceType: "candidate",
+              sourceId:   args.candidateId,
+            })
+          } catch { /* уведомление не должно ломать finalize */ }
+        }
+      }
     }
 
     console.log("[prequalification]", JSON.stringify({

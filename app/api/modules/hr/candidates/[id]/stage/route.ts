@@ -113,6 +113,9 @@ export async function PUT(
         ...(stage === "interview" && (body.interviewMode === "phone" || body.interviewMode === "zoom" || body.interviewMode === "office")
           ? { interviewMode: body.interviewMode }
           : {}),
+        // Аудит 10.07: дата события найма — для честных метрик отчёта
+        // («Нанято за период» по дате найма, а не дате отклика).
+        ...(stage === "hired" ? { hiredAt: new Date() } : {}),
         ...(stopAutoProcessing
           ? {
               autoProcessingStopped: true,

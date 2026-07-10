@@ -35,8 +35,15 @@ test("claude-sonnet-4-6 — $3/$15 за MTok", () => {
 })
 
 test("неизвестная модель → null (не выдумываем цену)", () => {
-  assert.equal(computeCostUsd("claude-opus-4-8", 1000, 1000), null)
   assert.equal(computeCostUsd("some-future-model", 1000, 1000), null)
+})
+
+test("claude-opus-4-8 — $5/$25 за MTok (ревизия 10.07, точечные сложные задачи)", () => {
+  assert.equal(computeCostUsd("claude-opus-4-8", 1_000_000, 1_000_000), 30)
+})
+
+test("claude-fable-5 — $10/$50 за MTok (только координация разработки)", () => {
+  assert.equal(computeCostUsd("claude-fable-5", 1_000_000, 1_000_000), 60)
 })
 
 test("model отсутствует (null/undefined) → null", () => {

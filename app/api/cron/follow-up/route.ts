@@ -27,6 +27,7 @@ import {
 import { decideDozhimMutex } from "@/lib/messaging/dozhim-mutex"
 import { decidePortraitGate } from "@/lib/followup/portrait-gate"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
+import { adaptFollowupMessage } from "@/lib/comms-agent/adapt-followup-message"
 
 // POST /api/cron/follow-up
 // Отправляет очередную порцию касаний из follow_up_messages кандидатам
@@ -625,6 +626,7 @@ async function processOneTouch(
       scheduleWorkingDays:        vacancies.scheduleWorkingDays,
       scheduleExcludedHolidayIds: vacancies.scheduleExcludedHolidayIds,
       scheduleCustomHolidays:     vacancies.scheduleCustomHolidays,
+      aiProcessSettings:          vacancies.aiProcessSettings,
     })
     .from(vacancies)
     .where(eq(vacancies.id, campaign.vacancyId))
@@ -797,7 +799,7 @@ async function processOneTouch(
     managerName = (mgr?.firstName?.trim() || mgr?.name?.trim() || "")
   }
 
-  const finalText = renderTemplate(msg.messageText, {
+  let finalText = renderTemplate(msg.messageText, {
     name:          firstName,
     vacancy:       vacancy.title || "",
     company:       companyName,
@@ -806,6 +808,30 @@ async function processOneTouch(
     test_link:     testUrl,
     schedule_link: scheduleUrl,
   })
+
+  // Пилот «агента коммуникаций» (Юрий 10.07): если включено на вакансии,
+  // AI переписывает finalText под контекст кандидата, оставаясь в рамках
+  // этого же текста как заготовки. ВЫКЛ по умолчанию у всех вакансий —
+  // нулевой риск для существующих дожимов, пока флаг явно не включён.
+  // Только на реальных дожимных касаниях (не одноразовые транзакционные).
+  const dozhimAgentEnabled = (vacancy.aiProcessSettings as { dozhimAgentEnabled?: boolean } | null)?.dozhimAgentEnabled === true
+  if (dozhimAgentEnabled && isDozhimTouch) {
+    const adapted = await adaptFollowupMessage({
+      guardrailText: finalText,
+      candidateName: firstName,
+      vacancyTitle:  vacancy.title || "",
+      branch:        msg.branch,
+      touchNumber:   msg.touchNumber,
+      progressHint:  "",
+      vacancyId:     campaign.vacancyId,
+      companyId:     vacancy.companyId,
+    })
+    if (adapted.safe) {
+      finalText = adapted.text
+    } else {
+      console.info(`[cron/follow-up] comms-agent fallback to literal text: ${adapted.reason}`)
+    }
+  }
 
   // Реально отправляем в hh → выдержать per-company задержку перед следующей
   // отправкой. Возвращаем delayMs во всех исходах ниже (sent / hh-ошибка /
