@@ -22,6 +22,8 @@ import { getPlatformSetting } from "@/lib/platform/settings"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
 import { MESSAGE_GUARD_ALERTS_KEY } from "@/lib/messaging/guard-alert"
 import { escapeHtml } from "@/lib/tip/bot/telegram"
+import { PRIVACY_POLICY_VERSION, MARKETING_CONSENT_VERSION } from "@/lib/legal/operator-requisites"
+import { insertConsentLog } from "@/lib/legal/log-consent"
 import {
   isHoneypotTripped,
   isWithinLandingLeadRateLimit,
@@ -40,6 +42,8 @@ const LeadSchema = z.object({
   // 152-ФЗ: страница /portfolio показывает чекбокс согласия и шлёт true;
   // /landing пока без чекбокса — не ломаем её, consent там просто отсутствует.
   consent: z.boolean().optional(),
+  // Необязательный чекбокс подписки на рассылку (шлёт /portfolio, если есть).
+  marketingConsent: z.boolean().optional(),
 }).refine(
   (v) => v.interest !== "website" || v.consent === true,
   { message: "Нужно согласие на обработку персональных данных", path: ["consent"] },
@@ -76,7 +80,7 @@ export async function POST(req: NextRequest) {
       const firstIssue = parsed.error.issues[0]?.message ?? "Проверьте поля формы"
       return NextResponse.json({ error: firstIssue }, { status: 400 })
     }
-    const { name, contact, company, interest, comment, source, consent } = parsed.data
+    const { name, contact, company, interest, comment, source, consent, marketingConsent } = parsed.data
 
     const ipHash = computeIpHash(req)
     if (ipHash) {
@@ -106,6 +110,31 @@ export async function POST(req: NextRequest) {
     void notifyLandingLead({ name, contact, company, interest, comment }).catch((err) => {
       console.warn("[landing-lead] telegram notify failed:", err instanceof Error ? err.message : err)
     })
+
+    // 152-ФЗ: логируем в единый журнал согласий, только если галка реально была
+    // (для /landing её пока нет — consent не придёт; для /portfolio обязательна).
+    // Раньше это писалось ТОЛЬКО через отдельный best-effort fetch с клиента —
+    // терялось при сбое сети и не попадало в счётчик /admin/platform.
+    if (consent === true) {
+      try {
+        await insertConsentLog({
+          req,
+          visitorId: contact,
+          consentType: "privacy_policy",
+          documentVersion: PRIVACY_POLICY_VERSION,
+        })
+        if (marketingConsent === true) {
+          await insertConsentLog({
+            req,
+            visitorId: contact,
+            consentType: "marketing",
+            documentVersion: MARKETING_CONSENT_VERSION,
+          })
+        }
+      } catch (err) {
+        console.error("[landing-lead] consent log write failed:", err instanceof Error ? err.message : err)
+      }
+    }
 
     return NextResponse.json({ ok: true, id: lead.id }, { status: 201 })
   } catch (error) {

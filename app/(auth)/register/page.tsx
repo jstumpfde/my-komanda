@@ -8,20 +8,6 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Briefcase, Send, CheckCircle2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { PRIVACY_POLICY_VERSION, MARKETING_CONSENT_VERSION } from "@/lib/legal/operator-requisites"
-
-// Пишет факт согласия в журнал 152-ФЗ (см. /admin/platform → Согласия).
-// Best-effort — ошибка записи лога не должна мешать успешной отправке заявки.
-function logConsents(email: string, marketing: boolean) {
-  const fire = (consentType: string, documentVersion: string) =>
-    fetch("/api/consent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consentType, action: "accepted", documentVersion, visitorId: email }),
-    }).catch(() => {})
-  void fire("privacy_policy", PRIVACY_POLICY_VERSION)
-  if (marketing) void fire("marketing", MARKETING_CONSENT_VERSION)
-}
 
 function Spinner() {
   return (
@@ -80,12 +66,12 @@ export default function RegisterPage() {
           phone: phone || null,
           companyName: companyName.trim() || null,
           comment: comment.trim() || null,
+          marketingConsent,
         }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? "Ошибка отправки"); return }
       setSubmitted(true)
-      logConsents(email.trim().toLowerCase(), marketingConsent)
     } catch {
       setError("Ошибка соединения. Попробуйте ещё раз.")
     } finally {
