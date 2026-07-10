@@ -785,6 +785,22 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                 Далее: {nextFormatAfter(iv.format)}
                               </Button>
                             )}
+                            {/* Юрий 10.07: менеджер отменяет интервью — кандидат сможет сам
+                                записаться на новое время по своей ссылке (та же логика, что и
+                                при самостоятельном переносе — старое подтверждённое событие
+                                отменяется, слот освобождается). Только для будущих неотменённых. */}
+                            {!iv.byStageOnly && iv.status !== "Отменено" && iv.status !== "Не явился" && iv.date > new Date() && (
+                              <Button
+                                variant="ghost" size="sm" className="gap-1 text-xs h-7 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (!confirm(`Отменить интервью с ${iv.candidate}? Кандидат сможет сам записаться на новое время по своей ссылке.`)) return
+                                  updateInterview(iv.id, { status: "Отменено" }, "Интервью отменено")
+                                }}
+                              >
+                                <X className="h-3.5 w-3.5" /> Отменить
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" tabIndex={-1}><ExternalLink className="h-3.5 w-3.5" /> Открыть</Button>
                           </div>
                         </div>

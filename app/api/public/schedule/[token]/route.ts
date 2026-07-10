@@ -578,10 +578,14 @@ export async function POST(
 
     // #3.3 Перенос: если у кандидата уже есть будущий interview-event — отменяем его.
     // Идемпотентно: не трогаем прошедшие события и только что созданный (выше проверено).
+    // Юрий 10.07: interviewStatus (текстовый бейдж в списке интервью) обязательно
+    // синхронизируем с status — иначе список HR показывал ДВЕ «Подтверждено»
+    // карточки на одного кандидата (реально отменённая + новая), хотя защита от
+    // двойной записи на уровне БД уже отрабатывала верно (баг был только в отображении).
     const nowForCancel = new Date()
     await db
       .update(calendarEvents)
-      .set({ status: "cancelled" })
+      .set({ status: "cancelled", interviewStatus: "Отменено" })
       .where(and(
         eq(calendarEvents.companyId,   row.companyId),
         eq(calendarEvents.candidateId, candidate.id),
