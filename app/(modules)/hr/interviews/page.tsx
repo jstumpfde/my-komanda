@@ -14,11 +14,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles, CalendarClock, Link2, UserCheck } from "lucide-react"
+import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles, CalendarClock, Link2, UserCheck, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
 import { getStageLabel } from "@/lib/stages"
+import { StageMessageControl } from "@/components/candidates/stage-message-control"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞
 interface Interview {
   id: string; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
   candidateId: string | null
+  vacancyId: string | null
   // Контекст кандидата (из JOIN в /calendar) — для наполнения карточки.
   aiScore: number | null; resumeScore: number | null; phone: string | null; stage: string | null
   anketaFilled: boolean; tested: boolean; testScore: number | null; answersScore: number | null
@@ -122,6 +124,7 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
     interviewer: ev.interviewer || "—",
     type, format, status,
     candidateId: ev.candidateId ?? null,
+    vacancyId: ev.vacancyId ?? null,
     aiScore: ev.candAiScore ?? ev.candResumeScore ?? null,
     resumeScore: ev.candResumeScore ?? null,
     phone: ev.candPhone ?? null,
@@ -134,6 +137,21 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
 }
 
 // ─── Утилиты ────────────────────────────────────────────────
+
+// Юрий 10.07: parseInt("16:15") даёт 16 (останавливается на «:», минуты
+// теряются) — при переносе интервью с длительностью меньше часа в пределах
+// того же часа (16:00-16:15) разница «endTime - time» считалась как 0,
+// и новое время после переноса получалось «18:00-18:00». Считаем в минутах.
+function timeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+function minutesToTime(mins: number): string {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, mins))
+  const h = Math.floor(clamped / 60)
+  const m = clamped % 60
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+}
 
 // Цвет числового скоринга (0..100): зелёный/янтарный/красный.
 function scoreColor(n: number | null | undefined): string {
@@ -291,6 +309,79 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const [dropTargetStatus, setDropTargetStatus] = useState<InterviewStatus | null>(null)
 
   const [notifyDialog, setNotifyDialog] = useState<{ message: string } | null>(null)
+
+  // Диалог отмены интервью менеджером (Юрий 10.07): вкладка «Отменить» —
+  // приглашение перезаписаться (слот освобождается, кандидат не отклоняется);
+  // вкладка «Отказать» — реальный отказ (та же механика, что и обычный
+  // отказ на карточке кандидата). Обе — с предпросмотром/редактированием
+  // текста и опцией сохранить правку как новый шаблон вакансии.
+  const [cancelDialogIv, setCancelDialogIv] = useState<Interview | null>(null)
+  const [cancelTab, setCancelTab] = useState<"reschedule" | "reject">("reschedule")
+  const [cancelSendMessage, setCancelSendMessage] = useState(true)
+  const [cancelMessageText, setCancelMessageText] = useState("")
+  const [cancelRejectReason, setCancelRejectReason] = useState("")
+  const [cancelSubmitting, setCancelSubmitting] = useState(false)
+  const [cancelSavingTemplate, setCancelSavingTemplate] = useState(false)
+
+  const openCancelDialog = (iv: Interview) => {
+    setCancelDialogIv(iv)
+    setCancelTab("reschedule")
+    setCancelSendMessage(true)
+    setCancelMessageText("")
+    setCancelRejectReason("")
+  }
+
+  const saveMessageTemplate = async () => {
+    if (!cancelDialogIv?.vacancyId) { toast.error("Не удалось определить вакансию"); return }
+    setCancelSavingTemplate(true)
+    try {
+      const field = cancelTab === "reject" ? "rejectMessage" : "interviewCancelledMessage"
+      const res = await fetch(`/api/modules/hr/vacancies/${cancelDialogIv.vacancyId}/ai-settings`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: cancelMessageText }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Шаблон сохранён для этой вакансии")
+    } catch { toast.error("Не удалось сохранить шаблон") }
+    finally { setCancelSavingTemplate(false) }
+  }
+
+  const submitCancelDialog = async () => {
+    if (!cancelDialogIv) return
+    setCancelSubmitting(true)
+    try {
+      if (cancelTab === "reschedule") {
+        if (cancelSendMessage && cancelMessageText.trim()) {
+          const res = await fetch(`/api/modules/hr/calendar/${cancelDialogIv.id}/cancel-and-notify`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: cancelMessageText }),
+          })
+          if (!res.ok) throw new Error()
+        } else {
+          updateInterview(cancelDialogIv.id, { status: "Отменено" }, "Интервью отменено")
+        }
+        toast.success("Интервью отменено" + (cancelSendMessage ? " — кандидату отправлено сообщение" : ""))
+      } else {
+        if (!cancelDialogIv.candidateId) { toast.error("Кандидат не привязан к записи"); return }
+        const res = await fetch(`/api/modules/hr/candidates/${cancelDialogIv.candidateId}/stage`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stage: "rejected",
+            sendMessage: cancelSendMessage,
+            messageOverride: cancelSendMessage ? cancelMessageText : undefined,
+            rejectionReasonCategory: cancelRejectReason || null,
+            rejectionInitiator: "company",
+          }),
+        })
+        if (!res.ok) throw new Error()
+        updateInterview(cancelDialogIv.id, { status: "Отменено" }, "Кандидату отказано")
+        toast.success("Кандидату отказано" + (cancelSendMessage ? " — сообщение отправлено" : ""))
+      }
+      setCancelDialogIv(null)
+      await loadInterviews()
+    } catch { toast.error("Не удалось выполнить действие") }
+    finally { setCancelSubmitting(false) }
+  }
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
@@ -464,8 +555,8 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     const iv = interviews.find(x => x.id === dragIvId)
     if (!iv) return
     const newTime = `${String(hour).padStart(2, "0")}:00`
-    const endH = hour + (iv.endTime && iv.time ? (parseInt(iv.endTime) - parseInt(iv.time)) : 1)
-    const newEnd = `${String(Math.min(endH, 20)).padStart(2, "0")}:00`
+    const durationMin = iv.endTime && iv.time ? Math.max(5, timeToMinutes(iv.endTime) - timeToMinutes(iv.time)) : 60
+    const newEnd = minutesToTime(Math.min(hour * 60 + durationMin, 20 * 60))
     updateInterview(dragIvId, { time: newTime, endTime: newEnd }, `Встреча перенесена на ${newTime}`)
     ivDragEnd()
   }
@@ -493,8 +584,8 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     if (!iv) return
     const newDate = new Date(day); newDate.setHours(hour, 0, 0, 0)
     const newTime = `${String(hour).padStart(2, "0")}:00`
-    const dur = iv.endTime && iv.time ? (parseInt(iv.endTime) - parseInt(iv.time)) : 1
-    const newEnd = `${String(Math.min(hour + dur, 20)).padStart(2, "0")}:00`
+    const durationMin = iv.endTime && iv.time ? Math.max(5, timeToMinutes(iv.endTime) - timeToMinutes(iv.time)) : 60
+    const newEnd = minutesToTime(Math.min(hour * 60 + durationMin, 20 * 60))
     const dayLabel = day.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
     updateInterview(dragIvId, { date: newDate, time: newTime, endTime: newEnd }, `Встреча перенесена на ${dayLabel} в ${newTime}`)
     ivDragEnd()
@@ -517,7 +608,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
         id: `stage-virtual-${c.id}`, date: virtualNow, time: "—", endTime: "—",
         candidate: c.name, vacancy: vacOptions.find(v => v.id === vacancyId)?.title ?? "—",
         interviewer: "—", type: "HR" as InterviewType, format: "Онлайн" as InterviewFormat, status: "Пройдено" as InterviewStatus,
-        candidateId: c.id, aiScore: null, resumeScore: null, phone: null, stage: c.stage,
+        candidateId: c.id, vacancyId: vacancyId ?? null, aiScore: null, resumeScore: null, phone: null, stage: c.stage,
         anketaFilled: false, tested: false, testScore: null, answersScore: null, byStageOnly: true,
       }))
     return [...interviews, ...virtuals]
@@ -785,18 +876,13 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                 Далее: {nextFormatAfter(iv.format)}
                               </Button>
                             )}
-                            {/* Юрий 10.07: менеджер отменяет интервью — кандидат сможет сам
-                                записаться на новое время по своей ссылке (та же логика, что и
-                                при самостоятельном переносе — старое подтверждённое событие
-                                отменяется, слот освобождается). Только для будущих неотменённых. */}
+                            {/* Юрий 10.07: менеджер отменяет интервью или отказывает — диалог
+                                с предпросмотром/редактированием сообщения кандидату перед отправкой.
+                                Только для будущих неотменённых. */}
                             {!iv.byStageOnly && iv.status !== "Отменено" && iv.status !== "Не явился" && iv.date > new Date() && (
                               <Button
                                 variant="ghost" size="sm" className="gap-1 text-xs h-7 text-muted-foreground hover:text-destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (!confirm(`Отменить интервью с ${iv.candidate}? Кандидат сможет сам записаться на новое время по своей ссылке.`)) return
-                                  updateInterview(iv.id, { status: "Отменено" }, "Интервью отменено")
-                                }}
+                                onClick={(e) => { e.stopPropagation(); openCancelDialog(iv) }}
                               >
                                 <X className="h-3.5 w-3.5" /> Отменить
                               </Button>
@@ -994,7 +1080,9 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                               >
                                 {isDropCell && <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary rounded" />}
                                 {cellIvs.map(iv => {
-                                  const dur = iv.endTime ? Math.max(1, parseInt(iv.endTime) - parseInt(iv.time)) : 1
+                                  const durHours = iv.endTime && iv.time
+                                    ? Math.max(0.25, (timeToMinutes(iv.endTime) - timeToMinutes(iv.time)) / 60)
+                                    : 1
                                   return (
                                     <div
                                       key={iv.id}
@@ -1002,7 +1090,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                       onDragStart={() => ivDragStart(iv.id)}
                                       onDragEnd={ivDragEnd}
                                       className={cn("rounded-md border px-2 py-1.5 text-[10px] leading-tight cursor-pointer active:cursor-grabbing mb-0.5 transition-opacity flex flex-col justify-center gap-0.5", STATUS_STYLES[iv.status], dragIvId === iv.id && "opacity-40 scale-95")}
-                                      style={{ minHeight: `${dur * 56}px` }}
+                                      style={{ minHeight: `${durHours * 56}px` }}
                                       title={`${iv.candidate} · ${iv.type} · ${iv.format} · ${iv.time}–${iv.endTime}`}
                                       onClick={() => iv.candidateId ? openCandidate(iv.candidateId) : toast.info("Кандидат не привязан к записи")}
                                     >
@@ -1303,6 +1391,61 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               </Button>
               <Button variant="outline" className="flex-1 gap-1.5" onClick={() => { toast("Встреча перенесена без уведомления"); setNotifyDialog(null) }}>
                 <BellOff className="w-4 h-4" /> Нет
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Диалог отмены интервью менеджером (Юрий 10.07) ═══════════════
+          Вкладка «Отменить» — приглашение перезаписаться (слот освобождается,
+          кандидат остаётся в воронке). Вкладка «Отказать» — реальный отказ
+          (та же механика, что и обычный отказ на карточке кандидата).
+          Обе — с предпросмотром/редактированием текста + сохранением правки
+          как нового шаблона вакансии. */}
+      <Dialog open={!!cancelDialogIv} onOpenChange={o => { if (!o) setCancelDialogIv(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Интервью с {cancelDialogIv?.candidate}</DialogTitle>
+          </DialogHeader>
+          <Tabs value={cancelTab} onValueChange={v => setCancelTab(v as "reschedule" | "reject")}>
+            <TabsList className="w-full">
+              <TabsTrigger value="reschedule" className="flex-1">Отменить (перезаписаться)</TabsTrigger>
+              <TabsTrigger value="reject" className="flex-1">Отказать</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              {cancelTab === "reschedule"
+                ? "Запись отменяется, кандидат сможет сам выбрать новое время по своей ссылке."
+                : "Кандидат переводится на стадию «Отказ»."}
+            </p>
+            <StageMessageControl
+              stage={cancelTab === "reschedule" ? "interview_cancelled" : "rejected"}
+              vacancyId={cancelDialogIv?.vacancyId ?? null}
+              sendMessage={cancelSendMessage}
+              onSendMessageChange={setCancelSendMessage}
+              messageText={cancelMessageText}
+              onMessageTextChange={setCancelMessageText}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-2">
+            {cancelSendMessage && cancelMessageText.trim() && (
+              <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={saveMessageTemplate} disabled={cancelSavingTemplate}>
+                {cancelSavingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Сохранить как шаблон вакансии
+              </Button>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" size="sm" onClick={() => setCancelDialogIv(null)} disabled={cancelSubmitting}>Отмена</Button>
+              <Button
+                size="sm"
+                className={cn("gap-1.5", cancelTab === "reject" && "bg-destructive hover:bg-destructive/90")}
+                onClick={submitCancelDialog}
+                disabled={cancelSubmitting}
+              >
+                {cancelSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                {cancelTab === "reschedule" ? "Отменить интервью" : "Отказать"}
               </Button>
             </div>
           </div>

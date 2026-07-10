@@ -119,6 +119,18 @@ export async function PUT(
         ? body.rejectMessage.slice(0, 2000)
         : undefined
     }
+    // Юрий 10.07: шаблон «менеджер отменил интервью — приглашение перезаписаться».
+    if (body.interviewCancelledMessage !== undefined) {
+      settings.interviewCancelledMessage = typeof body.interviewCancelledMessage === "string"
+        ? body.interviewCancelledMessage.slice(0, 2000)
+        : undefined
+    }
+    // Юрий 10.07: шаблон авто-уведомления при вставке/смене ссылки на встречу.
+    if (body.meetingLinkMessage !== undefined) {
+      settings.meetingLinkMessage = typeof body.meetingLinkMessage === "string"
+        ? body.meetingLinkMessage.slice(0, 2000)
+        : undefined
+    }
 
     const updates: Record<string, unknown> = {
       aiProcessSettings: settings,

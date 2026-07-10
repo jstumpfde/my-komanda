@@ -66,15 +66,22 @@ function localYMD(d: Date, tz: string): string {
   } catch { return d.toISOString().slice(0, 10) }
 }
 
+// Юрий 10.07: явная метка часового пояса рядом с каждым временем в тексте
+// кандидату — без неё «18:00» читается как локальное время получателя,
+// что приводило к путанице («по московскому времени у вас указано?»).
+function tzLabel(tz: string): string {
+  return tz === "Europe/Moscow" ? "МСК" : tz
+}
+
 function fmt(d: Date, tz: string): string {
   try {
     return new Intl.DateTimeFormat("ru-RU", {
       day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit", timeZone: tz,
-    }).format(d)
+    }).format(d) + ` (${tzLabel(tz)})`
   } catch {
     return new Intl.DateTimeFormat("ru-RU", {
       day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow",
-    }).format(d)
+    }).format(d) + " (МСК)"
   }
 }
 
