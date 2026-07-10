@@ -21,6 +21,7 @@ import { getEffectiveMessageDefaults } from "@/lib/messaging/effective-message-d
 import { renderTemplate } from "@/lib/template-renderer"
 import { rejectMessageVars } from "@/lib/funnel-v2/reject-vars"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
+import { sanitizeRejectionText } from "@/lib/rejection/legal-guard"
 
 interface CandidateContext {
   id:        string
@@ -145,6 +146,10 @@ export async function trySyncRejectToHh(candidateId: string, customMessage?: str
       const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).rejectMessage
       message = renderTemplate(tpl, rejectVars)
     }
+    // Аудит 10.07: юр-фильтр — на ИТОГОВЫЙ текст, а не только на customMessage
+    // у вызывающих. Раньше generic rejectMessage вакансии (большинство отказов)
+    // уходил в hh без проверки на защищённые признаки.
+    message = sanitizeRejectionText(message) ?? message
 
     await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
     console.info(`[hh:sync-stage] reject → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
@@ -260,13 +265,15 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
     if (action === "discard") {
       const tpl = ctx.vac.aiProcessSettings.rejectMessage?.trim() || (await getEffectiveMessageDefaults(ctx.vac.companyId)).rejectMessage
       // Единый набор переменных отказа (инвариант: без литералов {{...}})
-      const message = renderTemplate(tpl, rejectMessageVars({
+      const rendered = renderTemplate(tpl, rejectMessageVars({
         firstName,
         vacancyTitle: ctx.vac.title,
         companyName:  ctx.vac.companyName,
         token:        ctx.cand.token,
         baseUrl:      getAppBaseUrl(),
       }))
+      // Аудит 10.07: юр-фильтр и на ручном пути смены стадии (раньше — нет).
+      const message = sanitizeRejectionText(rendered) ?? rendered
       await changeNegotiationState(token.accessToken, ctx.hh.hhResponseId, "discard", message)
       console.info(`[hh:sync-stage] discard (${newStage}) → ${ctx.hh.hhResponseId} (cand ${ctx.cand.id})`)
       return true

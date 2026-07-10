@@ -91,7 +91,19 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
       // останавливаем автообработку, НО stage='rejected' и сообщение в hh
       // ставит cron pending-rejections, когда истечёт задержка вакансии
       // (в рабочее время). delay=0 → cron исполнит на ближайшем прогоне.
+      //
+      // Аудит 10.07 — ПОРЯДОК: scheduleRejection ДО коммита статуса. Раньше
+      // статус 'failed' коммитился первым, и если scheduleRejection падал —
+      // повторный finalize возвращал «already_failed», отказ не ставился
+      // никогда, кандидат зависал без движения. scheduleRejection идемпотентен
+      // (гварды pendingRejectionAt/stage внутри), поэтому переупорядочивание
+      // безопасно.
       const aiSettings = (cand.aiSettings as VacancyAiProcessSettings | null) ?? null
+      await scheduleRejection({
+        candidateId:  args.candidateId,
+        reason:       "prequalification_failed",
+        delayMinutes: rejectionDelayMinutes(aiSettings),
+      })
       await db.update(candidates).set({
         autoProcessingStopped:       true,
         autoProcessingStoppedReason: "prequalification_failed",
@@ -101,11 +113,6 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
         stageHistory: [...history, { from: fromStage, to: fromStage, at: nowIso, reason }],
         updatedAt: now,
       }).where(eq(candidates.id, args.candidateId))
-      await scheduleRejection({
-        candidateId:  args.candidateId,
-        reason:       "prequalification_failed",
-        delayMinutes: rejectionDelayMinutes(aiSettings),
-      })
     } else {
       // passed или no_answer:
       //   • prequal_only — demo не отправляется, кандидат → anketa_filled,
@@ -118,6 +125,22 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
       const skipDemo = mode === "prequal_only"
       const toStage = skipDemo ? "anketa_filled" : fromStage
 
+      // Аудит 10.07 — ПОРЯДОК: приглашение с demo-ссылкой уходит ДО коммита
+      // статуса 'passed'. Раньше статус коммитился первым, и при сбое отправки
+      // (протухший hh-токен/сеть) кандидат оставался «прошёл», ссылка не
+      // уходила, повторный finalize отвечал «already_passed» — потерян
+      // навсегда. Теперь при сбое статус не выставляется → следующий вызов
+      // finalize (крон предквалификации) повторит попытку. Редкий обратный
+      // случай (отправка ок, коммит упал → второе приглашение при ретрае)
+      // безобиднее молчаливой потери кандидата.
+      if (!skipDemo) {
+        const sent = await trySyncInviteToHh(args.candidateId)
+        if (!sent) {
+          console.warn("[prequalification] invite send failed — finalize отложен для ретрая", { candidateId: args.candidateId })
+          return { finalized: false, reason: "invite_send_failed" }
+        }
+      }
+
       await db.update(candidates).set({
         prequalificationStatus:      verdict,
         prequalificationCompletedAt: now,
@@ -125,10 +148,6 @@ export async function finalizePrequalification(args: FinalizeArgs): Promise<Fina
         stageHistory: [...history, { from: fromStage, to: toStage, at: nowIso, reason }],
         updatedAt: now,
       }).where(eq(candidates.id, args.candidateId))
-
-      if (!skipDemo) {
-        await trySyncInviteToHh(args.candidateId)
-      }
 
       // hh_responses из очереди (если ещё лежит как response) → invited.
       // Делаем и для prequal_only — отклик из очереди ушёл, решение принято.
