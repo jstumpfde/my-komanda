@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, Bell, BellOff, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles, CalendarClock, Link2, UserCheck, Loader2 } from "lucide-react"
+import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles, CalendarClock, Link2, UserCheck, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
@@ -309,7 +309,10 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const [dropTargetDay, setDropTargetDay] = useState<string | null>(null)
   const [dropTargetStatus, setDropTargetStatus] = useState<InterviewStatus | null>(null)
 
-  const [notifyDialog, setNotifyDialog] = useState<{ message: string } | null>(null)
+  // Легаси-диалог «Уведомить кандидата о переносе?» удалён 11.07: его «Да,
+  // уведомить» показывал тост об отправке, ничего не отправляя (скрытое
+  // ложное обещание). Честное уведомление при отмене — через диалог отмены
+  // (cancel-and-notify); уведомление при переносе — бэклог.
 
   // Диалог отмены интервью менеджером (Юрий 10.07): вкладка «Отменить» —
   // приглашение перезаписаться (слот освобождается, кандидат не отклоняется);
@@ -373,7 +376,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
             toast.warning("Интервью отменено, но сообщение не доставлено — предупредите кандидата вручную")
           }
         } else {
-          updateInterview(cancelDialogIv.id, { status: "Отменено" }, "Интервью отменено")
+          updateInterview(cancelDialogIv.id, { status: "Отменено" })
           if (cancelSendMessage) {
             toast.warning("Интервью отменено без сообщения (текст пуст) — предупредите кандидата вручную")
           } else {
@@ -396,7 +399,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           }),
         })
         if (!res.ok) throw new Error()
-        updateInterview(cancelDialogIv.id, { status: "Отменено" }, "Кандидату отказано")
+        updateInterview(cancelDialogIv.id, { status: "Отменено" })
         // Отказ уходит через движок отказов (задержка вакансии) — «будет», не «уже».
         toast.success("Кандидату отказано" + (willSendReject ? " — сообщение будет отправлено" : ""))
       }
@@ -544,10 +547,10 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   // пишет startAt/endAt, смена статуса маппится на статус события календаря
   // (confirmed/tentative/cancelled). Тонкие статусы (Пройдено/Не явился) — в
   // interview_status, статус события — ближайший (для конфликтов/напоминаний C6).
-  const updateInterview = (id: string, patch: Partial<Interview>, msg: string) => {
+  const updateInterview = (id: string, patch: Partial<Interview>, msg?: string) => {
     const current = interviews.find(iv => iv.id === id)
     setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
-    setNotifyDialog({ message: msg })
+    if (msg) toast(msg)
     if (!current) return
     const merged = { ...current, ...patch }
     const body: Record<string, unknown> = {}
@@ -1401,25 +1404,6 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
         </DialogContent>
       </Dialog>
 
-      {/* ═══ Notify dialog ════════════════════════════════════ */}
-      <Dialog open={!!notifyDialog} onOpenChange={o => { if (!o) setNotifyDialog(null) }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Встреча перенесена</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <p className="text-sm text-foreground">{notifyDialog?.message}</p>
-            <p className="text-sm text-muted-foreground">Уведомить кандидата о переносе?</p>
-            <div className="flex gap-2">
-              <Button className="flex-1 gap-1.5" onClick={() => { toast.success("Уведомление отправлено кандидату"); setNotifyDialog(null) }}>
-                <Bell className="w-4 h-4" /> Да, уведомить
-              </Button>
-              <Button variant="outline" className="flex-1 gap-1.5" onClick={() => { toast("Встреча перенесена без уведомления"); setNotifyDialog(null) }}>
-                <BellOff className="w-4 h-4" /> Нет
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* ═══ Диалог отмены интервью менеджером (Юрий 10.07) ═══════════════
           Вкладка «Отменить» — приглашение перезаписаться (слот освобождается,
           кандидат остаётся в воронке). Вкладка «Отказать» — реальный отказ
@@ -1429,7 +1413,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
       <Dialog open={!!cancelDialogIv} onOpenChange={o => { if (!o) setCancelDialogIv(null) }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Интервью с {cancelDialogIv?.candidate}</DialogTitle>
+            <DialogTitle>Интервью с {(cancelDialogIv?.candidate ?? "").replace(/^Интервью\s*—\s*/, "") || "кандидатом"}</DialogTitle>
           </DialogHeader>
           <Tabs value={cancelTab} onValueChange={v => setCancelTab(v as "reschedule" | "reject")}>
             <TabsList className="w-full">
