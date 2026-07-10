@@ -6,10 +6,13 @@ import { requireCompany, apiError } from "@/lib/api-helpers"
 import { getValidToken } from "@/lib/hh-helpers"
 
 // Маппинг id стадии hh → русское название
+// (имена сверены с живым hh API 11.07: GET /negotiations → collections[];
+// phone_interview = «Первичный контакт», consider = «Подумать» — прежний
+// вариант путал эти два. Синхронно с HH_STATE_LABELS в lib/hh/stage-mapping.ts.)
 const HH_STAGE_LABELS: Record<string, string> = {
   response:        "Отклик",
-  consider:        "Первичный контакт",
-  phone_interview: "Телефонное интервью",
+  consider:        "Подумать",
+  phone_interview: "Первичный контакт",
   interview:       "Собеседование",
   assessment:      "Тестовое задание",
   offer:           "Оффер",

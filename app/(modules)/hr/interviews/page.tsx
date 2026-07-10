@@ -382,12 +382,15 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
         }
       } else {
         if (!cancelDialogIv.candidateId) { toast.error("Кандидат не привязан к записи"); return }
+        // Как и в reschedule-ветке: обещаем отправку только если шаблон
+        // реально есть (превью = зеркало движка отказов).
+        const willSendReject = cancelSendMessage && cancelPreview.hasMessage
         const res = await fetch(`/api/modules/hr/candidates/${cancelDialogIv.candidateId}/stage`, {
           method: "PUT", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             stage: "rejected",
-            sendMessage: cancelSendMessage,
-            messageOverride: cancelSendMessage && cancelMessageText.trim() ? cancelMessageText : undefined,
+            sendMessage: willSendReject,
+            messageOverride: willSendReject && cancelMessageText.trim() ? cancelMessageText : undefined,
             rejectionReasonCategory: cancelRejectReason || null,
             rejectionInitiator: "company",
           }),
@@ -395,7 +398,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
         if (!res.ok) throw new Error()
         updateInterview(cancelDialogIv.id, { status: "Отменено" }, "Кандидату отказано")
         // Отказ уходит через движок отказов (задержка вакансии) — «будет», не «уже».
-        toast.success("Кандидату отказано" + (cancelSendMessage ? " — сообщение будет отправлено" : ""))
+        toast.success("Кандидату отказано" + (willSendReject ? " — сообщение будет отправлено" : ""))
       }
       setCancelDialogIv(null)
       await loadInterviews()

@@ -109,6 +109,10 @@ export function StageMessageControl({
         if (cancelled) return
         setPreview(null)
         onPreviewStateRef.current?.({ loading: false, hasMessage: false })
+        // Иначе при обрыве сети в поле остаётся текст ПРЕДЫДУЩЕЙ стадии
+        // (напр. текст отмены записи уйдёт как текст отказа). Ручной ввод
+        // HR (dirty) не трогаем.
+        if (!dirtyRef.current) onMessageTextChange("")
       })
       .finally(() => { if (!cancelled) setPreviewLoading(false) })
 

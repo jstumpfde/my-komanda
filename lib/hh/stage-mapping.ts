@@ -10,8 +10,8 @@
 // РЕАЛЬНЫЙ набор employer-состояний hh negotiation:
 //   response            — новый отклик (наш эквивалент: «Новый», но входящий
 //                         пуш в стадию не двигаем — response это ещё не решение)
-//   phone_interview     — «Телефонное интервью» / первичный контакт
-//   consider            — «Подумать» (тоже первичный контакт; входящий → primary_contact)
+//   phone_interview     — «Первичный контакт» (имя из hh API, сверено 11.07)
+//   consider            — «Подумать» (тоже ранняя стадия; входящий → primary_contact)
 //   assessment          — «Тестовое задание»
 //   interview           — «Собеседование»
 //   discard_by_employer — «Отказ» работодателя
@@ -177,10 +177,15 @@ export function isCandidateInitiatedDiscard(hhState: string | null | undefined):
 // Согласовано с существующим UI-словарём в
 // app/api/modules/hr/candidates/[id]/channel-stage/route.ts (HH_STAGE_LABELS),
 // чтобы не расходились метки на карточке и в синке/логах.
+//
+// 11.07: имена сверены с живым hh API (GET /negotiations → collections[]):
+// phone_interview = «Первичный контакт», consider = «Подумать». Прежняя
+// «карта 01.07» путала эти два — карточка показывала обнадёживающий
+// «Первичный контакт» для consider («Подумать») и наоборот.
 export const HH_STATE_LABELS: Record<string, string> = {
   response:             "Отклик",
-  phone_interview:      "Телефонное интервью",
-  consider:             "Первичный контакт",
+  phone_interview:      "Первичный контакт",
+  consider:             "Подумать",
   assessment:           "Тестовое задание",
   interview:            "Собеседование",
   discard:              "Отказ",

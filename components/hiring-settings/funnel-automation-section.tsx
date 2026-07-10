@@ -84,11 +84,13 @@ const STAGE_DOT_CLASSES: Record<StageColor, string> = {
 
 // ─── hh.ru маппинг стадий (статусы переговоров hh) ───────────────────────────
 // Статусы (коллекции переговоров) кандидата на hh.ru — куда переносим отклик.
+// Имена сверены с живым hh API 11.07 (GET /negotiations → collections[]):
+// phone_interview = «Первичный контакт», consider = «Подумать».
 const HH_STAGE_OPTIONS = [
   { value: "none",                 label: "—" },
   { value: "response",             label: "Новый отклик" },
-  { value: "consider",             label: "Думаю / в работе" },
-  { value: "phone_interview",      label: "Телефонное интервью" },
+  { value: "consider",             label: "Подумать" },
+  { value: "phone_interview",      label: "Первичный контакт" },
   { value: "assessment",           label: "Тестовое задание" },
   { value: "interview",            label: "Собеседование" },
   { value: "offer",                label: "Оффер" },

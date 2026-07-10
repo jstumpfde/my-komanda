@@ -355,7 +355,7 @@ export async function changeNegotiationState(
   companyId?: string,   // для per-company Telegram-алерта стража (необязателен)
 ): Promise<void> {
   // Маппинг на hh negotiation endpoints (PUT /negotiations/{action}/{id}):
-  //   invitation → phone_interview (Телефонное интервью / первый контакт)
+  //   invitation → phone_interview («Первичный контакт», имя из hh API 11.07)
   //   assessment → assessment (Тестовое задание)
   //   interview  → interview (Собеседование)
   //   consider   → consider (Подумать / первичный контакт)

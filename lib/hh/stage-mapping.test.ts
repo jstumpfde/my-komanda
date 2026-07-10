@@ -118,10 +118,11 @@ test("hhStatusStringToHhAction: русские v2-статусы", () => {
 })
 
 test("ярлыки hh-состояний (read-only показ #16)", () => {
-  assert.equal(hhStateLabel("phone_interview"), "Телефонное интервью")
+  // Имена сверены с живым hh API 11.07 (GET /negotiations → collections[]).
+  assert.equal(hhStateLabel("phone_interview"), "Первичный контакт")
   assert.equal(hhStateLabel("assessment"), "Тестовое задание")
   assert.equal(hhStateLabel("discard_by_applicant"), "Кандидат отказался")
-  assert.equal(hhStateLabel("consider"), "Первичный контакт")
+  assert.equal(hhStateLabel("consider"), "Подумать")
   assert.equal(hhStateLabel("hired"), "Выход на работу")
   assert.equal(hhStateLabel(null), null)
   // неизвестное — возвращаем как есть (не выдумываем)
