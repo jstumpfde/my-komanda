@@ -593,6 +593,7 @@ export async function executeStageEntry(
       await db.update(candidates)
         .set({
           stage:             "hired",
+          hiredAt:           now, // дата события найма (аудит 10.07, отчёт)
           funnelV2StateJson: hiredState,
           updatedAt:         now,
         })

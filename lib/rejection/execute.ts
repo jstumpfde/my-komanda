@@ -14,7 +14,7 @@
 import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { sanitizeRejectionText } from "@/lib/rejection/legal-guard"
-import { candidates, followUpMessages } from "@/lib/db/schema"
+import { candidates, followUpMessages, vacancies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 
@@ -113,6 +113,10 @@ export async function executeRejection(args: {
 
   await db.update(candidates).set({
     stage:                       "rejected",
+    // Аудит 10.07: дата СОБЫТИЯ отказа — по ней отчёт считает «Отказов за
+    // период» (раньше писалась только в ручном пути смены стадии, авто-путь
+    // не писал → отчёт был вынужден считать по дате отклика).
+    rejectionAt:                 now,
     automationPaused:            true,
     autoProcessingStopped:       true,
     autoProcessingStoppedReason: reason,
@@ -141,7 +145,35 @@ export async function executeRejection(args: {
 
   // Сообщение об отказе + discard в hh. Если на момент планирования был
   // сохранён кастомный текст (стоп-фактор) — шлём его; иначе generic из вакансии.
-  await trySyncRejectToHh(candidateId, sanitizeRejectionText(prev.message)).catch(() => false)
+  // Аудит 10.07: сбой синка больше не глотается молча — раньше кандидат был
+  // rejected локально, а на hh письмо не уходило и чат оставался открытым,
+  // без какого-либо сигнала. Теперь HR получает in-app уведомление и может
+  // закрыть отказ на hh руками (авто-ретрая нет осознанно: повторный discard
+  // по протухшей переписке будет падать вечно — см. паттерн 12в в бэклоге).
+  const hhSynced = await trySyncRejectToHh(candidateId, sanitizeRejectionText(prev.message)).catch(() => false)
+  if (!hhSynced) {
+    try {
+      const [row] = await db
+        .select({ name: candidates.name, companyId: vacancies.companyId, vacancyTitle: vacancies.title })
+        .from(candidates)
+        .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+        .where(eq(candidates.id, candidateId))
+        .limit(1)
+      if (row?.companyId) {
+        const { createNotification } = await import("@/lib/notifications")
+        await createNotification({
+          tenantId:   row.companyId,
+          type:       "hh_reject_sync_failed",
+          title:      `⚠️ Отказ не ушёл на hh: ${row.name ?? "кандидат"}`,
+          body:       `${row.vacancyTitle ?? ""} · кандидат отклонён на платформе, но hh-чат не закрыт (сбой синка). Закройте отказ на hh вручную.`,
+          severity:   "warning",
+          href:       `/hr/candidates/${candidateId}`,
+          sourceType: "candidate",
+          sourceId:   candidateId,
+        })
+      }
+    } catch { /* уведомление не должно ломать сам отказ */ }
+  }
 
   return { rejected: true }
 }

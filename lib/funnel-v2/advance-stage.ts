@@ -292,6 +292,7 @@ export async function advanceToNextStage(
       .set({
         funnelV2StateJson: completedState,
         stage:             "hired",   // конец воронки = нанят (легаси)
+        hiredAt:           new Date(), // дата события найма (аудит 10.07, отчёт)
         updatedAt:         new Date(),
       })
       .where(eq(candidates.id, candidate.id))
