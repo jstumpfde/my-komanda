@@ -10,26 +10,16 @@ import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Check, Loader2, ExternalLink, Sparkles } from "lucide-react"
-import { PRIVACY_POLICY_VERSION, MARKETING_CONSENT_VERSION } from "@/lib/legal/operator-requisites"
 
 type LeadStatus = "idle" | "submitting" | "success" | "error"
 
-// Тот же паттерн (и те же 3 чекбокса), что и app/(auth)/register/page.tsx —
-// best-effort запись в журнал 152-ФЗ (см. /admin/platform/consent-log).
-// Не блокирует отправку заявки при сбое. Оферта — только UI-гейт кнопки
-// (как и в register/page.tsx): consentLog поддерживает лишь privacy_policy/
-// marketing/cookie, отдельного consentType под оферту в системе нет.
-function logConsents(contact: string, marketing: boolean) {
-  const fire = (consentType: string, documentVersion: string) =>
-    fetch("/api/consent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ consentType, action: "accepted", documentVersion, visitorId: contact }),
-    }).catch(() => {})
-  void fire("privacy_policy", PRIVACY_POLICY_VERSION)
-  if (marketing) void fire("marketing", MARKETING_CONSENT_VERSION)
-}
-
+// Те же 3 чекбокса, что и в app/(auth)/register/page.tsx. Оферта — только
+// UI-гейт кнопки: consentLog поддерживает лишь privacy_policy/marketing/cookie,
+// отдельного consentType под оферту в системе нет. Согласие на обработку ПД и
+// на рассылку пишутся в журнал 152-ФЗ (/admin/platform → Согласия) СЕРВЕРНО,
+// внутри POST /api/public/landing-lead — см. consent/marketingConsent в теле
+// запроса ниже (раньше был отдельный best-effort fetch с клиента на
+// /api/consent, который молча терялся при сбое сети).
 const CASES = [
   {
     slug: "biglife",
@@ -71,6 +61,7 @@ function LeadForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name, contact, company, interest: "website", comment, website, consent,
+          marketingConsent,
           source: "portfolio",
         }),
       })
@@ -80,7 +71,6 @@ function LeadForm() {
         setStatus("error")
         return
       }
-      logConsents(contact, marketingConsent)
       setStatus("success")
     } catch {
       setErrorMessage("Не удалось отправить заявку — проверьте соединение и попробуйте ещё раз")

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { accessRequests } from "@/lib/db/schema"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { PRIVACY_POLICY_VERSION, MARKETING_CONSENT_VERSION } from "@/lib/legal/operator-requisites"
+import { logRegistrationConsent } from "@/lib/legal/log-consent"
 
 // POST /api/public/partner-application
 //
@@ -52,6 +54,18 @@ export async function POST(req: NextRequest) {
       status: "new",
       requestType: "partner",
     }).returning({ id: accessRequests.id })
+
+    // 152-ФЗ: чекбокс согласия обязателен для сабмита формы (см.
+    // app/(auth)/register/partner/page.tsx), пишем факт в журнал согласий
+    // здесь же на сервере — надёжнее, чем отдельный best-effort fetch с клиента.
+    const marketingConsent = typeof body.marketingConsent === "boolean" ? body.marketingConsent : false
+    await logRegistrationConsent({
+      req,
+      visitorId: email,
+      privacyPolicyVersion: PRIVACY_POLICY_VERSION,
+      marketingConsent,
+      marketingConsentVersion: MARKETING_CONSENT_VERSION,
+    })
 
     return NextResponse.json({ ok: true, id: request.id }, { status: 201 })
   } catch (error) {
