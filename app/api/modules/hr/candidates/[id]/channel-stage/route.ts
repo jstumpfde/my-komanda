@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { and, eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses, hhCandidates } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
@@ -40,6 +40,8 @@ async function resolveNegotiationId(
         eq(hhResponses.companyId, companyId),
       ),
     )
+    // Свежий negotiation при повторном отклике (см. sync-stage.ts, 11.07)
+    .orderBy(desc(hhResponses.createdAt))
     .limit(1)
 
   if (direct?.hhResponseId) return direct.hhResponseId

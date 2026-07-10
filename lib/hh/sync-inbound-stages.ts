@@ -19,7 +19,7 @@
 // входящий сигнал не двигает назад (кроме отказа: hh-discard → rejected всегда
 // имеет приоритет, т.к. отклик реально закрыт на hh).
 
-import { and, eq, isNull, isNotNull, or, ne } from "drizzle-orm"
+import { and, desc, eq, isNull, isNotNull, or, ne } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, hhResponses, hhCandidates } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
@@ -55,6 +55,8 @@ async function resolveNegotiationId(candidateId: string, companyId: string): Pro
     .select({ hhResponseId: hhResponses.hhResponseId })
     .from(hhResponses)
     .where(and(eq(hhResponses.localCandidateId, candidateId), eq(hhResponses.companyId, companyId)))
+    // Свежий negotiation при повторном отклике (см. sync-stage.ts, 11.07)
+    .orderBy(desc(hhResponses.createdAt))
     .limit(1)
   if (direct?.hhResponseId) return direct.hhResponseId
 

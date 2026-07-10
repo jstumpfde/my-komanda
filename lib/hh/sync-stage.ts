@@ -12,7 +12,7 @@
 import { db } from "@/lib/db"
 import { candidates, hhCandidates, hhResponses, vacancies, companies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { getValidToken } from "@/lib/hh-helpers"
 import { changeNegotiationState } from "@/lib/hh-api"
@@ -66,6 +66,9 @@ async function loadContext(candidateId: string): Promise<{
     ))
     .leftJoin(hhCandidates, eq(hhCandidates.candidateId, candidates.id))
     .where(eq(candidates.id, candidateId))
+    // После перепубликации у кандидата может быть два negotiation (старый
+    // мёртвый + свежий) — берём свежий, как follow-up/route.ts (разведка 11.07).
+    .orderBy(desc(hhResponses.createdAt))
     .limit(1)
 
   if (!row) return null
