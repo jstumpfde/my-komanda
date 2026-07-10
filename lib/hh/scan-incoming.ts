@@ -106,18 +106,29 @@ async function fetchNewApplicantMessages(
   hhResponseId: string,
   lastSeenId: string | null,
 ): Promise<HHMsg[]> {
-  const url = `https://api.hh.ru/negotiations/${hhResponseId}/messages?with_text=true&per_page=100&page=0`
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "User-Agent": "Company24.pro/1.0",
-    },
-  })
-  if (!res.ok) {
-    throw new Error(`hh ${res.status}: ${(await res.text()).slice(0, 100)}`)
+  // Аудит 10.07: раньше читалась только page=0 (100 сообщений) — в длинном
+  // диалоге (>100, например с чат-ботом) новые сообщения кандидата вообще не
+  // попадали в выборку, а lastSeenId не находился в странице → возвращались
+  // ВСЕ сообщения и старые переобрабатывались. Теперь листаем до конца
+  // (потолок 5 страниц = 500 сообщений — диалог длиннее в найме нереален).
+  const items: HHMsg[] = []
+  for (let page = 0; page < 5; page++) {
+    const url = `https://api.hh.ru/negotiations/${hhResponseId}/messages?with_text=true&per_page=100&page=${page}`
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": "Company24.pro/1.0",
+      },
+    })
+    if (!res.ok) {
+      throw new Error(`hh ${res.status}: ${(await res.text()).slice(0, 100)}`)
+    }
+    const data = await res.json() as { items?: HHMsg[]; pages?: number }
+    const chunk = Array.isArray(data.items) ? data.items : []
+    items.push(...chunk)
+    const totalPages = typeof data.pages === "number" ? data.pages : 1
+    if (page + 1 >= totalPages || chunk.length === 0) break
   }
-  const data = await res.json() as { items?: HHMsg[] }
-  const items = Array.isArray(data.items) ? data.items : []
   // Только applicant-сообщения с непустым текстом, отсортированные по
   // created_at ASC, новее last_seen_id.
   const applicant = items
@@ -208,6 +219,8 @@ async function applyRejection(args: {
 
   await db.update(candidates).set({
     stage: "rejected",
+    // Аудит 10.07: дата события отказа — по ней отчёт считает «Отказов за период».
+    rejectionAt: new Date(),
     automationPaused: true,
     autoProcessingStopped: true,
     autoProcessingStoppedReason: reason,
@@ -313,14 +326,39 @@ export async function scanIncomingMessages(opts: {
 
   for (const resp of responses) {
     result.scanned++
+
+    // Аудит 10.07 — атомарный CAS-claim отклика (тот же паттерн, что в
+    // process-queue: там это чинило двойное приветствие Петренко). Прогоны
+    // крона НАКЛАДЫВАЮТСЯ (паузы чат-бота до 120с/сообщение легко растягивают
+    // прогон за интервал), и раньше оба брали один отклик → кандидату уходило
+    // два разных ответа. Клеймим сдвигом last_check_at: выигравший прогон
+    // работает, проигравший видит 0 обновлённых строк и пропускает. Плата за
+    // это: при падении процесса отклик переобработается через staleMinutes
+    // (14 мин), а не мгновенно — дубль сообщения кандидату хуже этой задержки.
+    const claimed = await db.update(hhResponses)
+      .set({ lastCheckAt: new Date() })
+      .where(and(
+        eq(hhResponses.id, resp.id),
+        or(isNull(hhResponses.lastCheckAt), lt(hhResponses.lastCheckAt, staleThreshold)),
+      ))
+      .returning({ id: hhResponses.id })
+    if (claimed.length === 0) {
+      result.scanned--
+      continue // другой прогон уже забрал этот отклик
+    }
+
     const accessToken = await getToken(resp.companyId)
     if (!accessToken) {
       result.errors.push(`no_token:${resp.companyId}`)
-      // Пишем last_check_at чтобы не зацикливаться на этой компании.
-      await db.update(hhResponses).set({ lastCheckAt: new Date() })
-        .where(eq(hhResponses.id, resp.id))
-      continue
+      continue // last_check_at уже сдвинут клеймом — зацикливания нет
     }
+
+    // Аудит 10.07 — per-response изоляция ошибок: раньше детерминированная
+    // ошибка на ОДНОМ отклике (prequalification/эскалация без try/catch)
+    // валила исключением весь прогон, и т.к. отклик оставался первым в FIFO,
+    // обработка входящих ВСЕХ компаний вставала намертво. Теперь ошибка
+    // логируется, отклик переобработается через staleMinutes, цикл живёт.
+    try {
 
     let newMsgs: HHMsg[] = []
     try {
@@ -436,6 +474,7 @@ export async function scanIncomingMessages(opts: {
         candName:       candidates.name,
         candShortId:    candidates.shortId,
         candToken:      candidates.token,
+        candStage:      candidates.stage,
         callIntentCount: candidates.callIntentCount,
         prequalStatus:   candidates.prequalificationStatus,
         vacancyId:      candidates.vacancyId,
@@ -456,6 +495,21 @@ export async function scanIncomingMessages(opts: {
       .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
       .where(eq(candidates.id, candidateId))
       .limit(1)
+
+    // Аудит 10.07 — терминальные стадии: уже отклонённый/нанятый кандидат не
+    // должен получать ответы бота/FAQ, а его «хочу созвониться» — откатывать
+    // стадию назад в primary_contact (раньше ни одного гарда по стадии не
+    // было). Сообщения помечаем прочитанными (lastSeen сдвигаем ниже по
+    // обычному пути) — просто не реагируем.
+    if (candVac?.candStage === "rejected" || candVac?.candStage === "hired") {
+      const lastIdTerminal = newMsgs[newMsgs.length - 1].id ?? resp.lastSeenMessageId ?? null
+      await db.update(hhResponses).set({
+        lastSeenMessageId: lastIdTerminal,
+        lastCheckAt: new Date(),
+      }).where(eq(hhResponses.id, resp.id))
+      console.info(`[scan-incoming] skip terminal-stage candidate=${candidateId} stage=${candVac.candStage}: ${newMsgs.length} msg(s) marked seen, no reaction`)
+      continue
+    }
 
     // Бот-уточнение (контур «Портрет»): один раз на кандидата читаем spec-флаг,
     // чтобы Executor мягко уточнял спорное. Только для Портрет-вакансий — иначе
@@ -521,6 +575,10 @@ export async function scanIncomingMessages(opts: {
           })
           const sentOk = await sendFarewell(accessToken, resp.hhResponseId, rendered)
           console.info(`[scan-incoming] ${candidateId} auto_responder_faq_sent ok=${sentOk} text="${preview}"`)
+          // Аудит 10.07: недоставленный ответ (429/5xx hh) не должен «съедать»
+          // вопрос кандидата — не двигаем lastSeen дальше этого сообщения,
+          // повторим на следующем прогоне (тот же механизм, что при сбое AI).
+          if (!sentOk) { aiFailedIdx = msgIdx; break }
           continue
         }
       }
@@ -601,10 +659,15 @@ export async function scanIncomingMessages(opts: {
                 await new Promise(r => setTimeout(r, Math.min(cb.preMessageDelayMs!, 60_000)))
               }
               if (cb.replyDelayMs && cb.replyDelayMs > 0) {
-                await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+                await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs!, 60_000)))
               }
               const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
               console.info(`[scan-incoming] ${candidateId} ai_chatbot_sent ok=${ok} cat=${cb.category} conf=${cb.confidence?.toFixed(2)} text="${preview}"`)
+              // Аудит 10.07: недоставленный ответ бота не должен «съедать»
+              // вопрос кандидата — не двигаем lastSeen дальше, повтор на
+              // следующем прогоне (processChatbotMessage идемпотентен по
+              // истории: перечитает контекст и ответит заново).
+              if (!ok) { aiFailedIdx = msgIdx; break }
 
               // Фаза 2b «бот ведёт» (СПЯЩАЯ): если HR включил autonomy.* у вакансии
               // и движок уверенно рекомендует шаг воронки — исполняем. По умолчанию
@@ -625,7 +688,7 @@ export async function scanIncomingMessages(opts: {
               // отправляем кандидату это сообщение перед закрытием цепочки.
               if (cb.reply) {
                 if (cb.replyDelayMs && cb.replyDelayMs > 0) {
-                  await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+                  await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs!, 60_000)))
                 }
                 const ok = await sendFarewell(accessToken, resp.hhResponseId, cb.reply)
                 console.info(`[scan-incoming] ${candidateId} ai_chatbot_rejected_with_reply ok=${ok} reason=${cb.escalationReason} text="${preview}"`)
@@ -652,15 +715,15 @@ export async function scanIncomingMessages(opts: {
       }
 
       // Шаг 1: стоп-слова чата → жёсткий отказ. Делаем до callIntent.
-      // Если у вакансии настроен кастомный список (stopWordsJson) — substring-match;
-      // иначе fallback на hardcoded STOP_WORDS с word-boundary.
+      // Аудит 10.07: кастомный список вакансии ОБЪЕДИНЯЕТСЯ с платформенным
+      // baseline, а не заменяет его (раньше при заданном кастомном — а он
+      // задан почти всегда — «не хочу»/«нашел работу» без «ё» не ловились).
       {
         const swFlag = (candVac?.aiProcessSettings as { stopWordsChatEnabled?: boolean } | null)?.stopWordsChatEnabled
         if (isBlockEnabled(candVac, "stop_words_chat", swFlag !== false)) {
           const vacStopWords = (candVac?.stopWordsJson ?? []).filter((s): s is string => typeof s === "string")
-          const matched = vacStopWords.length > 0
-            ? matchStopWordList(text, vacStopWords) !== null
-            : matchStopWordWith(text, await getBaselineStopWords())
+          const matched = (vacStopWords.length > 0 && matchStopWordList(text, vacStopWords) !== null)
+            || matchStopWordWith(text, await getBaselineStopWords())
           if (matched) {
             // Настраиваемая реакция (Юрий 02.07): дефолт 'none' — стадию НЕ
             // трогаем вообще, реагируем только прощальным сообщением (если
@@ -832,6 +895,12 @@ export async function scanIncomingMessages(opts: {
       lastSeenMessageId: lastId,
       lastCheckAt: new Date(),
     }).where(eq(hhResponses.id, resp.id))
+    } catch (err) {
+      // lastSeen НЕ двигаем — сообщения этого отклика переобработаются через
+      // staleMinutes (last_check_at уже сдвинут клеймом, зацикливания нет).
+      result.errors.push(`response:${resp.hhResponseId}:${err instanceof Error ? err.message : "?"}`)
+      console.error(`[scan-incoming] response ${resp.hhResponseId} failed, isolated:`, err instanceof Error ? err.message : err)
+    }
   }
 
   return result

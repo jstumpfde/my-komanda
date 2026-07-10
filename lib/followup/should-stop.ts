@@ -130,11 +130,16 @@ export async function shouldStopFollowUp(
     } catch { /* silent — fallback ниже */ }
 
     // F6: baseline стоп-слов — из платформенной (редактируемой) записи, не хардкод.
+    // Аудит 10.07: baseline ОБЪЕДИНЯЕТСЯ с кастомным списком вакансии, а не
+    // заменяется им. Раньше при заданном кастомном списке (а он задан почти
+    // всегда — DB-дефолт колонки) baseline отключался целиком: «не хочу»,
+    // «прекратите», «нашел работу» (без «ё») не ловились — кандидат просил
+    // перестать писать, а дожимы продолжали идти. Комментарий выше («baseline
+    // НЕ отключаем») теперь соответствует коду.
     const baseline = await getBaselineStopWords()
     const matchAny = (text: string): boolean =>
-      vacancyStopWords
-        ? matchStopWordList(text, vacancyStopWords) !== null
-        : matchStopWordWith(text, baseline)
+      (vacancyStopWords ? matchStopWordList(text, vacancyStopWords) !== null : false)
+      || matchStopWordWith(text, baseline)
 
     const answers = candidate.anketaAnswers
     if (Array.isArray(answers)) {

@@ -441,14 +441,14 @@ export async function processAvitoInbound(
             await new Promise(r => setTimeout(r, Math.min(cb.preMessageDelayMs!, 60_000)))
           }
           if (cb.replyDelayMs && cb.replyDelayMs > 0) {
-            await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+            await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs!, 60_000)))
           }
           const ok = await sendAvitoMessage(accessToken, avitoUserId, chatId, cb.reply)
           console.info(`[avito/scan-incoming] ${candidateId} ai_chatbot_sent ok=${ok} cat=${cb.category} conf=${cb.confidence?.toFixed(2)} text="${preview}"`)
         } else if (cb.action === "rejected") {
           if (cb.reply) {
             if (cb.replyDelayMs && cb.replyDelayMs > 0) {
-              await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs, 60_000)))
+              await new Promise(r => setTimeout(r, Math.min(cb.replyDelayMs!, 60_000)))
             }
             await sendAvitoMessage(accessToken, avitoUserId, chatId, cb.reply)
           }
@@ -465,14 +465,14 @@ export async function processAvitoInbound(
     }
   }
 
-  // 7. Стоп-слова чата.
+  // 7. Стоп-слова чата. Аудит 10.07: кастомный список ОБЪЕДИНЯЕТСЯ с
+  // платформенным baseline, не заменяет его (см. hh/scan-incoming.ts).
   {
     const swFlag = (candVac.aiProcessSettings as { stopWordsChatEnabled?: boolean } | null)?.stopWordsChatEnabled
     if (isBlockEnabled(candVac, "stop_words_chat", swFlag !== false)) {
       const vacStopWords = (candVac.stopWordsJson ?? []).filter((s): s is string => typeof s === "string")
-      const matched = vacStopWords.length > 0
-        ? matchStopWordList(text, vacStopWords) !== null
-        : matchStopWordWith(text, await getBaselineStopWords())
+      const matched = (vacStopWords.length > 0 && matchStopWordList(text, vacStopWords) !== null)
+        || matchStopWordWith(text, await getBaselineStopWords())
       if (matched) {
         // Настраиваемая реакция (Юрий 02.07): дефолт 'none' — стадию НЕ трогаем,
         // реагируем только прощальным сообщением (если текст задан). См.
