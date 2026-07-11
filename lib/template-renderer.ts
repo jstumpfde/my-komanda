@@ -72,6 +72,11 @@ const ALIASES: Record<string, string> = {
   "контакты":                  "contacts",
   "контакты_hr":               "contacts",
   "contacts":                  "contacts",
+  // ─── перенос интервью: новые дата/время (reschedule-and-notify) ───
+  "новая_дата":                "new_date",
+  "new_date":                  "new_date",
+  "новое_время":               "new_time",
+  "new_time":                  "new_time",
 }
 
 // Регулярка единым проходом ловит:

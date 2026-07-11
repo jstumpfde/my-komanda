@@ -1299,6 +1299,9 @@ export interface VacancyAiProcessSettings {
   // Юрий 10.07: текст, который уходит кандидату, когда менеджер отменяет
   // назначенное интервью (не отказ — приглашение перезаписаться на новое время).
   interviewCancelledMessage?: string
+  // 11.07: текст при переносе интервью менеджером (drag времени/дня) —
+  // {{name}}/{{vacancy}}/{{new_date}}/{{new_time}}/{{schedule_link}}.
+  interviewRescheduledMessage?: string
   // Юрий 10.07: текст при вставке/смене ссылки на встречу (Zoom и т.п.) —
   // {{name}}/{{vacancy}}/{{meeting_link}}/{{contacts}}.
   meetingLinkMessage?: string
