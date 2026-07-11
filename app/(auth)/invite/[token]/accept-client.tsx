@@ -37,6 +37,7 @@ export default function AcceptInviteClient({
   const [name, setName]         = useState("")
   const [email, setEmail]       = useState("")
   const [password, setPassword] = useState("")
+  const [consent, setConsent]   = useState(false)
 
   // Login form
   const [loginEmail,    setLoginEmail]    = useState("")
@@ -76,24 +77,47 @@ export default function AcceptInviteClient({
       toast.error("Заполните все поля")
       return
     }
+    if (password.length < 8 || !/[A-Za-zА-Яа-яЁё]/.test(password) || !/[0-9]/.test(password)) {
+      toast.error("Пароль должен содержать минимум 8 символов, хотя бы 1 букву и 1 цифру")
+      return
+    }
+    if (!consent) {
+      toast.error("Подтвердите согласие на обработку персональных данных")
+      return
+    }
     setLoading(true)
     try {
-      // 1. Регистрируем через обычный endpoint, передавая inviteToken
-      const regRes = await fetch("/api/auth/register", {
+      // 1. Регистрация по инвайт-токену: общий /api/auth/register закрыт
+      //    (онбординг компаний ручной), а этот эндпоинт создаёт аккаунт и
+      //    сразу вступает в компанию из ссылки — роль/компания из токена.
+      const regRes = await fetch("/api/invites/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, inviteToken: token }),
+        body: JSON.stringify({ token, name, email, password }),
       })
-      const regData = await regRes.json()
+      const regData = await regRes.json().catch(() => ({}))
+      if (regRes.status === 409) {
+        // Аккаунт с таким email уже существует — переключаем на вход
+        toast.info(regData.error ?? "Аккаунт с таким email уже есть — войдите")
+        setLoginEmail(email)
+        setMode("login")
+        return
+      }
       if (!regRes.ok) throw new Error(regData.error ?? "Ошибка регистрации")
 
-      // 2. Авторизуемся
+      // 2. Автовход
       const result = await signIn("credentials", {
         email,
         password,
         redirect: false,
       })
-      if (result?.error) throw new Error("Ошибка входа после регистрации")
+      if (result?.error) {
+        // Аккаунт уже создан и приглашение принято — достаточно войти вручную
+        toast.info("Аккаунт создан. Войдите с указанными email и паролем.")
+        setLoginEmail(email)
+        setMode("login")
+        return
+      }
 
       toast.success(`Добро пожаловать в ${companyName}!`)
       router.push("/overview")
@@ -223,9 +247,21 @@ export default function AcceptInviteClient({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Пароль</Label>
-                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Минимум 8 символов" />
+                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Минимум 8 символов, буква и цифра" />
               </div>
-              <Button className="w-full" onClick={handleRegister} disabled={loading}>
+              <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={e => setConsent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-input cursor-pointer flex-shrink-0"
+                />
+                <span>
+                  Даю согласие на обработку персональных данных в соответствии с{" "}
+                  <a href="/privacy" target="_blank" className="underline hover:opacity-80">Политикой обработки персональных данных</a>.
+                </span>
+              </label>
+              <Button className="w-full" onClick={handleRegister} disabled={loading || !consent}>
                 {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 Зарегистрироваться
               </Button>
