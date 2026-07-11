@@ -103,6 +103,11 @@ const PUBLIC_PREFIXES = [
   // Webhook Авито: приходит от серверов Авито (без сессии), роут сам проверяет
   // AVITO_WEBHOOK_SECRET. Без этого Авито-серверы получали бы 302 на /login.
   "/api/webhooks/avito",
+  // Публичный дашборд AI-РОП по share-токену (страница /rop-report/[token],
+  // фаза 4 UI) — без сессии, роут сам резолвит companyId по токену
+  // (rop_report_shares). API /api/public/rop-report и /api/public/rop-webhook
+  // уже покрыты общим префиксом "/api/public/" выше.
+  "/rop-report/",
 ]
 
 function isPublic(pathname: string): boolean {
