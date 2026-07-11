@@ -4,10 +4,12 @@
 // «не использовать в AI» (aiOptOut — enforced сразу в retrieval.ts).
 
 import { NextRequest } from "next/server"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { apiError, apiSuccess, requireDirector } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
-import { knowledgeSources, type KnowledgeSourceRootFolder } from "@/lib/db/schema"
+import { knowledgeSources, knowledgeSourceDocuments, type KnowledgeSourceRootFolder } from "@/lib/db/schema"
+import { assertKnowledgeDriveSourcesEnabled } from "@/lib/knowledge-sources/feature-flag"
+import { resolveAiOptOut } from "@/lib/knowledge-sources/root-folders"
 
 const VALID_AUDIENCES = new Set(["employees", "department", "clients", "partners", "owner_only"])
 
@@ -35,6 +37,7 @@ export async function POST(
 ) {
   try {
     const user = await requireDirector()
+    await assertKnowledgeDriveSourcesEnabled(user) // MAJOR-1: гейт на каждом роуте
     const { id } = await params
 
     const body = await req.json().catch(() => null) as { folders?: unknown } | null
@@ -48,11 +51,54 @@ export async function POST(
       .limit(1)
     if (!source) return apiError("Источник не найден", 404)
 
+    // tenantId в WHERE — defense-in-depth (MINOR-c из ревью): выборка выше уже
+    // проверила владение, но UPDATE не должен полагаться на неё одну.
     await db.update(knowledgeSources)
       .set({ rootFolders: folders, updatedAt: new Date() })
-      .where(eq(knowledgeSources.id, id))
+      .where(and(eq(knowledgeSources.id, id), eq(knowledgeSources.tenantId, user.companyId)))
 
-    return apiSuccess({ ok: true, folders })
+    // MAJOR-2 (ревью 11.07): aiOptOut применяется МГНОВЕННО, не при следующем
+    // краулe. Retrieval фильтрует по денормализованному
+    // knowledge_source_documents.ai_opt_out — пересчитываем его для всех
+    // документов источника прямо здесь, по свежесохранённым папкам.
+    const docs = await db
+      .select({
+        id: knowledgeSourceDocuments.id,
+        externalPath: knowledgeSourceDocuments.externalPath,
+        aiOptOut: knowledgeSourceDocuments.aiOptOut,
+      })
+      .from(knowledgeSourceDocuments)
+      .where(and(
+        eq(knowledgeSourceDocuments.sourceId, id),
+        eq(knowledgeSourceDocuments.tenantId, user.companyId),
+      ))
+
+    const toOptOut: string[] = []
+    const toOptIn: string[] = []
+    for (const doc of docs) {
+      const next = resolveAiOptOut(folders, doc.externalPath)
+      if (next && !doc.aiOptOut) toOptOut.push(doc.id)
+      else if (!next && doc.aiOptOut) toOptIn.push(doc.id)
+    }
+    const now = new Date()
+    if (toOptOut.length > 0) {
+      await db.update(knowledgeSourceDocuments)
+        .set({ aiOptOut: true, updatedAt: now })
+        .where(and(
+          inArray(knowledgeSourceDocuments.id, toOptOut),
+          eq(knowledgeSourceDocuments.tenantId, user.companyId),
+        ))
+    }
+    if (toOptIn.length > 0) {
+      await db.update(knowledgeSourceDocuments)
+        .set({ aiOptOut: false, updatedAt: now })
+        .where(and(
+          inArray(knowledgeSourceDocuments.id, toOptIn),
+          eq(knowledgeSourceDocuments.tenantId, user.companyId),
+        ))
+    }
+
+    return apiSuccess({ ok: true, folders, aiOptOutUpdated: toOptOut.length + toOptIn.length })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[knowledge/sources/[id]/folders]", err)
