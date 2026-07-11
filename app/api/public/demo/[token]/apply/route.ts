@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq, or, sql } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
-import { candidates, demos, hhCandidates, vacancies } from "@/lib/db/schema"
+import { candidates, demos, hhCandidates, legalDocuments, vacancies } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
@@ -68,6 +68,23 @@ const ANKETA_ELIGIBLE = new Set([
   "decision",
 ])
 
+// 152-ФЗ: редакция политики /politicahr2026 (на неё ссылается чекбокс согласия
+// в анкете) на момент отправки — для candidates.consent_doc_version. Сбой
+// запроса не должен ронять сохранение анкеты (клиент проглатывает не-2xx и
+// показывает «Спасибо» — 500 здесь молча потерял бы ПД кандидата).
+async function resolveHrPolicyVersion(): Promise<string> {
+  try {
+    const [doc] = await db
+      .select({ updatedAt: legalDocuments.updatedAt })
+      .from(legalDocuments)
+      .where(eq(legalDocuments.slug, "privacy_policy"))
+      .limit(1)
+    return doc?.updatedAt ? doc.updatedAt.toISOString().slice(0, 10) : "default"
+  } catch {
+    return "default"
+  }
+}
+
 function buildSurveyResponses(body: {
   firstName: string
   lastName: string
@@ -116,11 +133,23 @@ export async function POST(
       birthDate?: string
       city?: string
       anketa?: AnketaPayload
+      consent?: boolean
     }
 
     if (!body.firstName || !body.lastName || !body.email || !body.phone) {
       return NextResponse.json({ error: "Заполните обязательные поля" }, { status: 400 })
     }
+
+    // 152-ФЗ: явный отказ от обработки ПД несовместим с отправкой анкеты.
+    // UI не даёт отправить без галки (false возможен только крафтовым
+    // запросом в обход формы). undefined = легаси-клиент, загрузивший
+    // страницу до деплоя поля consent, — его анкету не роняем, просто не
+    // фиксируем согласие (та же стратегия, что у /api/public/landing-lead).
+    if (body.consent === false) {
+      return NextResponse.json({ error: "Нужно согласие на обработку персональных данных" }, { status: 400 })
+    }
+    const consentGiven = body.consent === true
+    const consentDocVersion = consentGiven ? await resolveHrPolicyVersion() : null
 
     const surveyResponses = buildSurveyResponses(body)
 
@@ -132,6 +161,7 @@ export async function POST(
         vacancyId: candidates.vacancyId,
         stage: candidates.stage,
         stageHistory: candidates.stageHistory,
+        consentAt: candidates.consentAt,
         hhResumeId: hhCandidates.hhResumeId,
       })
       .from(candidates)
@@ -158,6 +188,13 @@ export async function POST(
         updates.email = body.email
         updates.phone = body.phone
         updates.city = body.city || null
+      }
+      // 152-ФЗ: фиксируем ПЕРВОЕ согласие (повторная отправка анкеты не
+      // перезаписывает исходные момент/редакцию — доказательная ценность
+      // именно у первого).
+      if (consentGiven && !existing.consentAt) {
+        updates.consentAt = new Date()
+        updates.consentDocVersion = consentDocVersion
       }
 
       // F2.C: → anketa_filled (после расширения воронки промежуточный
@@ -242,6 +279,7 @@ export async function POST(
             stage:         candidates.stage,
             stageHistory:  candidates.stageHistory,
             referralUuids: candidates.referralUuids,
+            consentAt:     candidates.consentAt,
             hhResumeId:    hhCandidates.hhResumeId,
           })
           .from(candidates)
@@ -268,6 +306,11 @@ export async function POST(
         updates.email = body.email
         updates.phone = body.phone
         updates.city  = body.city || null
+      }
+      // 152-ФЗ: как и в основной ветке — только первое согласие.
+      if (consentGiven && !dup.consentAt) {
+        updates.consentAt = new Date()
+        updates.consentDocVersion = consentDocVersion
       }
       if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
         updates.stage = "anketa_filled"
@@ -323,6 +366,8 @@ export async function POST(
           stage: "new",
           token: nanoid(12),
           surveyResponses,
+          consentAt: consentGiven ? new Date() : null,
+          consentDocVersion: consentGiven ? consentDocVersion : null,
           shortId: short?.shortId ?? null,
           sequenceNumber: short?.sequenceNumber ?? null,
         })
