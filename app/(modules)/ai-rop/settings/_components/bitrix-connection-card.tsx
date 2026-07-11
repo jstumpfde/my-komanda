@@ -1,7 +1,7 @@
 "use client"
 
 // Подключение Bitrix24 — входящий вебхук + токен, статус подключения.
-// PATCH /api/modules/ai-rop/settings — общий эндпоинт настроек (rop_settings,
+// POST /api/modules/ai-rop/settings — общий эндпоинт настроек (rop_settings,
 // явные колонки), см. lib/ai-rop/settings.ts::updateRopSettings.
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -23,7 +23,7 @@ export function BitrixConnectionCard({ initialWebhookUrl, initialInboundToken }:
     setBusy(true); setSaved(false)
     try {
       const r = await fetch("/api/modules/ai-rop/settings", {
-        method: "PATCH",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bitrixWebhookUrl: webhookUrl.trim() || null, bitrixInboundToken: inboundToken.trim() || null }),
       })

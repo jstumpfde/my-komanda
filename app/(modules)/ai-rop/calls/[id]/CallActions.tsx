@@ -42,7 +42,7 @@ export function ReprocessButton({ callId }: { callId: string }) {
   async function go() {
     setBusy(true)
     try {
-      const r = await fetch(`/api/modules/ai-rop/calls/${callId}/reprocess`, { method: "POST" })
+      const r = await fetch(`/api/modules/ai-rop/calls/${callId}/process`, { method: "POST" })
       const data = await r.json().catch(() => ({}))
       if (!data.ok) alert("Ошибка: " + (data.error || "неизвестная"))
       router.refresh()
@@ -79,7 +79,7 @@ export function EnrichCrmButton({ callId }: { callId: string }) {
   async function go() {
     setBusy(true); setStatus("idle")
     try {
-      const r = await fetch(`/api/modules/ai-rop/calls/${callId}/enrich-crm`, { method: "POST" })
+      const r = await fetch(`/api/modules/ai-rop/calls/${callId}/enrich`, { method: "POST" })
       const data = await r.json().catch(() => ({}))
       setStatus(data.ok ? "ok" : "error")
       if (data.ok) router.refresh()

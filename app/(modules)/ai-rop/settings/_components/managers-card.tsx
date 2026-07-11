@@ -35,7 +35,7 @@ function ManagerRowEditor({ m }: { m: ManagerRow }) {
       await fetch("/api/modules/ai-rop/managers", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bitrixManagerId: m.bitrixManagerId, ...body }),
+        body: JSON.stringify({ id: m.bitrixManagerId, ...body }),
       })
       router.refresh()
     } finally { setBusy(false) }
@@ -47,7 +47,7 @@ function ManagerRowEditor({ m }: { m: ManagerRow }) {
       <DataCell>{m.isActive ? <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">активен</Badge> : <Badge variant="outline" className="text-muted-foreground">неактивен</Badge>}</DataCell>
       <DataCell>
         <div className="flex items-center gap-2">
-          <Switch checked={inReports} disabled={busy} onCheckedChange={(v) => { setInReports(v); patch({ excludedFromReports: !v }) }} />
+          <Switch checked={inReports} disabled={busy} onCheckedChange={(v) => { setInReports(v); patch({ excluded_from_reports: !v }) }} />
           <span className="text-xs text-muted-foreground">{inReports ? "В отчётах" : "Скрыт"}</span>
         </div>
       </DataCell>
@@ -55,12 +55,12 @@ function ManagerRowEditor({ m }: { m: ManagerRow }) {
         <Input
           value={defaultProduct}
           onChange={(e) => setDefaultProduct(e.target.value)}
-          onBlur={() => patch({ defaultProduct: defaultProduct.trim() || null })}
+          onBlur={() => patch({ default_product: defaultProduct.trim() || null })}
           placeholder="МП / МК…"
           className="h-8 w-28 text-xs"
         />
       </DataCell>
-      <DataCell><Switch checked={crmSync} disabled={busy} onCheckedChange={(v) => { setCrmSync(v); patch({ crmSyncEnabled: v }) }} /></DataCell>
+      <DataCell><Switch checked={crmSync} disabled={busy} onCheckedChange={(v) => { setCrmSync(v); patch({ crm_sync_enabled: v }) }} /></DataCell>
     </DataRow>
   )
 }
@@ -72,7 +72,7 @@ export function ManagersCard({ managers }: { managers: ManagerRow[] }) {
   async function backfillNames() {
     setBusy(true)
     try {
-      await fetch("/api/modules/ai-rop/managers/backfill-names", { method: "POST" })
+      await fetch("/api/modules/ai-rop/managers/backfill", { method: "POST" })
       router.refresh()
     } finally { setBusy(false) }
   }

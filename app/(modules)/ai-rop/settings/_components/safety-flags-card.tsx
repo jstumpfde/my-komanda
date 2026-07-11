@@ -20,10 +20,10 @@ export function SafetyFlagsCard({ initialDryRunCrm, initialDryRunMessages }: { i
     setBusy(true)
     if (field === "dryRunCrm") setDryRunCrm(value); else setDryRunMessages(value)
     try {
-      await fetch("/api/modules/ai-rop/settings", {
-        method: "PATCH",
+      await fetch("/api/modules/ai-rop/flags", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
+        body: JSON.stringify({ dry_run: value, kind: field === "dryRunCrm" ? "crm" : "messages" }),
       })
       router.refresh()
     } finally { setBusy(false) }

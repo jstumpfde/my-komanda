@@ -1,11 +1,15 @@
 "use client"
 
-// Форма ручной загрузки взаимодействия — звонок/чат/email/встреча, текст ИЛИ
+// Форма ручной загрузки взаимодействия — чат/email/встреча, текст ИЛИ
 // аудиофайл. POST → /api/modules/ai-rop/interactions/upload (multipart,
 // зона API-агента; путь и поля — по образцу ca /api/interactions/upload).
+// Тип "call" НЕ поддерживается этим роутом (звонки приходят автоматически
+// из Bitrix telephony — auto-import/bitrix-activities), поэтому его нет
+// в TYPE_OPTIONS — иначе сабмит всегда падал бы с 400 "type должен быть
+// chat/email/meeting" (см. VALID_TYPES в route.ts).
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Phone, MessageSquare, Mail, Video, FileText, Loader2, ArrowDownLeft, ArrowUpRight } from "lucide-react"
+import { MessageSquare, Mail, Video, FileText, Loader2, ArrowDownLeft, ArrowUpRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -13,19 +17,17 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
-type Type = "call" | "chat" | "email" | "meeting"
+type Type = "chat" | "email" | "meeting"
 type Channel = string
 type Direction = "in" | "out" | ""
 
-const TYPE_OPTIONS: Array<{ value: Type; label: string; icon: typeof Phone }> = [
-  { value: "call", label: "Звонок", icon: Phone },
+const TYPE_OPTIONS: Array<{ value: Type; label: string; icon: typeof MessageSquare }> = [
   { value: "chat", label: "Чат", icon: MessageSquare },
   { value: "email", label: "Email", icon: Mail },
   { value: "meeting", label: "Встреча / запись", icon: Video },
 ]
 
 const CHANNELS_BY_TYPE: Record<Type, Array<{ value: Channel; label: string }>> = {
-  call: [{ value: "bitrix_telephony", label: "Bitrix24 АТС" }, { value: "manual", label: "Другое (ручная запись)" }],
   chat: [{ value: "whatsapp", label: "WhatsApp" }, { value: "telegram", label: "Telegram" }, { value: "openlines", label: "Bitrix Open Lines" }, { value: "manual", label: "Другое" }],
   email: [{ value: "email_imap", label: "Email" }, { value: "manual", label: "Другое" }],
   meeting: [{ value: "zoom", label: "Zoom" }, { value: "yandex_telemost", label: "Яндекс Телемост" }, { value: "dictaphone", label: "Диктофон / голосовая запись" }, { value: "other", label: "Другая платформа" }],
@@ -39,8 +41,8 @@ function nowLocalInput(): string {
 
 export function UploadForm() {
   const router = useRouter()
-  const [type, setType] = useState<Type>("call")
-  const [channel, setChannel] = useState<Channel>(CHANNELS_BY_TYPE.call[0].value)
+  const [type, setType] = useState<Type>("chat")
+  const [channel, setChannel] = useState<Channel>(CHANNELS_BY_TYPE.chat[0].value)
   const [direction, setDirection] = useState<Direction>("")
   const [clientPhone, setClientPhone] = useState("")
   const [clientName, setClientName] = useState("")
@@ -95,7 +97,7 @@ export function UploadForm() {
     <form onSubmit={submit} className="flex max-w-3xl flex-col gap-4 rounded-xl border bg-card p-5">
       <div>
         <Label className="mb-2 block">Тип взаимодействия</Label>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2">
           {TYPE_OPTIONS.map((opt) => {
             const Icon = opt.icon
             return (

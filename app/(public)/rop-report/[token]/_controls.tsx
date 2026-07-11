@@ -119,10 +119,9 @@ export function ReportAutoRefresh({
   }, [intervalSec, router])
 
   useEffect(() => {
-    // Трекер захода — fire-and-forget, эндпоинт по контракту плана (см. п.10
-    // AI-ROP-MODULE-PLAN): POST /api/public/rop-report/[token]. Собственного
-    // API-роута здесь нет (чужая зона app/api/**) — сейчас может 404, это
-    // ожидаемо до готовности той зоны.
+    // Трекер захода — fire-and-forget, POST /api/public/rop-report/[token]
+    // (route.ts, чужая зона app/api/**) — ставит cookie rop_report_viewer,
+    // пишет в rop_report_views, контракт сверен.
     fetch(`/api/public/rop-report/${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

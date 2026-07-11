@@ -1,7 +1,7 @@
 "use client"
 
 // Бюджет AI на обработку — лимиты по месяцу (rop_settings.settings.budget),
-// PATCH через отдельный эндпоинт (jsonb-патч, не явные колонки).
+// POST через отдельный эндпоинт /api/modules/ai-rop/budget (jsonb-патч, не явные колонки).
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Coins } from "lucide-react"
@@ -41,8 +41,8 @@ export function BudgetCard({ initial, usage }: { initial: BudgetInitial; usage: 
   async function save() {
     setBusy(true); setSaved(false)
     try {
-      await fetch("/api/modules/ai-rop/settings/budget", {
-        method: "PATCH",
+      await fetch("/api/modules/ai-rop/budget", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           maxAnthropicTokens: maxAnthropicTokens ? Number(maxAnthropicTokens) : null,

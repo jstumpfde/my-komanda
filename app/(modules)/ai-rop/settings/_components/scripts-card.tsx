@@ -59,7 +59,7 @@ function ScriptEditorSheet({ script, open, onOpenChange }: { script: ScriptRow |
   async function save() {
     setBusy(true)
     try {
-      const body = { name: name.trim() || "Без названия", product: product.trim() || null, direction, isActive, contentMd, checklist: checklist.filter((c) => c.title.trim()) }
+      const body = { name: name.trim() || "Без названия", product: product.trim() || null, direction, is_active: isActive, content_md: contentMd, checklist: checklist.filter((c) => c.title.trim()) }
       if (isNew) {
         await fetch("/api/modules/ai-rop/scripts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       } else {
@@ -130,7 +130,7 @@ export function ScriptsCard({ scripts }: { scripts: ScriptRow[] }) {
   const router = useRouter()
 
   async function fromTemplate(key: string) {
-    await fetch("/api/modules/ai-rop/scripts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ templateKey: key }) })
+    await fetch(`/api/modules/ai-rop/scripts/template?key=${key}`, { method: "POST" })
     router.refresh()
   }
 

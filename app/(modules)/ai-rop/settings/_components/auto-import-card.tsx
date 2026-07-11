@@ -17,7 +17,7 @@ export function AutoImportCard({ initialEnabled, lastAt }: { initialEnabled: boo
   async function toggle(v: boolean) {
     setEnabled(v); setBusy(true)
     try {
-      await fetch("/api/modules/ai-rop/settings/auto-import", {
+      await fetch("/api/modules/ai-rop/auto-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: v }),
@@ -29,7 +29,7 @@ export function AutoImportCard({ initialEnabled, lastAt }: { initialEnabled: boo
   async function runNow() {
     setBusy(true)
     try {
-      await fetch("/api/modules/ai-rop/settings/auto-import", {
+      await fetch("/api/modules/ai-rop/auto-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ runNow: true }),

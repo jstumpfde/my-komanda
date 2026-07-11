@@ -37,14 +37,16 @@ export function DiscrepancyCard({ initial }: { initial: DiscrepancyInitial }) {
     setBusy(true); setSaved(false)
     try {
       await fetch("/api/modules/ai-rop/settings", {
-        method: "PATCH",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          discrepancyEnabled: enabled,
-          discrepancyRecipientMode: recipientMode,
-          discrepancyActionMode: actionMode,
-          discrepancySeverityMin: severityMin,
-          discrepancyCustomFields: JSON.stringify(customFields.split(",").map((s) => s.trim()).filter(Boolean)),
+          discrepancy: {
+            enabled,
+            recipientMode,
+            actionMode,
+            severityMin,
+            customFields: customFields.split(",").map((s) => s.trim()).filter(Boolean),
+          },
         }),
       })
       setSaved(true); router.refresh(); setTimeout(() => setSaved(false), 2000)

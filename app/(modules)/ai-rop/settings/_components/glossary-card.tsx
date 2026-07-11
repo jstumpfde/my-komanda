@@ -19,7 +19,7 @@ export function GlossaryCard({ initial }: { initial: string }) {
     setBusy(true); setSaved(false)
     try {
       await fetch("/api/modules/ai-rop/settings", {
-        method: "PATCH",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ glossary: value }),
       })

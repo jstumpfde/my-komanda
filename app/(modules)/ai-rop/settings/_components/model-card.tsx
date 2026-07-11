@@ -25,7 +25,7 @@ export function ModelCard({ initial }: { initial: string | null }) {
     setBusy(true); setSaved(false)
     try {
       await fetch("/api/modules/ai-rop/settings", {
-        method: "PATCH",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ analysisModel: model === "__default__" ? null : model }),
       })
