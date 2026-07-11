@@ -30,6 +30,7 @@ export function prepareText(title: string | null | undefined, content: string | 
 
 interface OpenAIEmbeddingResponse {
   data: { embedding: number[] }[]
+  usage?: { prompt_tokens?: number; total_tokens?: number }
   error?: { message: string }
 }
 
@@ -68,17 +69,27 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
   }
 }
 
-// Batch embeddings — OpenAI принимает input как array. Возвращает
-// массив параллельный входу (null для неудачных).
-export async function generateEmbeddingsBatch(texts: string[]): Promise<(number[] | null)[]> {
+export interface EmbeddingsBatchResult {
+  vectors: (number[] | null)[]
+  /** usage.total_tokens из ответа OpenAI — 0, если ключа нет/запрос не удался. */
+  totalTokens: number
+}
+
+// Batch embeddings — OpenAI принимает input как array. Возвращает массив
+// векторов параллельный входу (null для неудачных) + суммарные токены запроса
+// (usage.total_tokens), чтобы вызывающий код мог списать их с AI-лимита
+// компании (lib/knowledge/token-limits.ts) и залогировать через logAiCall.
+// Раньше usage вообще не читался — «Дочинить учёт usage эмбеддингов» из
+// концепта kb-connected-sources §arch.
+export async function generateEmbeddingsBatchWithUsage(texts: string[]): Promise<EmbeddingsBatchResult> {
   const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return texts.map(() => null)
+  if (!apiKey) return { vectors: texts.map(() => null), totalTokens: 0 }
   const prepared = texts.map((t) => t.trim().slice(0, MAX_TEXT_CHARS))
   const nonEmpty = prepared
     .map((t, i) => ({ t, i }))
     .filter((x) => x.t.length > 0)
 
-  if (nonEmpty.length === 0) return texts.map(() => null)
+  if (nonEmpty.length === 0) return { vectors: texts.map(() => null), totalTokens: 0 }
 
   try {
     const res = await fetch("https://api.openai.com/v1/embeddings", {
@@ -95,7 +106,7 @@ export async function generateEmbeddingsBatch(texts: string[]): Promise<(number[
     if (!res.ok) {
       const errBody = (await res.json().catch(() => ({}))) as OpenAIEmbeddingResponse
       console.error("[embeddings] OpenAI batch", res.status, errBody.error?.message)
-      return texts.map(() => null)
+      return { vectors: texts.map(() => null), totalTokens: 0 }
     }
     const data = (await res.json()) as OpenAIEmbeddingResponse
     const result: (number[] | null)[] = texts.map(() => null)
@@ -105,11 +116,51 @@ export async function generateEmbeddingsBatch(texts: string[]): Promise<(number[
         result[nonEmpty[i].i] = vec
       }
     }
-    return result
+    return { vectors: result, totalTokens: data.usage?.total_tokens ?? 0 }
   } catch (err) {
     console.error("[embeddings] batch fetch failed", err)
-    return texts.map(() => null)
+    return { vectors: texts.map(() => null), totalTokens: 0 }
   }
+}
+
+// Обратная совместимость: старые call-сайты (реиндекс статей/демо, ai-search)
+// ждут только массив векторов — usage им исторически не был нужен (штучный
+// реиндекс одной статьи не списывался с лимита модуля знаний отдельно). Новый
+// код (индексация подключённых источников) должен звать
+// generateEmbeddingsBatchWithUsage напрямую, чтобы списывать токены с лимита
+// компании — см. lib/knowledge-sources/indexer.ts.
+export async function generateEmbeddingsBatch(texts: string[]): Promise<(number[] | null)[]> {
+  const { vectors } = await generateEmbeddingsBatchWithUsage(texts)
+  return vectors
+}
+
+// ─── Точка расширения: бэкенд эмбеддингов (концепт §risks — 152-ФЗ) ────────
+// Сейчас единственный бэкенд — OpenAI (зарубежный). Реальные клиентские диски
+// с ПДн НЕ индексируем, пока не подключён RU-резидентный бэкенд (Yandex
+// Cloud) — переключение делается платформенной настройкой EMBEDDING_PROVIDER,
+// без изменения вызывающего кода (lib/knowledge-sources/indexer.ts зовёт
+// getEmbeddingProvider(), а не generateEmbeddingsBatchWithUsage напрямую).
+
+export interface EmbeddingProvider {
+  readonly name: string
+  embedBatch(texts: string[]): Promise<EmbeddingsBatchResult>
+}
+
+const openaiProvider: EmbeddingProvider = {
+  name: "openai",
+  embedBatch: generateEmbeddingsBatchWithUsage,
+}
+
+/**
+ * Текущий провайдер эмбеддингов — из env EMBEDDING_PROVIDER (default
+ * "openai"). Другие значения намеренно бросают явную ошибку вместо тихого
+ * фолбэка на зарубежный OpenAI — до появления RU-резидентного бэкенда любой
+ * другой провайдер означает ошибку конфигурации, а не «просто используй OpenAI».
+ */
+export function getEmbeddingProvider(): EmbeddingProvider {
+  const name = process.env.EMBEDDING_PROVIDER || "openai"
+  if (name === "openai") return openaiProvider
+  throw new Error(`Провайдер эмбеддингов "${name}" не реализован (доступен только "openai" в фазе 1)`)
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
