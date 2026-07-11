@@ -16,6 +16,7 @@ import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 import { renderButtonIcon } from "@/lib/button-icons"
 import { estimateDemoDuration } from "@/lib/demo/estimate-duration"
+import { renderDemoVars, withCityVars } from "@/lib/demo-vars"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -232,17 +233,21 @@ function pluralizeSteps(n: number): string {
 
 // ─── Variable replacement ────────────────────────────────────────────────────
 
+// Подстановка — через общий lib/demo-vars.ts: локальная регулярка с `\w` не
+// матчила кириллицу, и «{{город}}»/«{{имя}}» уходили кандидату сырыми скобками.
+// withCityVars добавляет «в_городе» (предложный падеж, «в Казани»).
 function replaceVars(text: string, data: DemoData): string {
   const firstName = data.candidateName?.split(" ")[0] || data.candidateName
   const map: Record<string, string> = {
     "имя": firstName || "",
+    "имя_кандидата": firstName || "",
     "компания": data.companyName || "",
     "должность": data.vacancyTitle || "",
     "зарплата_от": data.salaryMin ? data.salaryMin.toLocaleString("ru-RU") : "",
     "зарплата_до": data.salaryMax ? data.salaryMax.toLocaleString("ru-RU") : "",
     "город": data.city || "",
   }
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => map[key] ?? `{{${key}}}`)
+  return renderDemoVars(text, withCityVars(map))
 }
 
 // ─── Group blocks by lesson for single-page rendering ────────────────────────
