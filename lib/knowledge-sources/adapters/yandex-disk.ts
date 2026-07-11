@@ -111,14 +111,26 @@ export class YandexDiskAdapter implements SourceAdapter {
     const { href } = (await linkRes.json()) as { href?: string }
     if (!href) throw new Error("Яндекс.Диск не вернул ссылку на скачивание")
 
-    // SSRF-защита: href приходит от внешнего API — теоретически может быть
-    // подменён/скомпрометирован, проверяем перед фактическим скачиванием
-    // (тот же паттерн, что на каждый href-download в проекте — lib/ssrf-guard.ts).
-    await assertPublicUrl(href)
-
-    const fileRes = await fetch(href)
-    if (!fileRes.ok) throw new Error(`Не удалось скачать файл: ${fileRes.status}`)
-    const arrayBuffer = await fileRes.arrayBuffer()
-    return Buffer.from(arrayBuffer)
+    // SSRF-защита: href приходит от внешнего API. Редиректы следуем ВРУЧНУЮ
+    // (redirect: "manual") с assertPublicUrl на КАЖДЫЙ хоп (MINOR-d из ревью
+    // 11.07): fetch с авто-редиректом проверял бы только первый URL, а
+    // downloader-хост Яндекса мог бы (теоретически/при компрометации)
+    // средиректить во внутреннюю сеть — классический TOCTOU-обход ssrf-guard.
+    let currentUrl = href
+    const MAX_REDIRECTS = 5
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      await assertPublicUrl(currentUrl)
+      const fileRes = await fetch(currentUrl, { redirect: "manual" })
+      if (fileRes.status >= 300 && fileRes.status < 400) {
+        const location = fileRes.headers.get("location")
+        if (!location) throw new Error(`Редирект ${fileRes.status} без Location при скачивании файла`)
+        currentUrl = new URL(location, currentUrl).toString()
+        continue
+      }
+      if (!fileRes.ok) throw new Error(`Не удалось скачать файл: ${fileRes.status}`)
+      const arrayBuffer = await fileRes.arrayBuffer()
+      return Buffer.from(arrayBuffer)
+    }
+    throw new Error(`Слишком много редиректов (>${MAX_REDIRECTS}) при скачивании файла`)
   }
 }
