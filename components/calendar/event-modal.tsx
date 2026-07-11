@@ -137,7 +137,8 @@ export function EventModal({
       .catch(() => {})
     fetch("/api/integrations/zoom/status")
       .then(r => r.ok ? r.json() : null)
-      .then((j: { data?: { connected: boolean } } | null) => setZoomConnected(!!j?.data?.connected))
+      // apiSuccess отдаёт плоский {connected} (баг 11.07: j.data → всегда false)
+      .then((j: { connected?: boolean } | null) => setZoomConnected(!!j?.connected))
       .catch(() => {})
   }, [open])
 

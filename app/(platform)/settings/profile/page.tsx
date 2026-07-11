@@ -178,10 +178,11 @@ function ProfileSettingsPageInner() {
   const loadZoomStatus = () => {
     fetch("/api/integrations/zoom/status")
       .then(r => r.ok ? r.json() : null)
-      .then((j: { data?: { connected: boolean; email: string | null } } | null) => {
-        const d = j?.data
-        setZoomConnected(!!d?.connected)
-        setZoomEmail(d?.email ?? null)
+      // apiSuccess отдаёт ПЛОСКИЙ JSON {connected, email} — без обёртки data
+      // (баг 11.07: парсили j.data → карточка вечно «Подключить Zoom»).
+      .then((j: { connected?: boolean; email?: string | null } | null) => {
+        setZoomConnected(!!j?.connected)
+        setZoomEmail(j?.email ?? null)
       })
       .catch(() => {})
       .finally(() => setLoadingZoom(false))
