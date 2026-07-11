@@ -23,9 +23,24 @@ export const INTERVIEW_METHOD_LABELS: Record<InterviewMethodKey, string> = {
   office:   'В офисе',
 }
 
-/** Дефолтные значения длительности и буфера */
+/**
+ * Канонические дефолты длительности по способу (Юрий, редизайн интервью:
+ * звонок 15 / онлайн 25 / офис 45). Единственный источник — его же используют
+ * настройки в календаре-хабе и публичная страница самозаписи.
+ */
+export const METHOD_DEFAULT_DURATIONS: Record<InterviewMethodKey, number> = {
+  phone:    15,
+  zoom:     25,
+  telemost: 25,
+  meet:     25,
+  office:   45,
+}
+
+export const DEFAULT_METHOD_BUFFER = 15
+
+/** Легаси-дефолт «одна длительность на все способы» (нормализация старых данных) */
 const DEFAULT_DURATION = 45
-const DEFAULT_BUFFER   = 15
+const DEFAULT_BUFFER   = DEFAULT_METHOD_BUFFER
 
 /** Конфиг одного способа интервью (нормализованный) */
 export interface MethodConfig {
@@ -53,9 +68,10 @@ type ScheduleLike = {
  * Логика:
  * 1. Если schedule.interviewMethodConfigs есть и непустой — берём его,
  *    сортируем по INTERVIEW_METHOD_ORDER, добиваем отсутствующие способы
- *    как { enabled: false, duration: дефолт, buffer: дефолт }.
+ *    как { enabled: false, duration: дефолт способа, buffer: дефолт }.
  * 2. Иначе (legacy) — строим из interviewMethods (включённость),
- *    slotDuration (или дефолт 45) и bufferTime (или дефолт 15).
+ *    slotDuration (если задан — одна на все способы, иначе дефолт способа)
+ *    и bufferTime (или дефолт 15).
  *
  * Всегда возвращает ровно 5 элементов в порядке INTERVIEW_METHOD_ORDER.
  */
@@ -71,21 +87,23 @@ export function getInterviewMethodConfigs(schedule: ScheduleLike | null | undefi
       return {
         method,
         enabled:  existing?.enabled  ?? false,
-        duration: existing?.duration ?? DEFAULT_DURATION,
+        duration: existing?.duration ?? METHOD_DEFAULT_DURATIONS[method],
         buffer:   existing?.buffer   ?? DEFAULT_BUFFER,
       }
     })
   }
 
-  // Legacy: строим из interviewMethods + общих slotDuration/bufferTime
+  // Legacy: строим из interviewMethods + общих slotDuration/bufferTime.
+  // Явно заданный slotDuration сохраняет старую семантику «одна длительность
+  // на все способы»; без него — канонический дефолт способа.
   const enabledSet = new Set<string>(schedule?.interviewMethods ?? [])
-  const duration   = schedule?.slotDuration ? parseInt(schedule.slotDuration, 10) || DEFAULT_DURATION : DEFAULT_DURATION
-  const buffer     = schedule?.bufferTime   ? parseInt(schedule.bufferTime,   10) || DEFAULT_BUFFER   : DEFAULT_BUFFER
+  const legacyDuration = schedule?.slotDuration ? parseInt(schedule.slotDuration, 10) || DEFAULT_DURATION : null
+  const buffer         = schedule?.bufferTime   ? parseInt(schedule.bufferTime,   10) || DEFAULT_BUFFER   : DEFAULT_BUFFER
 
   return INTERVIEW_METHOD_ORDER.map(method => ({
     method,
     enabled:  enabledSet.has(method),
-    duration,
+    duration: legacyDuration ?? METHOD_DEFAULT_DURATIONS[method],
     buffer,
   }))
 }
