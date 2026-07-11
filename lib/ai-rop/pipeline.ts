@@ -180,7 +180,9 @@ export async function processCall(callId: string, companyId: string, opts?: { sc
 
     const HALLUCINATIONS = ["продолжение следует", "субтитры", "спасибо за просмотр", "редактор субтитров", "amara.org", "благодарю за внимание"]
     const isHallucination = cleaned.length > 0 && cleaned.length < 60 && HALLUCINATIONS.some((h) => low.includes(h))
-    const tooShort = cleaned.length < 15 || (row.durationSec ?? 0) < 7
+    // durationSec-порог применяем только к аудио: у text-only (чат/email) длительность
+    // всегда 0 — в оригинале call-agent этот гард молча убивал загруженные переписки.
+    const tooShort = cleaned.length < 15 || (!isTextOnly && (row.durationSec ?? 0) < 7)
 
     if (tooShort || isHallucination || isRepeatedGarbage) {
       await upsertTranscript(callId, { text: t.text, segmentsJson: t.segments, dialogueJson: [], language: t.language, model: t.model })
