@@ -1,16 +1,26 @@
 // GET/POST /api/modules/ai-rop/settings — профиль настроек AI-РОП компании:
 // Bitrix-подключение (webhook/inbound-токен — секреты, отдаём только хвост),
-// глоссарий, модель анализа, настройки «Сравнения с CRM-карточкой», порог
-// «контактного» звонка (contactThresholdSeconds) и токен-биллинг (тариф/
+// глоссарий, модель анализа, настройки «Сравнения с CRM-карточкой», STT
+// (Yandex SpeechKit — секрет, write-only, отдаём только хвост из 4 символов),
+// параметры дашборда (порог «контактного» звонка, срок хранения аудио, цель
+// weekly challenge), таксономия категорий возражений и токен-биллинг (тариф/
 // автопродление/пороги). dry-run флаги — отдельный роут /flags (частый
 // переключатель, не хотим гонять весь профиль ради одного тумблера).
 //
 // Доступ: requireRopManage (директор) — и на чтение, и на запись: тут секреты
-// (webhook, inbound-токен), рядовому менеджеру их видеть незачем.
+// (webhook, inbound-токен, Yandex STT-ключ), рядовому менеджеру их видеть незачем.
+//
+// jsonb-поля (settings.stt/contactThresholdSeconds/recordingsRetentionDays/
+// weeklyDoneGoal/objectionTaxonomy) патчатся ОДНИМ read-modify-write внутри
+// POST — раньше contactThresholdSeconds делал отдельный getRopSettings+
+// updateRopSettings ПОСЛЕ основного патча явных колонок, что при параллельном
+// сохранении из двух карточек settings могло потерять один из патчей
+// (last-write-wins на весь jsonb-столбец); теперь все jsonb-патчи одного
+// запроса объединяются перед единственной записью.
 import { NextResponse } from "next/server"
 import { apiError } from "@/lib/api-helpers"
 import { requireRopManage } from "@/lib/ai-rop/access"
-import { getRopSettings, getSettingsJson, updateRopSettings } from "@/lib/ai-rop/settings"
+import { getRopSettings, getSettingsJson, updateRopSettings, type RopSettingsJson } from "@/lib/ai-rop/settings"
 import { getTokenSettings, setTokenSettings, type RopTokenBillingSettings } from "@/lib/ai-rop/tokens"
 
 type RecipientMode = "manager" | "admins"
@@ -20,12 +30,26 @@ const RECIPIENT_MODES: RecipientMode[] = ["manager", "admins"]
 const ACTION_MODES: ActionMode[] = ["manual", "auto_approve"]
 const SEVERITIES: Severity[] = ["low", "medium", "high"]
 
+// Держать в синхроне с DEFAULT_RETENTION_DAYS (app/api/cron/ai-rop-process/route.ts)
+// и DEFAULT_WEEKLY_GOAL (lib/ai-rop/gamification.ts) — там же дефолты применяются
+// на чтении, если в settings.jsonb значения ещё нет.
+const DEFAULT_RECORDINGS_RETENTION_DAYS = 30
+const DEFAULT_WEEKLY_DONE_GOAL = 50
+
 /** Секрет → «…хвост» (последние 6 символов), null если пусто. */
 function maskSecret(value: string | null | undefined): string | null {
   const v = (value ?? "").trim()
   if (!v) return null
   if (v.length <= 6) return "…" + v
   return "…" + v.slice(-6)
+}
+
+/** STT-ключ Yandex — короче хвост (4 символа, как в задаче), null если пусто. */
+function maskSttKey(value: string | null | undefined): string | null {
+  const v = (value ?? "").trim()
+  if (!v) return null
+  if (v.length <= 4) return "…" + v
+  return "…" + v.slice(-4)
 }
 
 function parseJsonArray(raw: string | null): string[] {
@@ -44,6 +68,7 @@ export async function GET() {
     const row = await getRopSettings(user.companyId)
     const json = getSettingsJson(row)
     const tokenSettings = await getTokenSettings(user.companyId)
+    const stt = json.stt ?? {}
 
     return NextResponse.json({
       ok: true,
@@ -65,6 +90,19 @@ export async function GET() {
           severityMin: (row.discrepancySeverityMin as Severity) ?? "medium",
         },
         tokenBilling: tokenSettings,
+        // Write-only секрет — GET отдаёт только факт настройки + короткий хвост,
+        // сам ключ на клиент не уходит НИКОГДА (в отличие от bitrixWebhookUrl,
+        // который settings/page.tsx передаёт в карточку напрямую как есть).
+        stt: {
+          yandexApiKeyConfigured: !!stt.yandexApiKey?.trim(),
+          yandexApiKeyTail: maskSttKey(stt.yandexApiKey),
+          yandexFolderId: stt.yandexFolderId ?? "",
+          allowForeignSttFallback: stt.allowForeignSttFallback === true,
+        },
+        recordingsRetentionDays:
+          typeof json.recordingsRetentionDays === "number" ? json.recordingsRetentionDays : DEFAULT_RECORDINGS_RETENTION_DAYS,
+        weeklyDoneGoal: typeof json.weeklyDoneGoal === "number" ? json.weeklyDoneGoal : DEFAULT_WEEKLY_DONE_GOAL,
+        objectionTaxonomy: Array.isArray(json.objectionTaxonomy) && json.objectionTaxonomy.length > 0 ? json.objectionTaxonomy : null,
       },
     })
   } catch (err) {
@@ -92,6 +130,15 @@ export async function POST(req: Request) {
         severityMin?: Severity
       }
       tokenBilling?: Partial<RopTokenBillingSettings>
+      // undefined-поле = не менять; null/"" — очистить (write-only секрет, GET его не отдаёт).
+      stt?: {
+        yandexApiKey?: string | null
+        yandexFolderId?: string | null
+        allowForeignSttFallback?: boolean
+      }
+      recordingsRetentionDays?: number | null
+      weeklyDoneGoal?: number | null
+      objectionTaxonomy?: Array<{ name: string; def: string }> | null
     }
 
     const patch: Record<string, unknown> = {}
@@ -132,13 +179,69 @@ export async function POST(req: Request) {
       await updateRopSettings(user.companyId, patch)
     }
 
-    if (body.contactThresholdSeconds !== undefined) {
+    // Один read-modify-write на ВСЕ jsonb-поля этого запроса (см. докблок файла —
+    // раньше contactThresholdSeconds патчился отдельным вызовом ПОСЛЕ основного,
+    // рискуя потерять параллельный патч другой карточки).
+    const touchesJsonSettings =
+      body.contactThresholdSeconds !== undefined ||
+      body.stt !== undefined ||
+      body.recordingsRetentionDays !== undefined ||
+      body.weeklyDoneGoal !== undefined ||
+      body.objectionTaxonomy !== undefined
+    if (touchesJsonSettings) {
       const row = await getRopSettings(user.companyId)
       const json = getSettingsJson(row)
-      const n = Number(body.contactThresholdSeconds)
-      await updateRopSettings(user.companyId, {
-        settings: { ...json, contactThresholdSeconds: Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined },
-      })
+      const nextJson: RopSettingsJson = { ...json }
+
+      if (body.contactThresholdSeconds !== undefined) {
+        const n = Number(body.contactThresholdSeconds)
+        nextJson.contactThresholdSeconds = Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined
+      }
+
+      if (body.stt !== undefined) {
+        const current = json.stt ?? {}
+        const nextStt: NonNullable<RopSettingsJson["stt"]> = { ...current }
+        if (body.stt.yandexApiKey !== undefined) {
+          nextStt.yandexApiKey = body.stt.yandexApiKey?.trim() || null
+        }
+        if (body.stt.yandexFolderId !== undefined) {
+          nextStt.yandexFolderId = body.stt.yandexFolderId?.trim() || null
+        }
+        if (body.stt.allowForeignSttFallback !== undefined) {
+          nextStt.allowForeignSttFallback = !!body.stt.allowForeignSttFallback
+        }
+        nextJson.stt = nextStt
+      }
+
+      if (body.recordingsRetentionDays !== undefined) {
+        const n = Number(body.recordingsRetentionDays)
+        if (body.recordingsRetentionDays !== null && (!Number.isFinite(n) || n <= 0)) {
+          return apiError("recordingsRetentionDays должен быть положительным числом", 400)
+        }
+        nextJson.recordingsRetentionDays = body.recordingsRetentionDays === null ? undefined : Math.trunc(n)
+      }
+
+      if (body.weeklyDoneGoal !== undefined) {
+        const n = Number(body.weeklyDoneGoal)
+        if (body.weeklyDoneGoal !== null && (!Number.isFinite(n) || n <= 0)) {
+          return apiError("weeklyDoneGoal должен быть положительным числом", 400)
+        }
+        nextJson.weeklyDoneGoal = body.weeklyDoneGoal === null ? undefined : Math.trunc(n)
+      }
+
+      if (body.objectionTaxonomy !== undefined) {
+        if (body.objectionTaxonomy === null) {
+          nextJson.objectionTaxonomy = undefined
+        } else {
+          if (!Array.isArray(body.objectionTaxonomy)) return apiError("objectionTaxonomy должен быть массивом", 400)
+          const cleaned = body.objectionTaxonomy
+            .map((c) => ({ name: String(c?.name ?? "").trim(), def: String(c?.def ?? "").trim() }))
+            .filter((c) => c.name)
+          nextJson.objectionTaxonomy = cleaned.length > 0 ? cleaned : undefined
+        }
+      }
+
+      await updateRopSettings(user.companyId, { settings: nextJson })
     }
 
     if (body.tokenBilling) {

@@ -18,11 +18,13 @@ import {
 import { loadDashboardData } from "@/lib/ai-rop/dashboard-data"
 import { getBillingStatus } from "@/lib/ai-rop/tokens"
 import { getActiveShareToken } from "@/lib/ai-rop/dashboard-share"
+import { getProviderHealth } from "@/lib/ai-rop/provider-health"
 import { requireRopViewer } from "./_components/rop-guard"
 import { DashboardFilters } from "./_components/dashboard-filters"
 import { ShareDashboardButton } from "./_components/share-dashboard-button"
 import { PrintDashboardButton } from "./_components/print-dashboard-button"
 import { TokenBalanceBanner } from "./_components/token-balance-banner"
+import { ProviderHealthBanner } from "./_components/provider-health-banner"
 import { CoachInsights } from "./_components/coach-insights"
 import { KpiRow, KpiTile } from "./_components/kpi-tile"
 import { ManagerMobileCard } from "./_components/manager-mobile-card"
@@ -90,9 +92,9 @@ export default async function AiRopDashboardPage(props: {
     ? `${sp.from ? formatDateShort(sp.from) : "…"} — ${sp.to ? formatDateShort(sp.to) : "…"}`
     : "за всё время"
 
-  const [shareToken, billingStatus] = viewer.isTeamViewer
-    ? await Promise.all([getActiveShareToken(viewer.companyId), getBillingStatus(viewer.companyId)])
-    : [null, null]
+  const [shareToken, billingStatus, providerHealth] = viewer.isTeamViewer
+    ? await Promise.all([getActiveShareToken(viewer.companyId), getBillingStatus(viewer.companyId), getProviderHealth()])
+    : [null, null, null]
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://company24.pro"
   const maxObjection = data.topObjections.length ? Math.max(...data.topObjections.map((o) => o.count)) : 1
@@ -105,6 +107,7 @@ export default async function AiRopDashboardPage(props: {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            {providerHealth && <ProviderHealthBanner health={providerHealth} canManage={viewer.canManage} />}
             {billingStatus && <TokenBalanceBanner status={billingStatus} />}
 
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

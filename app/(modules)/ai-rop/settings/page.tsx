@@ -1,11 +1,13 @@
 // Настройки AI-РОП — хаб карточками (Card-секции по DESIGN-REFERENCE): Bitrix,
-// автоимпорт, исторический импорт, менеджеры, скрипты/чек-листы, модель AI,
-// глоссарий, бюджет, токены (read-only), расхождения с CRM, публичная ссылка,
+// автоимпорт, исторический импорт, импорт email/чатов, менеджеры (+ привязка к
+// пользователю платформы), скрипты/чек-листы, модель AI, распознавание речи
+// (Yandex STT), глоссарий, таксономия возражений, параметры дашборда, бюджет,
+// токены (read-only), расхождения с CRM, переанализ, публичная ссылка,
 // безопасная запись (dry-run). Гейт — requireRopManageViewer (директор/владелец).
-import { eq, desc } from "drizzle-orm"
+import { eq, desc, isNull, and } from "drizzle-orm"
 import { Settings } from "lucide-react"
 import { db } from "@/lib/db"
-import { ropManagers, ropSalesScripts } from "@/lib/db/schema"
+import { ropManagers, ropSalesScripts, users } from "@/lib/db/schema"
 import { getRopSettings, getSettingsJson } from "@/lib/ai-rop/settings"
 import { getCompanyBudget, getMonthlyUsage } from "@/lib/ai-rop/budget"
 import { getBillingStatus, getLedger } from "@/lib/ai-rop/tokens"
@@ -23,17 +25,26 @@ import { DiscrepancyCard, type DiscrepancyInitial } from "./_components/discrepa
 import { BudgetCard } from "./_components/budget-card"
 import { AutoImportCard } from "./_components/auto-import-card"
 import { ImportForm } from "./_components/import-form"
-import { ManagersCard, type ManagerRow } from "./_components/managers-card"
+import { BitrixActivitiesCard } from "./_components/bitrix-activities-card"
+import { ManagersCard, type ManagerRow, type PlatformUserOption } from "./_components/managers-card"
 import { ScriptsCard, type ScriptRow } from "./_components/scripts-card"
 import { ShareCard } from "./_components/share-card"
 import { TokensSection } from "./_components/tokens-section"
+import { SttCard, type SttInitial } from "./_components/stt-card"
+import { DashboardSettingsCard, type DashboardSettingsInitial } from "./_components/dashboard-settings-card"
+import { ObjectionTaxonomyCard } from "./_components/objection-taxonomy-card"
+import { ReanalyzeCard } from "./_components/reanalyze-card"
 
 export const dynamic = "force-dynamic"
+
+const DEFAULT_CONTACT_THRESHOLD_SECONDS = 15
+const DEFAULT_RECORDINGS_RETENTION_DAYS = 30
+const DEFAULT_WEEKLY_DONE_GOAL = 50
 
 export default async function AiRopSettingsPage() {
   const viewer = await requireRopManageViewer()
 
-  const [settingsRow, budget, usage, billingStatus, ledger, shareToken, managersRows, scriptsRows] = await Promise.all([
+  const [settingsRow, budget, usage, billingStatus, ledger, shareToken, managersRows, scriptsRows, platformUsersRows] = await Promise.all([
     getRopSettings(viewer.companyId),
     getCompanyBudget(viewer.companyId),
     getMonthlyUsage(viewer.companyId),
@@ -42,10 +53,31 @@ export default async function AiRopSettingsPage() {
     getActiveShareToken(viewer.companyId),
     db.select().from(ropManagers).where(eq(ropManagers.tenantId, viewer.companyId)).orderBy(ropManagers.name),
     db.select().from(ropSalesScripts).where(eq(ropSalesScripts.tenantId, viewer.companyId)).orderBy(desc(ropSalesScripts.updatedAt)),
+    db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(and(eq(users.companyId, viewer.companyId), isNull(users.deletedAt)))
+      .orderBy(users.name),
   ])
   const viewStats = shareToken ? await getViewStats(viewer.companyId) : null
 
   const settingsJson = getSettingsJson(settingsRow)
+  const sttJson = settingsJson.stt ?? {}
+  // Write-only секрет: НИКОГДА не передаём полный ключ в клиентский компонент —
+  // только факт настройки + короткий хвост (отличие от bitrixWebhookUrl ниже,
+  // который исторически передаётся как есть, см. bitrix-connection-card.tsx).
+  const sttInitial: SttInitial = {
+    configured: !!sttJson.yandexApiKey?.trim(),
+    keyTail: sttJson.yandexApiKey?.trim() ? sttJson.yandexApiKey.trim().slice(-4) : null,
+    folderId: sttJson.yandexFolderId ?? "",
+    allowForeignFallback: sttJson.allowForeignSttFallback === true,
+  }
+  const dashboardSettingsInitial: DashboardSettingsInitial = {
+    contactThresholdSeconds: typeof settingsJson.contactThresholdSeconds === "number" ? settingsJson.contactThresholdSeconds : DEFAULT_CONTACT_THRESHOLD_SECONDS,
+    recordingsRetentionDays: typeof settingsJson.recordingsRetentionDays === "number" ? settingsJson.recordingsRetentionDays : DEFAULT_RECORDINGS_RETENTION_DAYS,
+    weeklyDoneGoal: typeof settingsJson.weeklyDoneGoal === "number" ? settingsJson.weeklyDoneGoal : DEFAULT_WEEKLY_DONE_GOAL,
+  }
+  const platformUsers: PlatformUserOption[] = platformUsersRows.map((u) => ({ id: u.id, name: u.name, email: u.email }))
 
   let customFields: string[] | null = null
   if (settingsRow.discrepancyCustomFields) {
@@ -69,6 +101,7 @@ export default async function AiRopSettingsPage() {
     excludedFromReports: m.excludedFromReports,
     defaultProduct: m.defaultProduct,
     crmSyncEnabled: m.crmSyncEnabled,
+    userId: m.userId,
   }))
   const scripts: ScriptRow[] = scriptsRows.map((s) => ({
     id: s.id,
@@ -102,8 +135,14 @@ export default async function AiRopSettingsPage() {
               <AutoImportCard initialEnabled={settingsJson.autoImportEnabled === true} lastAt={settingsJson.lastImportAt ?? null} />
               <ImportForm />
 
+              <BitrixActivitiesCard initialLastFetched={settingsJson.activitiesLastFetchedAt ?? null} />
+              <SttCard initial={sttInitial} />
+
               <ModelCard initial={settingsRow.analysisModel} />
               <GlossaryCard initial={settingsRow.glossary ?? ""} />
+
+              <ObjectionTaxonomyCard initial={settingsJson.objectionTaxonomy ?? null} />
+              <DashboardSettingsCard initial={dashboardSettingsInitial} />
 
               <DiscrepancyCard initial={discrepancyInitial} />
               <BudgetCard initial={budget} usage={usage} />
@@ -111,8 +150,9 @@ export default async function AiRopSettingsPage() {
               <TokensSection status={billingStatus} ledger={ledger} />
               <ShareCard initialToken={shareToken} baseUrl={baseUrl} stats={viewStats} />
 
-              <div className="lg:col-span-2"><ManagersCard managers={managers} /></div>
+              <div className="lg:col-span-2"><ManagersCard managers={managers} platformUsers={platformUsers} /></div>
               <div className="lg:col-span-2"><ScriptsCard scripts={scripts} /></div>
+              <div className="lg:col-span-2"><ReanalyzeCard /></div>
             </div>
           </div>
         </main>

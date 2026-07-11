@@ -5,9 +5,9 @@
 // excluded_from_reports НЕ перезатирается синком менеджеров из Bitrix (managers.ts) —
 // это ручная HR-настройка.
 import { NextResponse } from "next/server"
-import { and, desc, eq, isNotNull, ne, sql } from "drizzle-orm"
+import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { ropCalls, ropManagers, ropSalesScripts } from "@/lib/db/schema"
+import { ropCalls, ropManagers, ropSalesScripts, users } from "@/lib/db/schema"
 import { apiError } from "@/lib/api-helpers"
 import { requireRopManage, requireRopTeam, ropCanViewTeam, ropManagerScope } from "@/lib/ai-rop/access"
 import { ropCallsScope, type RopScope } from "@/lib/ai-rop/rls"
@@ -31,6 +31,7 @@ export async function GET() {
         excludedFromReports: sql<boolean>`COALESCE(BOOL_OR(${ropManagers.excludedFromReports}), false)`,
         defaultProduct: sql<string | null>`MAX(${ropManagers.defaultProduct})`,
         crmSyncEnabled: sql<boolean>`COALESCE(BOOL_OR(${ropManagers.crmSyncEnabled}), false)`,
+        userId: sql<string | null>`MAX(${ropManagers.userId}::text)`,
         calls: sql<number>`COUNT(*)::int`,
       })
       .from(ropCalls)
@@ -39,7 +40,17 @@ export async function GET() {
       .groupBy(ropCalls.managerId)
       .orderBy(desc(sql`COUNT(*)`))
 
-    return NextResponse.json({ ok: true, items: rows })
+    // Пользователи компании для селекта привязки (только team-viewer видит список — рядовому
+    // менеджеру он не нужен и лишний запрос ни к чему).
+    const platformUsers = scope.isTeamViewer
+      ? await db
+          .select({ id: users.id, name: users.name, email: users.email })
+          .from(users)
+          .where(and(eq(users.companyId, user.companyId), isNull(users.deletedAt)))
+          .orderBy(users.name)
+      : []
+
+    return NextResponse.json({ ok: true, items: rows, platformUsers })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[ai-rop/managers] GET error:", err)
@@ -56,6 +67,7 @@ export async function PATCH(req: Request) {
       excluded_from_reports?: boolean
       default_product?: string | null
       crm_sync_enabled?: boolean
+      user_id?: string | null
     }
     const { id } = body
     if (!id) return apiError("id обязателен", 400)
@@ -76,12 +88,33 @@ export async function PATCH(req: Request) {
       }
     }
 
+    // Привязка к пользователю платформы — включает роль manager (ropManagerScope)
+    // и RLS "видит только свои звонки". Пустое значение = отвязать. Проверяем
+    // ОБЯЗАТЕЛЬНО, что пользователь принадлежит той же компании — иначе можно
+    // было бы привязать чужого пользователя и утечь его в межтенантный scope.
+    let validatedUserId: string | null | undefined
+    if ("user_id" in body) {
+      const raw = (body.user_id ?? "").toString().trim()
+      if (!raw) {
+        validatedUserId = null
+      } else {
+        const [known] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, raw), eq(users.companyId, user.companyId), isNull(users.deletedAt)))
+          .limit(1)
+        if (!known) return apiError("Пользователь не найден в этой компании", 400)
+        validatedUserId = raw
+      }
+    }
+
     const [current] = await db
       .select({
         isActive: ropManagers.isActive,
         excludedFromReports: ropManagers.excludedFromReports,
         defaultProduct: ropManagers.defaultProduct,
         crmSyncEnabled: ropManagers.crmSyncEnabled,
+        userId: ropManagers.userId,
       })
       .from(ropManagers)
       .where(and(eq(ropManagers.tenantId, user.companyId), eq(ropManagers.bitrixManagerId, id)))
@@ -91,6 +124,7 @@ export async function PATCH(req: Request) {
     const nextExcluded = "excluded_from_reports" in body ? !!body.excluded_from_reports : current ? !!current.excludedFromReports : false
     const nextProduct = validatedProduct !== undefined ? validatedProduct : current?.defaultProduct ?? null
     const nextCrmSync = "crm_sync_enabled" in body ? !!body.crm_sync_enabled : current ? !!current.crmSyncEnabled : false
+    const nextUserId = validatedUserId !== undefined ? validatedUserId : current?.userId ?? null
 
     await db
       .insert(ropManagers)
@@ -101,6 +135,7 @@ export async function PATCH(req: Request) {
         excludedFromReports: nextExcluded,
         defaultProduct: nextProduct,
         crmSyncEnabled: nextCrmSync,
+        userId: nextUserId,
       })
       .onConflictDoUpdate({
         target: [ropManagers.tenantId, ropManagers.bitrixManagerId],
@@ -109,6 +144,7 @@ export async function PATCH(req: Request) {
           excludedFromReports: nextExcluded,
           defaultProduct: nextProduct,
           crmSyncEnabled: nextCrmSync,
+          userId: nextUserId,
           updatedAt: new Date(),
         },
       })

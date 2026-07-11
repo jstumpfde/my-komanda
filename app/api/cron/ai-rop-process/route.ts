@@ -12,8 +12,13 @@
 //
 // Раз в сутки (по метке в platform_settings) — лёгкая TTL-очистка старых
 // завершённых звонков (settings.recordingsRetentionDays на компанию, дефолт
-// 30 дней): удаляет строку rop_calls (каскадом транскрипт/анализ/расхождения)
-// и файл записи с диска, если он есть.
+// 30 дней): удаляет ТОЛЬКО файл аудиозаписи с диска и обнуляет recordingPath
+// у звонка (плеер на карточке звонка корректно показывает «запись не
+// скачана» вместо 404/500). Строка rop_calls (и связанные транскрипт/анализ/
+// расхождения/crm-log) НЕ удаляется НИКОГДА этим кроном — история и
+// аналитика хранятся вечно (в оригинале call-agent TTL тоже чистил только
+// файлы: `find recordings -mtime +30 -delete`, БД не трогал; удаление строк
+// здесь было бы расширением скоупа за пределы оригинала).
 //
 // Защищён X-Cron-Secret. Рекомендуемое расписание (раз в минуту):
 //   * * * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
@@ -21,7 +26,7 @@
 //     >> /var/log/ai-rop-process.log 2>&1
 import fs from "fs"
 import { NextRequest, NextResponse } from "next/server"
-import { and, eq, inArray, lt, lte, or, sql } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, lt, lte, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { ropCalls, platformSettings, ropSettings } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
@@ -135,12 +140,16 @@ async function handle(req: NextRequest) {
 }
 
 /**
- * TTL-очистка завершённых звонков старше settings.recordingsRetentionDays
- * (дефолт 30) на компанию. Удаляет строку rop_calls (каскад — транскрипт/
- * анализ/расхождения/crm-log) и файл записи с диска, если он есть. Затрагивает
- * только терминальные статусы (done/failed/no_recording/budget_exceeded) —
- * активные в очереди никогда не трогаем. Батч ограничен на прогон, чтобы не
- * держать долгую транзакцию по всей платформе разом.
+ * TTL-очистка АУДИОФАЙЛОВ (не строк БД) звонков старше
+ * settings.recordingsRetentionDays (дефолт 30) на компанию: удаляет файл
+ * записи с диска и обнуляет rop_calls.recordingPath. Строка rop_calls (и
+ * каскадные транскрипт/анализ/расхождения/crm-log) НЕ трогается — история
+ * звонков хранится бессрочно, чистим только место на диске. Условие
+ * `recordingPath IS NOT NULL` в выборке даёт естественную идемпотентность:
+ * уже обнулённые звонки не попадают в кандидаты повторно. Затрагивает только
+ * терминальные статусы (done/failed/no_recording/budget_exceeded) — активные
+ * в очереди никогда не трогаем. Батч ограничен на прогон, чтобы не держать
+ * долгую транзакцию по всей платформе разом.
  */
 async function runTtlCleanup(): Promise<{ checked: number; deleted: number }> {
   const settingsRows = await db.select().from(ropSettings)
@@ -162,6 +171,7 @@ async function runTtlCleanup(): Promise<{ checked: number; deleted: number }> {
           eq(ropCalls.tenantId, row.companyId),
           inArray(ropCalls.status, ["done", "failed", "no_recording", "budget_exceeded"]),
           lt(ropCalls.createdAt, cutoff),
+          isNotNull(ropCalls.recordingPath),
         ),
       )
       .limit(200)
@@ -173,13 +183,13 @@ async function runTtlCleanup(): Promise<{ checked: number; deleted: number }> {
           try {
             fs.unlinkSync(c.recordingPath)
           } catch {
-            // файла уже нет/недоступен — не блокируем удаление строки
+            // файла уже нет/недоступен — не блокируем обнуление ссылки
           }
         }
-        await db.delete(ropCalls).where(eq(ropCalls.id, c.id))
+        await db.update(ropCalls).set({ recordingPath: null }).where(eq(ropCalls.id, c.id))
         deleted++
       } catch (e) {
-        console.warn(`[cron/${CRON_NAME}] ttl-cleanup: не удалось удалить звонок ${c.id}:`, (e as Error).message)
+        console.warn(`[cron/${CRON_NAME}] ttl-cleanup: не удалось очистить запись звонка ${c.id}:`, (e as Error).message)
       }
     }
   }

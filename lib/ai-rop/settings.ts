@@ -35,6 +35,14 @@ export interface RopSettingsJson {
   autoImportEnabled?: boolean
   /** Метка last-fetch для email/чатов (bitrix-activities.fetchEmailAndChats since=). */
   activitiesLastFetchedAt?: string | null
+  /** Порог «контактного» звонка, сек (см. dashboard-data.ts::getContactThresholdSeconds). Дефолт 15. */
+  contactThresholdSeconds?: number
+  /** Срок хранения аудиозаписей, дней (cron ai-rop-process::runTtlCleanup удаляет только файл, не строку). Дефолт 30. */
+  recordingsRetentionDays?: number
+  /** Цель weekly challenge (см. gamification.ts::getWeeklyChallenge). Дефолт 50. */
+  weeklyDoneGoal?: number
+  /** Per-tenant таксономия категорий возражений (см. objection-clusters.ts::getTaxonomy). Пусто/нет = дефолт платформы. */
+  objectionTaxonomy?: Array<{ name: string; def: string }>
   /** Статус AI/STT-провайдера — см. provider-health.ts (RopProviderHealthStatus). Хранится
    *  здесь ТОЛЬКО если решили держать per-company; см. provider-health.ts docblock — по факту
    *  выбран платформенный уровень (platformSettings), поле оставлено про запас/на будущее. */

@@ -1,13 +1,13 @@
 "use client"
 
-// Кнопки действий на карточке звонка: Перезапустить обработку / Глубокий
-// анализ / Дозагрузить CRM / Отправить в CRM. Мутации — POST на
-// /api/modules/ai-rop/calls/[id]/* (роуты — зона API-агента, сигнатуры
-// совпадают с оригиналом call-agent /api/calls/:id/*). Видны только
+// Кнопки действий на карточке звонка: Перезапустить обработку / Переоценить по
+// другому скрипту / Глубокий анализ / Дозагрузить CRM / Отправить в CRM.
+// Мутации — POST на /api/modules/ai-rop/calls/[id]/* (роуты — зона API-агента,
+// сигнатуры совпадают с оригиналом call-agent /api/calls/:id/*). Видны только
 // team-viewer (директор/head/rop_view_team) — не manager.
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { RefreshCw, Microscope, RefreshCcw, Upload, CheckCircle2, XCircle, AlertCircle, Eye } from "lucide-react"
+import { RefreshCw, ChevronDown, Microscope, RefreshCcw, Upload, CheckCircle2, XCircle, AlertCircle, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface WriteResult {
@@ -49,6 +49,81 @@ export function ReprocessButton({ callId }: { callId: string }) {
     } finally { setBusy(false) }
   }
   return <Button size="sm" onClick={go} disabled={busy}><RefreshCw className="size-3.5" /> Перезапустить обработку</Button>
+}
+
+/** «Переоценить по другому скрипту» — дропдаун продуктов из активных rop_sales_scripts + «Авто». */
+export function ReassignScriptButton({ callId }: { callId: string }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [products, setProducts] = useState<string[]>([])
+  const router = useRouter()
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch("/api/modules/ai-rop/scripts")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.ok) return
+        const codes = [
+          ...new Set(
+            (data.items as Array<{ product: string | null; isActive: boolean }>)
+              .filter((s) => s.isActive && !!s.product)
+              .map((s) => (s.product as string).trim())
+              .filter(Boolean),
+          ),
+        ].sort()
+        setProducts(codes)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+  }, [])
+
+  async function run(scriptProduct: string) {
+    setOpen(false); setError(null); setBusy(true)
+    try {
+      const url = scriptProduct
+        ? `/api/modules/ai-rop/calls/${callId}/process?script_product=${encodeURIComponent(scriptProduct)}`
+        : `/api/modules/ai-rop/calls/${callId}/process`
+      const r = await fetch(url, { method: "POST" })
+      const data = await r.json().catch(() => ({}))
+      if (!data.ok) setError(data.error || "Неизвестная ошибка")
+      else router.refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div ref={wrapRef} className="relative inline-flex flex-col items-end gap-1">
+      <Button size="sm" variant="outline" onClick={() => !busy && setOpen((v) => !v)} disabled={busy} className="gap-1.5">
+        <RefreshCcw className="size-3.5" /> Переоценить по скрипту {!busy && <ChevronDown className="size-3" />}
+      </Button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1.5 min-w-56 overflow-hidden rounded-lg border bg-popover shadow-lg">
+          <div className="border-b px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип скрипта</div>
+          <button type="button" onClick={() => run("")} className="block w-full px-3 py-2 text-left text-sm hover:bg-accent">
+            <div className="font-medium">Авто (по чек-листу)</div>
+            <div className="text-xs text-muted-foreground">AI определит тип самостоятельно</div>
+          </button>
+          {products.map((p) => (
+            <button key={p} type="button" onClick={() => run(p)} className="block w-full px-3 py-2 text-left text-sm hover:bg-accent">
+              <div className="font-medium">{p}</div>
+            </button>
+          ))}
+          {products.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">Сначала задайте продукты в скриптах</div>}
+        </div>
+      )}
+      {error && <span className="max-w-56 text-right text-xs text-destructive">{error}</span>}
+    </div>
+  )
 }
 
 export function DeepAnalyzeButton({ callId }: { callId: string }) {

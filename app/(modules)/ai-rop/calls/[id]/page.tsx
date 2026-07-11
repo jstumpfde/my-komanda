@@ -22,7 +22,7 @@ import { requireRopViewer } from "../../_components/rop-guard"
 import { SentimentBadge, LeadOutcomeBadge } from "../../_components/badges"
 import { ChecklistBlock, type ChecklistScoreItem } from "../../_components/checklist-block"
 import { formatDateTime, formatDuration } from "../../_components/format"
-import { ReprocessButton, DeepAnalyzeButton, EnrichCrmButton, SendToCrmButton } from "./CallActions"
+import { ReprocessButton, ReassignScriptButton, DeepAnalyzeButton, EnrichCrmButton, SendToCrmButton } from "./CallActions"
 
 export const dynamic = "force-dynamic"
 
@@ -142,6 +142,7 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
                 {viewer.isTeamViewer && (
                   <div className="flex items-center gap-2">
                     <DeepAnalyzeButton callId={call.id} />
+                    <ReassignScriptButton callId={call.id} />
                     <ReprocessButton callId={call.id} />
                   </div>
                 )}
