@@ -374,6 +374,11 @@ export function DashboardSidebar() {
   const priceMonitorEnabled =
     !isOwner && !isAdminOrManager && !fullModulesCompany &&
     Array.isArray(companyModulesRaw) && companyModulesRaw.includes('price_monitor')
+  // AI-РОП — тот же аддитивный паттерн, что и price_monitor (default-OFF,
+  // включается только через companies.enabled_modules), но виден и владельцу
+  // компании: включённый модуль должны видеть все её пользователи.
+  const aiRopEnabled =
+    Array.isArray(companyModulesRaw) && companyModulesRaw.includes('ai_rop')
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
@@ -391,6 +396,8 @@ export function DashboardSidebar() {
     // Мониторинг цен — скрыт по умолчанию, аддитивный тумблер per-company
     // (см. priceMonitorEnabled выше); не входит в ALL_MODULE_KEYS/базовые списки.
     if (priceMonitorEnabled) add('price_monitor' as ModuleId)
+    // AI-РОП — аддитивный, как price_monitor (см. aiRopEnabled выше).
+    if (aiRopEnabled) add('ai_rop' as ModuleId)
     // Админ-оверрайд видимых модулей (companies.enabled_modules) — ПОСЛЕДНИЙ в
     // цепочке. Непустой список → показываем РОВНО заданные модули (hr гарантирован
     // нормализацией). Это ОВЕРРАЙД роли и стейджинг/пилот-расширений: например,
@@ -399,7 +406,7 @@ export function DashboardSidebar() {
     // ALL_MODULE_KEYS), поэтому явно сохраняем его, даже если он не попал в
     // companyEnabledModules (нормализованный список).
     const finalModules = companyEnabledModules
-      ? newModules.filter((m) => companyEnabledModules.includes(m) || (m === 'price_monitor' && priceMonitorEnabled))
+      ? newModules.filter((m) => companyEnabledModules.includes(m) || (m === 'price_monitor' && priceMonitorEnabled) || (m === 'ai_rop' && aiRopEnabled))
       : newModules
     // Защита: если фильтр случайно опустошил список — оставляем hr (никогда пусто).
     const safeModules = finalModules.length > 0 ? finalModules : (['hr'] as ModuleId[])
@@ -407,7 +414,7 @@ export function DashboardSidebar() {
       if (prev.length === safeModules.length && prev.every((m, i) => m === safeModules[i])) return prev
       return safeModules
     })
-  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany, companyEnabledKey, priceMonitorEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany, companyEnabledKey, priceMonitorEnabled, aiRopEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()

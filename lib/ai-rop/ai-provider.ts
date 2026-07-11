@@ -146,7 +146,9 @@ export async function callWithTool<T = unknown>(args: ToolCallArgs): Promise<Too
           await logAiCall({
             tenantId: args.companyId,
             action: args.action,
-            model: `${out.provider}:${out.model}`,
+            // Голый model id — computeCostUsd матчит его по прайс-таблице;
+            // с префиксом "anthropic:" costUsd молча оставался пустым.
+            model: out.model,
             inputTokens: out.inputTokens,
             outputTokens: out.outputTokens,
           })
