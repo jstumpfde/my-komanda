@@ -178,6 +178,7 @@ export interface CandidatesFilters {
   scoreMin?: number
   scoreMinResume?: number             // фильтр по candidates.resumeScore
   scoreMinAnketa?: number             // фильтр по candidates.demoAnswersScore (колонка «Анкета»)
+  scoreMinTest?: number               // фильтр по баллу теста (TEST_SCORE_SQL — колонка «Тест»)
   hideRejected?: boolean              // сервер: stage != 'rejected'
   hideNoSalary?: boolean              // сервер: исключить кандидатов без указанной ЗП
   activeNow?: boolean                 // сервер: активность за последние 30 мин (демо/тест)
@@ -295,6 +296,9 @@ export function useCandidates(
         }
         if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) {
           params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
+        }
+        if (typeof filters.scoreMinTest === "number" && filters.scoreMinTest > 0) {
+          params.set("scoreMinTest", String(filters.scoreMinTest))
         }
         if (filters.hideRejected) params.set("excludeRejected", "true")
         if (filters.hideNoSalary) params.set("hideNoSalary", "true")
@@ -533,6 +537,7 @@ export function usePaginatedCandidates({
         if (typeof filters.scoreMin === "number" && filters.scoreMin > 0) params.set("scoreMin", String(filters.scoreMin))
         if (typeof filters.scoreMinResume === "number" && filters.scoreMinResume > 0) params.set("scoreMinResume", String(filters.scoreMinResume))
         if (typeof filters.scoreMinAnketa === "number" && filters.scoreMinAnketa > 0) params.set("scoreMinAnketa", String(filters.scoreMinAnketa))
+        if (typeof filters.scoreMinTest === "number" && filters.scoreMinTest > 0) params.set("scoreMinTest", String(filters.scoreMinTest))
         if (filters.hideRejected) params.set("excludeRejected", "true")
         if (filters.hideNoSalary) params.set("hideNoSalary", "true")
         if (filters.activeNow) params.set("activeNow", "true")

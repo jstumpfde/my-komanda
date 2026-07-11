@@ -42,6 +42,9 @@ export interface FilterState {
   /** Минимальный AI-скор по анкете (поле candidates.demoAnswersScore —
    *  колонка «Анкета»). 0 = «не задан», фильтр не применяется. */
   scoreMinAnketa: number
+  /** Минимальный балл по тесту (тот же источник, что колонка «Тест»:
+   *  AI-балл последней сдачи либо объективный). 0 = «не задан». */
+  scoreMinTest: number
   sources: string[]
   workFormats: string[]
   relocation: "any" | "yes" | "no"
@@ -128,7 +131,7 @@ export const DEFAULT_FUNNEL_STATUSES: StageSlug[] = []
 
 const DEFAULT_FILTERS: FilterState = {
   searchText: "", cities: [], salaryMin: 0, salaryMax: 250000,
-  scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0,
+  scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, scoreMinTest: 0,
   sources: [], workFormats: [],
   relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
   funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
@@ -301,6 +304,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     (filters.workFormats?.length ?? 0) > 0 ? 1 : 0,
     (filters.scoreMinResume ?? 0) > 0 ? 1 : 0,
     (filters.scoreMinAnketa ?? 0) > 0 ? 1 : 0,
+    (filters.scoreMinTest ?? 0) > 0 ? 1 : 0,
     (filters.salaryMin ?? 0) > 0 || (filters.salaryMax ?? 250000) < 250000 ? 1 : 0,
     filters.hideNoSalary ? 1 : 0,
     (filters.relocation ?? "any") !== "any" ? 1 : 0,
@@ -501,6 +505,18 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             <Slider
               value={[filters.scoreMinAnketa]}
               onValueChange={([v]) => onFiltersChange({ ...filters, scoreMinAnketa: v })}
+              min={0} max={100} step={5}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Минимальный балл по тесту: {(filters.scoreMinTest ?? 0) > 0
+                ? filters.scoreMinTest
+                : <span className="italic">не задан</span>}
+            </label>
+            <Slider
+              value={[filters.scoreMinTest ?? 0]}
+              onValueChange={([v]) => onFiltersChange({ ...filters, scoreMinTest: v })}
               min={0} max={100} step={5}
             />
           </div>

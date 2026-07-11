@@ -81,6 +81,7 @@ function AuthenticatedDashboard() {
     scoreMin: 0,
     scoreMinResume: 0,
     scoreMinAnketa: 0,
+    scoreMinTest: 0,
     sources: [],
     workFormats: [],
     relocation: "any",
@@ -89,6 +90,9 @@ function AuthenticatedDashboard() {
     experienceMax: 20,
     funnelStatuses: DEFAULT_FUNNEL_STATUSES.slice(),
     hideRejected: true,  // отказы скрыты по умолчанию (решение Юрия)
+    hideNoSalary: false,
+    activeNow: false,
+    reviewQueue: false,
     demoProgress: [],
     dateRange: "",
     dateFrom: "",

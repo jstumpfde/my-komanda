@@ -988,6 +988,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Минимальный балл по тесту (Юрий 11.07) — тот же источник, что колонка
+    // «Тест» и её сортировка: TEST_SCORE_SQL (AI-балл последней сдачи либо
+    // объективный балл). Кандидаты без сданного теста отсекаются.
+    const scoreMinTestParam = url.searchParams.get("scoreMinTest")
+    if (scoreMinTestParam && Number.isFinite(Number(scoreMinTestParam))) {
+      const v = Math.max(0, Math.floor(Number(scoreMinTestParam)))
+      if (v > 0) {
+        filterConds.push(sql`(${TEST_SCORE_SQL} IS NOT NULL AND ${TEST_SCORE_SQL} >= ${v})`)
+      }
+    }
+
     // Скрыть отказы (тумблер «Скрыть/Показать отказы»). Отдельно от
     // stage-whitelist: исключает ровно rejected, не трогая legacy-стадии
     // (demo/interviewed/offer/...), которых нет в наборе slug'ов фильтра.

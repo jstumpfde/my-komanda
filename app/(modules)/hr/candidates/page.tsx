@@ -240,7 +240,7 @@ export default function CandidatesPage() {
   // Поп-овер фильтров (CandidateFilters)
   const [filters, setFilters] = useState<FilterState>({
     searchText: "", cities: [], salaryMin: 0, salaryMax: 250000,
-    scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0,
+    scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, scoreMinTest: 0,
     sources: [], workFormats: [],
     relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20,
     funnelStatuses: [],
@@ -359,6 +359,8 @@ export default function CandidatesPage() {
     if (filters.sources.length > 0) ps.set("sources", filters.sources.join(","))
     // AI-скор по анкете
     if (filters.scoreMinAnketa > 0) ps.set("scoreMinAnketa", String(filters.scoreMinAnketa))
+    // Балл по тесту
+    if (filters.scoreMinTest > 0) ps.set("scoreMinTest", String(filters.scoreMinTest))
     // AI-скор по резюме
     if (filters.scoreMinResume > 0) ps.set("scoreMinResume", String(filters.scoreMinResume))
     // Зарплата
