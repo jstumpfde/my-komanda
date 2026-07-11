@@ -83,6 +83,7 @@ import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-s
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FirstContactSettings } from "@/components/vacancies/first-contact-settings"
 import { RejectionTextsSummary } from "@/components/vacancies/rejection-texts-summary"
+import { CommsAgentToggle } from "@/components/vacancies/comms-agent-toggle"
 import { FunnelBuilder } from "@/components/vacancies/funnel-builder"
 import { FunnelV2Builder } from "@/components/vacancies/funnel-v2-builder"
 import { FunnelV3Editor } from "@/components/vacancies/funnel-v3-editor"
@@ -4690,21 +4691,31 @@ export default function VacancyPage() {
                       </div>
                     </div>
                   )}
-                  {/* #62: предупреждение для случая когда включён AI-агент.
-                      Обработка пока не подключена (см. ai-chatbot tab), но
-                      когда заработает — все блоки ниже будут заглушены
-                      AI-агентом. Сейчас они продолжают работать. */}
+                  {/* #62: честный баннер про AI чат-бот — обработка УЖЕ подключена
+                      (cron/follow-up route.ts:693 отменяет дожимные касания при
+                      aiChatbotEnabled===true, кроме приглашения на интервью). */}
                   {(apiVacancy as { aiChatbotEnabled?: boolean } | undefined)?.aiChatbotEnabled && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 p-3 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                       <div className="text-xs text-amber-900 dark:text-amber-200">
-                        <strong>AI чат-бот включён для этой вакансии.</strong> Когда
-                        обработка заработает (на следующей неделе), блоки ниже
-                        будут отключены — за общение с кандидатом отвечает агент.
-                        Сейчас они продолжают работать как обычно.
+                        <strong>AI чат-бот включён для этой вакансии.</strong> Первое
+                        приглашение по-прежнему уходит кандидату сразу при отклике,
+                        но напоминания 2 и 3 серии (блок 1) и все дожимы (блок 2)
+                        приостановлены — их отправляет сам бот в диалоге. Приглашение
+                        записаться на интервью (блок 4) и отказы (блок 5) продолжают
+                        работать как настроено.
                       </div>
                     </div>
                   )}
+
+                  {/* Фаза 1 «единого центра коммуникаций» (11.07): тумблер
+                      пилота «агент коммуникаций» — переписывает тексты дожимов
+                      под контекст кандидата. См. lib/comms-agent/. */}
+                  <CommsAgentToggle
+                    vacancyId={id}
+                    initialEnabled={(apiVacancy?.aiProcessSettings as { dozhimAgentEnabled?: boolean } | null | undefined)?.dozhimAgentEnabled}
+                    onSaved={() => refetchVacancy()}
+                  />
 
                   {/* 1 · Первый контакт */}
                   <div>
