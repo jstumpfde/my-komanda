@@ -101,6 +101,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   qc:        'ОКК',
   email_marketing: 'ЕМЛ',
   price_monitor:   'Цены',
+  ai_rop:          'РОП',
 }
 
 // Module accent colors for visual distinction
@@ -119,6 +120,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   qc:        'text-indigo-500',
   email_marketing: 'text-rose-500',
   price_monitor:   'text-lime-500',
+  ai_rop:          'text-pink-500',
 }
 
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
@@ -136,6 +138,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   qc:        'bg-indigo-500/10',
   email_marketing: 'bg-rose-500/10',
   price_monitor:   'bg-lime-500/10',
+  ai_rop:          'bg-pink-500/10',
 }
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
@@ -153,6 +156,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   qc:        '#6366f1',
   email_marketing: '#f43f5e',
   price_monitor:   '#84cc16',
+  ai_rop:          '#ec4899',
 }
 
 // Group colors for style C (colored icons + badge)

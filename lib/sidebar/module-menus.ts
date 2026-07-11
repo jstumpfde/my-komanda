@@ -61,6 +61,20 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
   // qc: весь модуль — нет ни одного API-вызова
   //   /qc, /qc/checklists, /qc/settings
   qc: [],
+
+  // ai_rop (порт call-agent, фаза 4a, 11.07): группировка по образцу HR —
+  // Обзор / Аналитика / Управление. default-OFF (companies.enabledModules),
+  // не в ALL_MODULES_FOR_ROLE/пресетах.
+  ai_rop: [
+    { label: 'Обзор', hrefs: ['/ai-rop', '/ai-rop/calls', '/ai-rop/rop'] },
+    { label: 'Аналитика', hrefs: [
+      '/ai-rop/dynamics', '/ai-rop/objections', '/ai-rop/clients',
+      '/ai-rop/leaderboard', '/ai-rop/reports', '/ai-rop/discrepancies',
+    ] },
+    { label: 'Управление', hrefs: [
+      '/ai-rop/queue', '/ai-rop/upload', '/ai-rop/knowledge', '/ai-rop/settings',
+    ] },
+  ],
 }
 
 export function getModuleMenuItems(activeModules: ModuleId[]) {
