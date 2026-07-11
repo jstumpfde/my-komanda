@@ -1,3 +1,5 @@
+import { renderDemoVars, withCityVars } from "./demo-vars"
+
 export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media" | "stories" | "pdf"
 
 export interface StoriesCard {
@@ -170,6 +172,7 @@ export const VARIABLES = [
   { key: "зарплата_от", label: "Зарплата от", example: "80 000" },
   { key: "зарплата_до", label: "Зарплата до", example: "150 000" },
   { key: "город", label: "Город", example: "Москва" },
+  { key: "в_городе", label: "В городе (склонение)", example: "в Москве" },
   { key: "офис", label: "Адрес офиса", example: "ул. Примерная, 1" },
   { key: "график", label: "График", example: "Пн-Пт, 9:00-18:00" },
 ]
@@ -257,7 +260,7 @@ export const DEFAULT_LESSONS: Lesson[] = [
     { ...createBlock("info"), id: "b9", infoStyle: "success" as const, content: "💰 Оклад: {{зарплата_от}} – {{зарплата_до}} ₽\n\n📊 Бонусная система:\n• 100% плана → +20%\n• 120% плана → +35%\n• 150% плана → +50%\n\nПримеры дохода:\n• Новичок (3 мес): ~{{зарплата_от}} ₽\n• Опытный (6 мес): ~{{зарплата_до}} ₽" },
   ]),
   lesson("l10", "📍", "Офис, график и команда", [
-    textBlock("b10a", "Наш офис — современное пространство в центре {{город}}.\n\n• Кухня и зона отдыха\n• Парковка для сотрудников\n• Удобная транспортная доступность"),
+    textBlock("b10a", "Наш офис — современное пространство в центре города.\n\n• Кухня и зона отдыха\n• Парковка для сотрудников\n• Удобная транспортная доступность"),
     { ...createBlock("image"), id: "b10b", imageLayout: "image-right" as ImageLayout },
   ]),
   lesson("l11", "📈", "Рост и карьера", [
@@ -323,7 +326,10 @@ export function createDemo(title: string, templateLessons?: Lesson[]): Demo {
   }
 }
 
+// Подстановка примеров в превью/витрине — через общий lib/demo-vars.ts
+// (локальная регулярка с `\w` не матчила кириллицу — плейсхолдеры оставались
+// сырыми). «в_городе» выводится из «город» автоматически («в Москве»).
 export function replaceVars(text: string): string {
-  const map: Record<string, string> = { "имя": "Иван", "компания": "TechCorp", "должность": "Менеджер по продажам", "зарплата_от": "80 000", "зарплата_до": "150 000", "город": "Москва", "офис": "ул. Примерная, 1", "график": "Пн-Пт, 9:00-18:00" }
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => map[key] || `{{${key}}}`)
+  const map: Record<string, string> = { "имя": "Иван", "имя_кандидата": "Иван", "компания": "TechCorp", "должность": "Менеджер по продажам", "зарплата_от": "80 000", "зарплата_до": "150 000", "город": "Москва", "офис": "ул. Примерная, 1", "график": "Пн-Пт, 9:00-18:00" }
+  return renderDemoVars(text, withCityVars(map))
 }
