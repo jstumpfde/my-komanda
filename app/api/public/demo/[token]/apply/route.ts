@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { and, eq, or, sql } from "drizzle-orm"
 import { nanoid } from "nanoid"
 import { db } from "@/lib/db"
-import { candidates, demos, hhCandidates, legalDocuments, vacancies } from "@/lib/db/schema"
+import { candidates, companies, demos, hhCandidates, legalDocuments, vacancies } from "@/lib/db/schema"
 import { generateCandidateShortId, isShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { normalizePhone, normalizeEmail } from "@/lib/candidates/normalize-contacts"
@@ -68,12 +68,40 @@ const ANKETA_ELIGIBLE = new Set([
   "decision",
 ])
 
-// 152-ФЗ: редакция политики /politicahr2026 (на неё ссылается чекбокс согласия
-// в анкете) на момент отправки — для candidates.consent_doc_version. Сбой
-// запроса не должен ронять сохранение анкеты (клиент проглатывает не-2xx и
-// показывает «Спасибо» — 500 здесь молча потерял бы ПД кандидата).
-async function resolveHrPolicyVersion(): Promise<string> {
+// 152-ФЗ: редакция политики, на которую ссылался чекбокс согласия в анкете,
+// на момент отправки — для candidates.consent_doc_version. Оператор ПД —
+// компания-наниматель: при наличии subdomain чекбокс ведёт на
+// /politicahr2026?company=<subdomain>, и фиксируем редакцию документа
+// КОМПАНИИ: "company:<дата privacy_policy_updated_at>" для своего HTML,
+// "company:default" для шаблона из реквизитов (страница помечает его
+// «Версия по умолчанию»). Логика зеркалит getCompanyPolicy + фолбэк в
+// app/(public)/politicahr2026/page.tsx: без privacy_policy_html и без
+// реквизитов (inn+email) страница показывает центральную политику — тогда
+// пишем её редакцию (дату legal_documents). Сбой запроса не должен ронять
+// сохранение анкеты (клиент проглатывает не-2xx и показывает «Спасибо» —
+// 500 здесь молча потерял бы ПД кандидата).
+async function resolveHrPolicyVersion(vacancyId: string): Promise<string> {
   try {
+    const [company] = await db
+      .select({
+        subdomain:              companies.subdomain,
+        privacyPolicyHtml:      companies.privacyPolicyHtml,
+        privacyPolicyUpdatedAt: companies.privacyPolicyUpdatedAt,
+        inn:                    companies.inn,
+        email:                  companies.email,
+      })
+      .from(vacancies)
+      .innerJoin(companies, eq(vacancies.companyId, companies.id))
+      .where(eq(vacancies.id, vacancyId))
+      .limit(1)
+    if (company?.subdomain) {
+      if (company.privacyPolicyHtml) {
+        return company.privacyPolicyUpdatedAt
+          ? `company:${company.privacyPolicyUpdatedAt.toISOString().slice(0, 10)}`
+          : "company:default"
+      }
+      if (company.inn && company.email) return "company:default"
+    }
     const [doc] = await db
       .select({ updatedAt: legalDocuments.updatedAt })
       .from(legalDocuments)
@@ -149,7 +177,6 @@ export async function POST(
       return NextResponse.json({ error: "Нужно согласие на обработку персональных данных" }, { status: 400 })
     }
     const consentGiven = body.consent === true
-    const consentDocVersion = consentGiven ? await resolveHrPolicyVersion() : null
 
     const surveyResponses = buildSurveyResponses(body)
 
@@ -194,7 +221,7 @@ export async function POST(
       // именно у первого).
       if (consentGiven && !existing.consentAt) {
         updates.consentAt = new Date()
-        updates.consentDocVersion = consentDocVersion
+        updates.consentDocVersion = await resolveHrPolicyVersion(existing.vacancyId)
       }
 
       // F2.C: → anketa_filled (после расширения воронки промежуточный
@@ -310,7 +337,7 @@ export async function POST(
       // 152-ФЗ: как и в основной ветке — только первое согласие.
       if (consentGiven && !dup.consentAt) {
         updates.consentAt = new Date()
-        updates.consentDocVersion = consentDocVersion
+        updates.consentDocVersion = await resolveHrPolicyVersion(demo.vacancyId)
       }
       if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
         updates.stage = "anketa_filled"
@@ -352,6 +379,8 @@ export async function POST(
       )
     }
 
+    // 152-ФЗ: редакция политики — по компании вакансии, к которой создаём кандидата.
+    const consentDocVersion = consentGiven ? await resolveHrPolicyVersion(demo.vacancyId) : null
     const candidate = await db.transaction(async (tx) => {
       const short = await generateCandidateShortId(tx, demo.vacancyId)
       const [row] = await tx

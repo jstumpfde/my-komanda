@@ -118,6 +118,9 @@ interface DemoData {
   vacancyTitle: string
   companyName: string
   companyLogo: string | null
+  // 152-ФЗ: subdomain компании → чекбокс согласия ссылается на ЕЁ политику
+  // (/politicahr2026?company=<subdomain>); нет subdomain — центральная политика.
+  companySubdomain?: string | null
   brandPrimaryColor: string
   brandBgColor: string
   brandTextColor: string
@@ -1669,7 +1672,7 @@ export default function DemoPage() {
                 style={{ accentColor: brandColor }}
               />
               <span>
-                Я согласен на обработку персональных данных в соответствии с <a href="/politicahr2026" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
+                Я согласен на обработку персональных данных в соответствии с <a href={data.companySubdomain ? `/politicahr2026?company=${encodeURIComponent(data.companySubdomain)}` : "/politicahr2026"} target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
               </span>
             </label>
 
