@@ -9,6 +9,7 @@ import { db } from "@/lib/db"
 import { knowledgeSources } from "@/lib/db/schema"
 import { getValidYandexDiskToken } from "@/lib/knowledge-sources/get-valid-token"
 import { YandexDiskAdapter } from "@/lib/knowledge-sources/adapters/yandex-disk"
+import { assertKnowledgeDriveSourcesEnabled } from "@/lib/knowledge-sources/feature-flag"
 
 export async function GET(
   req: NextRequest,
@@ -16,6 +17,7 @@ export async function GET(
 ) {
   try {
     const user = await requireCompany()
+    await assertKnowledgeDriveSourcesEnabled(user) // MAJOR-1: гейт на каждом роуте
     const { id } = await params
     const path = req.nextUrl.searchParams.get("path") || "/"
 
@@ -27,7 +29,7 @@ export async function GET(
     if (!source) return apiError("Источник не найден", 404)
     if (source.provider !== "yandex_disk") return apiError("Дерево папок пока поддерживается только для Яндекс.Диска", 400)
 
-    const accessToken = await getValidYandexDiskToken(source.id)
+    const accessToken = await getValidYandexDiskToken(source.id, user.companyId)
     if (!accessToken) return apiError("Токен недействителен — переподключите источник", 409)
 
     const adapter = new YandexDiskAdapter()

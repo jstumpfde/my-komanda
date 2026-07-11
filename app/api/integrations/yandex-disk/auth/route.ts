@@ -9,11 +9,15 @@ import { requireDirector } from "@/lib/api-helpers"
 import { buildAuthUrl, isYandexDiskConfigured } from "@/lib/knowledge-sources/yandex-oauth"
 import { encodeKnowledgeSourceState } from "@/lib/knowledge-sources/oauth-state"
 import { isTokenCryptoConfigured } from "@/lib/knowledge-sources/token-crypto"
+import { assertKnowledgeDriveSourcesEnabled } from "@/lib/knowledge-sources/feature-flag"
 
 export async function GET() {
   let user
   try {
     user = await requireDirector()
+    // MAJOR-1 (ревью 11.07): флаг проверяется в каждом роуте источников, а не
+    // только на списке — иначе подключение работало по прямому URL.
+    await assertKnowledgeDriveSourcesEnabled(user)
   } catch (e) {
     if (e instanceof Response) return e
     return NextResponse.json({ error: "unauthorized" }, { status: 401 })

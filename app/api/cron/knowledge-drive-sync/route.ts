@@ -13,10 +13,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { knowledgeSources } from "@/lib/db/schema"
+import { knowledgeSources, companies, users } from "@/lib/db/schema"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { syncOneSource } from "@/lib/knowledge-sources/sync-source"
+import { isEnabledForCron } from "@/lib/knowledge-sources/feature-flag"
 
 // Ключи 7470001-7470003 заняты (hh-import, pending-rejections, price-monitor-tick).
 const LOCK_KEY = 7470004
@@ -46,16 +47,31 @@ export async function POST(req: NextRequest) {
     const run = await startCronRun("knowledge-drive-sync")
 
     try {
-      const sources = await db
-        .select()
+      // MINOR-a (ревью 11.07): давно не синканные — первыми (NULLS FIRST =
+      // только что подключённые), чтобы большой первичный краул одного
+      // источника не морил голодом остальные при общем бюджете файлов.
+      const rows = await db
+        .select({
+          source: knowledgeSources,
+          hiringDefaultsJson: companies.hiringDefaultsJson,
+          connectedByEmail: users.email,
+        })
         .from(knowledgeSources)
+        .innerJoin(companies, eq(knowledgeSources.tenantId, companies.id))
+        .leftJoin(users, eq(knowledgeSources.connectedBy, users.id))
         .where(eq(knowledgeSources.status, "active"))
+        .orderBy(sql`${knowledgeSources.lastSyncAt} ASC NULLS FIRST`)
 
-      for (const source of sources) {
+      for (const row of rows) {
+        // MAJOR-1 (ревью 11.07): выключили фиче-флаг компании → источник
+        // перестаёт синкаться со следующего тика (company-флаг ИЛИ
+        // подключал владелец-полигон — см. isEnabledForCron).
+        if (!isEnabledForCron(row.hiringDefaultsJson, row.connectedByEmail)) continue
+
         const budget = MAX_FILES_PER_RUN - filesTouched
         if (budget <= 0) break
 
-        const result = await syncOneSource(source, budget)
+        const result = await syncOneSource(row.source, budget)
         filesTouched += result.filesTouched
         indexed += result.indexed
         skipped += result.skipped

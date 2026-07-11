@@ -32,7 +32,7 @@ export async function syncOneSource(source: KnowledgeSource, maxFiles: number): 
   if (source.provider !== "yandex_disk") return result // фаза 1 — только Диск
 
   try {
-    const accessToken = await getValidYandexDiskToken(source.id)
+    const accessToken = await getValidYandexDiskToken(source.id, source.tenantId)
     if (!accessToken) {
       await db.update(knowledgeSources).set({ status: "error", lastError: "Токен недоступен — переподключите источник" })
         .where(eq(knowledgeSources.id, source.id))

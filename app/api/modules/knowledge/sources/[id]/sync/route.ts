@@ -10,6 +10,7 @@ import { apiError, apiSuccess, requireDirector } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
 import { knowledgeSources } from "@/lib/db/schema"
 import { syncOneSource } from "@/lib/knowledge-sources/sync-source"
+import { assertKnowledgeDriveSourcesEnabled } from "@/lib/knowledge-sources/feature-flag"
 
 const MAX_FILES_PER_MANUAL_SYNC = 300
 
@@ -19,6 +20,7 @@ export async function POST(
 ) {
   try {
     const user = await requireDirector()
+    await assertKnowledgeDriveSourcesEnabled(user) // MAJOR-1: гейт на каждом роуте
     const { id } = await params
 
     const [source] = await db

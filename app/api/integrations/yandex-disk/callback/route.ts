@@ -12,6 +12,7 @@ import { and, eq } from "drizzle-orm"
 import { exchangeCode, getYandexLogin } from "@/lib/knowledge-sources/yandex-oauth"
 import { encryptToken, isTokenCryptoConfigured } from "@/lib/knowledge-sources/token-crypto"
 import { verifyKnowledgeSourceState, isStateFresh } from "@/lib/knowledge-sources/oauth-state"
+import { isKnowledgeDriveSourcesEnabled } from "@/lib/knowledge-sources/feature-flag"
 // База редиректа — из env (НЕ req.url): Next 16 подставляет внутренний origin
 // (http://localhost:3000) — инцидент 02.07.
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
@@ -38,6 +39,13 @@ export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.companyId || session.user.companyId !== state.companyId) {
     return NextResponse.redirect(new URL(`${PAGE}?error=invalid_state`, getAppBaseUrl()))
+  }
+
+  // MAJOR-1 (ревью 11.07): гейт фиче-флага и на callback — auth-роут флаг уже
+  // проверил, но state живёт 10 минут, за это время флаг могли выключить.
+  const enabled = await isKnowledgeDriveSourcesEnabled(state.companyId, session.user.email)
+  if (!enabled) {
+    return NextResponse.redirect(new URL(`${PAGE}?error=feature_disabled`, getAppBaseUrl()))
   }
 
   if (!isTokenCryptoConfigured()) {

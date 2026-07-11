@@ -14,6 +14,7 @@ import { getValidYandexDiskToken } from "@/lib/knowledge-sources/get-valid-token
 import { YandexDiskAdapter } from "@/lib/knowledge-sources/adapters/yandex-disk"
 import { estimateIndexing } from "@/lib/knowledge-sources/estimate"
 import type { SourceFileMeta } from "@/lib/knowledge-sources/adapter-types"
+import { assertKnowledgeDriveSourcesEnabled } from "@/lib/knowledge-sources/feature-flag"
 
 const ESTIMATE_FILE_CAP = 3000
 
@@ -23,6 +24,7 @@ export async function POST(
 ) {
   try {
     const user = await requireDirector()
+    await assertKnowledgeDriveSourcesEnabled(user) // MAJOR-1: гейт на каждом роуте
     const { id } = await params
 
     const [source] = await db
@@ -42,7 +44,7 @@ export async function POST(
       return apiSuccess({ totalFiles: 0, supportedFiles: 0, skippedFiles: 0, estimatedChars: 0, estimatedTokens: 0, truncated: false })
     }
 
-    const accessToken = await getValidYandexDiskToken(source.id)
+    const accessToken = await getValidYandexDiskToken(source.id, user.companyId)
     if (!accessToken) return apiError("Токен недействителен — переподключите источник", 409)
 
     const adapter = new YandexDiskAdapter()

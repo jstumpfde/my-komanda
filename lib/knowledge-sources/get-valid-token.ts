@@ -3,17 +3,23 @@
 // lib/zoom/get-valid-token.ts, см. memory hh-no-early-token-refresh: рефрешим
 // только истёкшие/близкие, не «на всякий случай»).
 
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { knowledgeSources } from "@/lib/db/schema"
 import { decryptToken, encryptToken } from "./token-crypto"
 import { refreshTokens } from "./yandex-oauth"
 
-export async function getValidYandexDiskToken(sourceId: string): Promise<string | null> {
+// companyId обязателен и входит в WHERE (MINOR-b из ревью 11.07):
+// tenant-скоуп на уровне самого хелпера, а не только у вызывающих роутов —
+// чужой sourceId с валидным UUID просто не найдётся.
+export async function getValidYandexDiskToken(sourceId: string, companyId: string): Promise<string | null> {
   const [row] = await db
     .select()
     .from(knowledgeSources)
-    .where(eq(knowledgeSources.id, sourceId))
+    .where(and(
+      eq(knowledgeSources.id, sourceId),
+      eq(knowledgeSources.tenantId, companyId),
+    ))
     .limit(1)
 
   if (!row || row.provider !== "yandex_disk") return null
@@ -44,7 +50,10 @@ export async function getValidYandexDiskToken(sourceId: string): Promise<string 
         tokenExpiresAt: expiresAt,
         updatedAt: new Date(),
       })
-      .where(eq(knowledgeSources.id, sourceId))
+      .where(and(
+        eq(knowledgeSources.id, sourceId),
+        eq(knowledgeSources.tenantId, companyId),
+      ))
     return tokens.access_token
   } catch (err) {
     console.error("[knowledge-sources] yandex-disk token refresh failed", err)
