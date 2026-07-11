@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useSidebar } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
 import { useAuth, ROLE_LABELS, ROLE_ICONS, type UserRole } from "@/lib/auth"
+import { BIGLIFE_COMPANY_ID } from "@/lib/big-life/constants"
 import { SubscriptionBanner } from "@/components/billing/subscription-banner"
 import { ImpersonationBanner } from "@/components/partner/impersonation-banner"
 import { AdminAlertsBanner } from "@/components/dashboard/admin-alerts-banner"
@@ -42,6 +43,11 @@ export function DashboardHeader() {
   const { user, role, realRole, isViewingAs, setRole, returnToAdmin, logout } = useAuth()
   const { data: session, update: updateSession } = useSession()
   const isPlatformAdmin = session?.user?.isPlatformAdmin === true
+  // «Обложки Big Life» видны только в АКТИВНОЙ компании Big Life (Юрий 11.07):
+  // сам тенант — по своему companyId; админ — только зайдя в Big Life режимом
+  // клиента (impersonation подменяет session.companyId на клиентскую компанию).
+  // Вне Big Life пункт скрыт и у админа. Серверная авторизация — requireBigLifeAccess.
+  const isBigLifeActive = session?.user?.companyId === BIGLIFE_COMPANY_ID
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
@@ -239,11 +245,9 @@ export function DashboardHeader() {
               </Link>
             )}
 
-            {/* Big Life covers shortcut — тот же паттерн, что и /admin/platform
-                выше: владелец платформы обычно role="director" СВОЕЙ личной
-                компании, companyId-гейт в сайдбаре его не ловит, поэтому нужна
-                отдельная isPlatformAdmin-точка входа (predeploy-guard 09.07). */}
-            {isPlatformAdmin && (
+            {/* Big Life covers shortcut — только в активной компании Big Life
+                (Юрий 11.07: раньше висел у админа везде по isPlatformAdmin). */}
+            {isBigLifeActive && (
               <Link
                 href="/big-life/covers"
                 title="Обложки Big Life"
@@ -365,7 +369,7 @@ export function DashboardHeader() {
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  {isPlatformAdmin && (
+                  {isBigLifeActive && (
                     <DropdownMenuItem className="text-sm cursor-pointer" asChild>
                       <Link href="/big-life/covers">
                         <ImageIcon className="w-4 h-4 mr-2" />

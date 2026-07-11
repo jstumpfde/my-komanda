@@ -1,5 +1,6 @@
 import { requireDirector, apiError } from "@/lib/api-helpers"
 import { isPlatformAdminEmail } from "@/lib/platform/auth"
+import { BIGLIFE_COMPANY_ID as BIGLIFE_COMPANY_ID_DEFAULT } from "@/lib/big-life/constants"
 
 // Big Life заведён как полноценный тенант (0271) — доступ имеют director/client
 // САМОЙ компании Big Life (через requireDirector(), включая партнёра под
@@ -12,7 +13,7 @@ import { isPlatformAdminEmail } from "@/lib/platform/auth"
 // ПОДМЕНЯЕМ companyId на Big Life — иначе все нижестоящие WHERE company_id=...
 // фильтруют по ЕГО СОБСТВЕННОЙ компании, и publish() тихо перезаписал бы живую
 // страницу пустым списком.
-const BIGLIFE_COMPANY_ID = process.env.BIGLIFE_COMPANY_ID || "a39c8844-2e7a-4adb-bb29-8645b2fbc9ff"
+const BIGLIFE_COMPANY_ID = process.env.BIGLIFE_COMPANY_ID || BIGLIFE_COMPANY_ID_DEFAULT
 
 export async function requireBigLifeAccess() {
   const user = await requireDirector()

@@ -42,6 +42,7 @@ import { getModuleGroups } from "@/lib/sidebar/module-menus"
 import { SETTINGS_MENU, ADMIN_MENU } from "@/lib/sidebar/config"
 import { useSidebarVisibility } from "@/lib/hooks/use-sidebar-visibility"
 import { SidebarCustomizationSheet } from "@/components/dashboard/sidebar-customization-sheet"
+import { BIGLIFE_COMPANY_ID } from "@/lib/big-life/constants"
 
 // ── Icon resolver ──────────────────────────────────────────────────────────
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -1162,13 +1163,12 @@ export function DashboardSidebar() {
             )
           })()}
 
-          {/* «Обложки Big Life» — виден тенанту Big Life (реальный director-
-              аккаунт заведён под этой конкретной компанией, см.
-              lib/big-life/auth.ts BIGLIFE_COMPANY_ID) ИЛИ владельцу платформы
-              по email-whitelist (isPlatformAdmin) — companyId у него обычно
-              указывает на ЛИЧНУЮ компанию, не Big Life, поэтому одного
-              сравнения companyId недостаточно (predeploy-guard 09.07). */}
-          {(user?.companyId === "a39c8844-2e7a-4adb-bb29-8645b2fbc9ff" || user?.isPlatformAdmin) && (() => {
+          {/* «Обложки Big Life» — только в АКТИВНОЙ компании Big Life (Юрий
+              11.07): сам тенант по companyId; админ — только зайдя в Big Life
+              режимом клиента (impersonation подменяет companyId на клиентскую
+              компанию). Вне Big Life скрыт и у админа; серверная авторизация —
+              requireBigLifeAccess (владельца пускает всегда). */}
+          {user?.companyId === BIGLIFE_COMPANY_ID && (() => {
             const coversActive = pathname === '/big-life/covers'
             return (
               <Link
