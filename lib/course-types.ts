@@ -1,4 +1,4 @@
-import { renderDemoVars, withCityVars } from "./demo-vars"
+import { renderDemoVars, demoVarExamplesMap, DEMO_PICKER_VARIABLES } from "./demo-vars"
 
 export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media" | "stories" | "pdf"
 
@@ -165,17 +165,10 @@ export interface DemoSection {
   demoIds: string[]
 }
 
-export const VARIABLES = [
-  { key: "имя", label: "Имя кандидата", example: "Иван" },
-  { key: "компания", label: "Компания", example: "TechCorp" },
-  { key: "должность", label: "Должность", example: "Менеджер по продажам" },
-  { key: "зарплата_от", label: "Зарплата от", example: "80 000" },
-  { key: "зарплата_до", label: "Зарплата до", example: "150 000" },
-  { key: "город", label: "Город", example: "Москва" },
-  { key: "в_городе", label: "В городе (склонение)", example: "в Москве" },
-  { key: "офис", label: "Адрес офиса", example: "ул. Примерная, 1" },
-  { key: "график", label: "График", example: "Пн-Пт, 9:00-18:00" },
-]
+// Единый список переменных — lib/demo-vars.ts (DEMO_PICKER_VARIABLES).
+// Локальная копия дрейфовала: рекламировала {{офис}}/{{график}} до того, как
+// рендер демо их знал, — кандидат видел сырые «{{офис}}».
+export const VARIABLES = DEMO_PICKER_VARIABLES
 
 export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[] = [
   { type: "text", icon: "T", label: "Текст" },
@@ -328,8 +321,7 @@ export function createDemo(title: string, templateLessons?: Lesson[]): Demo {
 
 // Подстановка примеров в превью/витрине — через общий lib/demo-vars.ts
 // (локальная регулярка с `\w` не матчила кириллицу — плейсхолдеры оставались
-// сырыми). «в_городе» выводится из «город» автоматически («в Москве»).
+// сырыми). Примеры значений — из того же единого списка, что и пикеры.
 export function replaceVars(text: string): string {
-  const map: Record<string, string> = { "имя": "Иван", "имя_кандидата": "Иван", "компания": "TechCorp", "должность": "Менеджер по продажам", "зарплата_от": "80 000", "зарплата_до": "150 000", "город": "Москва", "офис": "ул. Примерная, 1", "график": "Пн-Пт, 9:00-18:00" }
-  return renderDemoVars(text, withCityVars(map))
+  return renderDemoVars(text, demoVarExamplesMap())
 }

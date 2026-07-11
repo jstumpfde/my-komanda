@@ -16,7 +16,7 @@ import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 import { renderButtonIcon } from "@/lib/button-icons"
 import { estimateDemoDuration } from "@/lib/demo/estimate-duration"
-import { renderDemoVars, withCityVars } from "@/lib/demo-vars"
+import { renderDemoVars, buildDemoVarsMap } from "@/lib/demo-vars"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -126,6 +126,15 @@ interface DemoData {
   salaryMax: number | null
   city: string | null
   format: string | null
+  // Источники «настоящих» переменных демо (см. buildDemoVarsMap):
+  // {{график}}, {{офис}}, {{отрасль}}, {{сотрудников}}, {{лет_на_рынке}},
+  // {{руководитель}}. Отдаёт /api/public/demo/[token] из vacancies/companies.
+  schedule: string | null
+  officeAddress: string | null
+  industry: string | null
+  employeeCount: number | null
+  foundedYear: number | null
+  director: string | null
   lessons: Lesson[]
   progress: {
     schemaVersion?: number
@@ -235,19 +244,10 @@ function pluralizeSteps(n: number): string {
 
 // Подстановка — через общий lib/demo-vars.ts: локальная регулярка с `\w` не
 // матчила кириллицу, и «{{город}}»/«{{имя}}» уходили кандидату сырыми скобками.
-// withCityVars добавляет «в_городе» (предложный падеж, «в Казани»).
+// Карта переменных (вкл. производную «в_городе») строится в buildDemoVarsMap —
+// DemoData структурно совместим с DemoVarsSource.
 function replaceVars(text: string, data: DemoData): string {
-  const firstName = data.candidateName?.split(" ")[0] || data.candidateName
-  const map: Record<string, string> = {
-    "имя": firstName || "",
-    "имя_кандидата": firstName || "",
-    "компания": data.companyName || "",
-    "должность": data.vacancyTitle || "",
-    "зарплата_от": data.salaryMin ? data.salaryMin.toLocaleString("ru-RU") : "",
-    "зарплата_до": data.salaryMax ? data.salaryMax.toLocaleString("ru-RU") : "",
-    "город": data.city || "",
-  }
-  return renderDemoVars(text, withCityVars(map))
+  return renderDemoVars(text, buildDemoVarsMap(data))
 }
 
 // ─── Group blocks by lesson for single-page rendering ────────────────────────
