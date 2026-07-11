@@ -238,8 +238,11 @@ function SourceCard({ source, onChanged }: { source: SourceRow; onChanged: () =>
     })
   }
 
-  async function handleSave() {
-    setSaving(true)
+  // Единая точка сохранения выбора — используется и кнопкой «Сохранить
+  // выбор», и «Начать индексацию» (MAJOR-3 из ревью 11.07: sync-роут читает
+  // сохранённые rootFolders, поэтому синк без предварительного сохранения
+  // падал «Сначала выберите папки» при видимо отмеченных чекбоксах).
+  async function saveFolders(silent = false): Promise<boolean> {
     try {
       const res = await fetch(`/api/modules/knowledge/sources/${source.id}/folders`, {
         method: "POST",
@@ -249,12 +252,21 @@ function SourceCard({ source, onChanged }: { source: SourceRow; onChanged: () =>
       const data = await res.json().catch(() => null) as { ok?: true; error?: string } | null
       if (!res.ok || !data?.ok) {
         toast.error(data?.error || "Не удалось сохранить выбор папок")
-        return
+        return false
       }
-      toast.success("Папки сохранены")
-      onChanged()
+      if (!silent) toast.success("Папки сохранены")
+      return true
     } catch {
       toast.error("Ошибка сети")
+      return false
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const ok = await saveFolders()
+      if (ok) onChanged()
     } finally {
       setSaving(false)
     }
@@ -286,6 +298,10 @@ function SourceCard({ source, onChanged }: { source: SourceRow; onChanged: () =>
     setSyncing(true)
     setSyncResult(null)
     try {
+      // MAJOR-3: сначала сохраняем текущий выбор — sync-роут работает по
+      // сохранённым rootFolders, а не по состоянию чекбоксов в браузере.
+      const saved = await saveFolders(true)
+      if (!saved) return
       const res = await fetch(`/api/modules/knowledge/sources/${source.id}/sync`, { method: "POST" })
       const data = await res.json().catch(() => null) as (SyncResult & { error?: string }) | null
       if (!res.ok || !data) {
