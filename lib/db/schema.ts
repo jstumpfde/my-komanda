@@ -385,6 +385,13 @@ export interface CompanyHiringDefaults {
   // undefined/null → используется платформенный дефолт. 0 — зарезервировано
   // под «безлимит» на будущее, сейчас UI такого не предлагает.
   aiMonthlyTokenLimit?: number | null
+  // База знаний → «Подключённые источники» (концепт kb-connected-sources,
+  // фаза 1, 11.07): показывать раздел «Источники» и разрешать подключение
+  // Яндекс.Диска. Default OFF для всех — пилотный гейт 152-ФЗ (эмбеддинги
+  // считаются через зарубежный OpenAI, реальные клиентские диски с ПДн не
+  // индексируем до RU-резидентного бэкенда). Владелец-полигон (lib/owner.ts
+  // isOwnerEmail) видит раздел независимо от этого флага.
+  knowledgeDriveSourcesEnabled?: boolean
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
@@ -4794,3 +4801,110 @@ export const bigLifeCovers = pgTable("big_life_covers", {
 ])
 export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
 export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
+
+// ─── База знаний: «Подключённые источники» (концепт kb-connected-sources,
+// фаза 1, миграция 0278) ────────────────────────────────────────────────────
+// Компания подключает свой Яндекс.Диск (задел на webdav/google_drive/dropbox
+// — см. KnowledgeSourceProvider) как живой источник для AI-бота: OAuth →
+// выбор папок → крон-синк (краул + md5-дифф, app/api/cron/knowledge-drive-sync)
+// → парсинг → чанкинг → эмбеддинги → retrieveKnowledgeContext (lib/knowledge/
+// retrieval.ts) отдаёт цитаты с ссылкой на файл. Токены источника хранятся
+// ТОЛЬКО шифрованными (lib/knowledge-sources/token-crypto.ts, AES-256-GCM).
+//
+// 152-ФЗ жёсткий гейт (см. концепт §risks): пока эмбеддинги считаются через
+// зарубежный OpenAI — реальные клиентские диски с ПДн не подключаем, фаза 1
+// обкатывается на демо-тенанте/полигоне. Фиче-флаг —
+// companies.hiringDefaultsJson.knowledgeDriveSourcesEnabled (default OFF) ИЛИ
+// owner-email (lib/owner.ts) — см. lib/knowledge-sources/feature-flag.ts.
+
+export type KnowledgeSourceProvider = "yandex_disk" | "webdav" | "google_drive" | "dropbox"
+
+export interface KnowledgeSourceRootFolder {
+  /** Абсолютный путь на диске провайдера, напр. "/Регламенты". */
+  path: string
+  /** Человекочитаемое название (иначе — последний сегмент path). */
+  label?: string
+  // Фаза 1: сохраняется, но серверный enforcement — фаза 2 (см. концепт §access,
+  // §phases). Пока используется только как метка в UI и в цитатах бота.
+  audience: "employees" | "department" | "clients" | "partners" | "owner_only"
+  /** «Не использовать в AI» — enforced СРАЗУ, фильтруется в retrieval.ts. */
+  aiOptOut: boolean
+}
+
+export const knowledgeSources = pgTable("knowledge_sources", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  tenantId:        uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  provider:        text("provider").notNull().$type<KnowledgeSourceProvider>(),
+  title:           text("title").notNull(), // человекочитаемое имя (напр. "Яндекс.Диск (login)")
+  // AES-256-GCM шифротекст (iv.tag.ciphertext, base64) — см. token-crypto.ts.
+  // НИКОГДА не хранить access/refresh token в открытом виде (прецедент для
+  // всех будущих диск-интеграций, см. концепт §arch «Безопасность»).
+  accessTokenEnc:  text("access_token_enc").notNull(),
+  refreshTokenEnc: text("refresh_token_enc"),
+  tokenExpiresAt:  timestamp("token_expires_at", { withTimezone: true }),
+  connectedBy:     uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
+  rootFolders:     jsonb("root_folders").$type<KnowledgeSourceRootFolder[]>().notNull().default([]),
+  status:          text("status").notNull().default("active"), // active | error | paused
+  lastSyncAt:      timestamp("last_sync_at", { withTimezone: true }),
+  lastFullCrawlAt: timestamp("last_full_crawl_at", { withTimezone: true }),
+  lastError:       text("last_error"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:       timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("knowledge_sources_tenant_idx").on(t.tenantId),
+])
+export type KnowledgeSource    = typeof knowledgeSources.$inferSelect
+export type NewKnowledgeSource = typeof knowledgeSources.$inferInsert
+
+export const knowledgeSourceDocuments = pgTable("knowledge_source_documents", {
+  id:                 uuid("id").primaryKey().defaultRandom(),
+  tenantId:           uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  sourceId:           uuid("source_id").notNull().references(() => knowledgeSources.id, { onDelete: "cascade" }),
+  externalPath:       text("external_path").notNull(), // путь на диске провайдера — ключ идентичности
+  name:               text("name").notNull(),
+  mimeType:           text("mime_type"),
+  sizeBytes:          integer("size_bytes"),
+  providerModifiedAt: timestamp("provider_modified_at", { withTimezone: true }),
+  contentHash:        text("content_hash"), // md5 от провайдера (Яндекс.Диск) ИЛИ sha256 контента
+  status:             text("status").notNull().default("pending"), // indexed|pending|error|skipped|deleted
+  skipReason:         text("skip_reason"),
+  textChars:          integer("text_chars"),
+  tokensSpent:        integer("tokens_spent"),
+  // Денормализация KnowledgeSourceRootFolder.aiOptOut на момент последнего
+  // краула — избегаем jsonb-матчинга префикса пути на каждый retrieval-запрос
+  // (хот-путь AI-ответов). Пересчитывается в cron/knowledge-drive-sync при
+  // каждом краул-цикле (lib/knowledge-sources/root-folders.ts::resolveAiOptOut).
+  aiOptOut:           boolean("ai_opt_out").notNull().default(false),
+  lastIndexedAt:      timestamp("last_indexed_at", { withTimezone: true }),
+  // Soft-delete окно 30 дней — паттерн корзины вакансий (deletedAt IS NOT NULL
+  // = файл исчез с диска при последнем краулe). Hard-delete — тем же
+  // cron/trash-cleanup контуром можно расширить позже; фаза 1: чанки такого
+  // документа уже исключены из retrieval по WHERE deletedAt IS NULL.
+  deletedAt:          timestamp("deleted_at", { withTimezone: true }),
+  createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("knowledge_source_documents_source_path_uq").on(t.sourceId, t.externalPath),
+  index("knowledge_source_documents_tenant_idx").on(t.tenantId),
+  index("knowledge_source_documents_source_idx").on(t.sourceId),
+])
+export type KnowledgeSourceDocument    = typeof knowledgeSourceDocuments.$inferSelect
+export type NewKnowledgeSourceDocument = typeof knowledgeSourceDocuments.$inferInsert
+
+export const knowledgeChunks = pgTable("knowledge_chunks", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  tenantId:   uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  documentId: uuid("document_id").notNull().references(() => knowledgeSourceDocuments.id, { onDelete: "cascade" }),
+  ord:        integer("ord").notNull(), // порядок чанка внутри документа
+  text:       text("text").notNull(),
+  textHash:   text("text_hash").notNull(), // sha256(text) — переэмбеддинг только изменившихся чанков
+  // jsonb (float[1536]) — как knowledgeArticles.embedding, до перехода на
+  // pgvector (см. lib/knowledge/embeddings.ts).
+  embedding:  jsonb("embedding"),
+  tokenCount: integer("token_count"),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("knowledge_chunks_tenant_document_idx").on(t.tenantId, t.documentId),
+])
+export type KnowledgeChunk    = typeof knowledgeChunks.$inferSelect
+export type NewKnowledgeChunk = typeof knowledgeChunks.$inferInsert
