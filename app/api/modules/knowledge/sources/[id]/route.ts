@@ -7,7 +7,6 @@
 import { NextRequest } from "next/server"
 import { apiError, apiSuccess, requireDirector } from "@/lib/api-helpers"
 import { disconnectKnowledgeSource } from "@/lib/knowledge-sources/disconnect"
-import { assertKnowledgeDriveSourcesEnabled } from "@/lib/knowledge-sources/feature-flag"
 
 export async function DELETE(
   _req: NextRequest,
@@ -15,7 +14,9 @@ export async function DELETE(
 ) {
   try {
     const user = await requireDirector()
-    await assertKnowledgeDriveSourcesEnabled(user) // MAJOR-1: гейт на каждом роуте
+    // Гейт флага намеренно НЕ применяется: удаление своих данных должно
+    // работать даже при выключенной фиче (152-ФЗ). Достаточно директора +
+    // tenant-скоупа в disconnectKnowledgeSource (решение координатора 11.07).
     const { id } = await params
     const disconnected = await disconnectKnowledgeSource(id, user.companyId)
     if (!disconnected) return apiError("Источник не найден", 404)
