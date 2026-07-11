@@ -81,6 +81,7 @@ import {
 } from "@/lib/hr/contacts"
 import { cn } from "@/lib/utils"
 import { EditableMessagePreview } from "@/components/candidates/editable-message-preview"
+import { renderTemplate } from "@/lib/template-renderer"
 import { useAuth } from "@/lib/auth"
 import {
   getStageLabel,
@@ -3624,7 +3625,7 @@ export function CandidateDrawer({
                   label="Вступительный текст (перед списком времени)"
                   text={inviteText}
                   onChange={setInviteText}
-                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle }}
+                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle, schedule_link: inviteScheduleLink }}
                   placeholders={["name", "vacancy"]}
                   onSaveTemplate={saveInviteTemplate}
                 />
@@ -3633,9 +3634,11 @@ export function CandidateDrawer({
                   <div className="text-sm whitespace-pre-wrap break-words">
                     {inviteSelectedSlots.length === 0
                       ? "Выберите время выше — оно добавится в сообщение."
-                      : buildInviteMessage()
-                          .replace(/\{\{\s*name\s*\}\}/g, inviteFirstName)
-                          .replace(/\{\{\s*vacancy\s*\}\}/g, inviteVacancyTitle)}
+                      : renderTemplate(buildInviteMessage(), {
+                          name: inviteFirstName,
+                          vacancy: inviteVacancyTitle,
+                          schedule_link: inviteScheduleLink,
+                        })}
                   </div>
                 </div>
               </TabsContent>

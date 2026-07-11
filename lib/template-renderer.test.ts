@@ -85,3 +85,14 @@ test("не-плейсхолдер в фигурных скобках → не т
   const out = renderTemplate("set {x: 1}", { name: "Иван" })
   assert.equal(out, "set {x: 1}")
 })
+
+// 11. Двойные скобки + кириллические алиасы — сценарий превью сообщений
+//     (EditableMessagePreview рендерит этим же движком; локальные
+//     \w-регулярки кириллицу не матчили и {{Имя}} уходило литералом).
+test("двойные скобки с кириллицей {{Имя}}/{{компания}} → подставляет", () => {
+  const out = renderTemplate(
+    "{{Имя}}, вакансия «{{Должность}}» ({{компания}}). Запись: {{schedule_link}}",
+    { name: "Иван", vacancy: "Продавец", company: "Company24", schedule_link: "https://company24.pro/schedule/abc" },
+  )
+  assert.equal(out, "Иван, вакансия «Продавец» (Company24). Запись: https://company24.pro/schedule/abc")
+})
