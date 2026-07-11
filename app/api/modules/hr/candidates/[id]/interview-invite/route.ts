@@ -11,11 +11,15 @@
 //     fetchScheduleData (та же логика, что на публичной /schedule/[token]).
 //   - vacancyTitle, candidateFirstName — для подстановки {{name}}/{{vacancy}}
 //     в превью на клиенте.
+//   - companyName, managerName, demoUrl, testUrl — значения {{company}}/
+//     {{manager}}/{{demo_link}}/{{test_link}} с теми же формулами и фолбэками,
+//     что в cron follow-up: реальная отправка подставляет их, поэтому превью
+//     обязано знать те же значения, иначе HR видит литерал «{{company}}».
 
 import { NextRequest } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies } from "@/lib/db/schema"
+import { candidates, vacancies, companies, users } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getCandidateFirstName } from "@/lib/messaging/candidate-name"
 import { DEFAULT_SCHEDULE_INVITE_TEXT } from "@/lib/messaging/schedule-invite"
@@ -39,6 +43,8 @@ export async function GET(
         vacancyId:     candidates.vacancyId,
         vacancyTitle:      vacancies.title,
         scheduleInviteText: vacancies.scheduleInviteText,
+        companyId:     vacancies.companyId,
+        createdBy:     vacancies.createdBy,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -49,6 +55,27 @@ export async function GET(
 
     const tokenForUrl = row.shortId ?? row.token ?? row.candidateId
     const scheduleLink = `${getAppBaseUrl()}/schedule/${tokenForUrl}`
+    // Формулы 1:1 из cron follow-up (обычное касание, без спецкейса «2-й части
+    // демо») — превью обязано совпадать с тем, что реально уйдёт кандидату.
+    const demoUrl = `${getAppBaseUrl()}/demo/${tokenForUrl}`
+    const testUrl = `${getAppBaseUrl()}/test/${tokenForUrl}`
+
+    const [companyRow] = await db
+      .select({ name: companies.name })
+      .from(companies)
+      .where(eq(companies.id, row.companyId))
+      .limit(1)
+    const companyName = companyRow?.name?.trim() || "Company24"
+
+    let managerName = ""
+    if (row.createdBy) {
+      const [mgr] = await db
+        .select({ firstName: users.firstName, name: users.name })
+        .from(users)
+        .where(eq(users.id, row.createdBy))
+        .limit(1)
+      managerName = (mgr?.firstName?.trim() || mgr?.name?.trim() || "")
+    }
 
     // Слоты интервью (Режим Б). Переиспользуем публичный резолвер — он берёт
     // окна из hiring_defaults.schedule и исключает занятые события календаря.
@@ -76,6 +103,10 @@ export async function GET(
       scheduleLink,
       vacancyTitle:       row.vacancyTitle ?? "",
       candidateFirstName: firstName,
+      companyName,
+      managerName,
+      demoUrl,
+      testUrl,
       timezoneLabel,
       days,
     })

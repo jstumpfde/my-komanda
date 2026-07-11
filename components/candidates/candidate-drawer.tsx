@@ -910,10 +910,26 @@ export function CandidateDrawer({
   const [inviteScheduleLink, setInviteScheduleLink] = useState("")
   const [inviteVacancyTitle, setInviteVacancyTitle] = useState("")
   const [inviteFirstName, setInviteFirstName] = useState("")
+  const [inviteCompanyName, setInviteCompanyName] = useState("")
+  const [inviteManagerName, setInviteManagerName] = useState("")
+  const [inviteDemoUrl, setInviteDemoUrl] = useState("")
+  const [inviteTestUrl, setInviteTestUrl] = useState("")
   const [inviteTzLabel, setInviteTzLabel] = useState("")
   const [inviteDays, setInviteDays] = useState<{ date: string; label: string; slots: string[] }[]>([])
   const [inviteSelectedSlots, setInviteSelectedSlots] = useState<string[]>([]) // "YYYY-MM-DD|HH:MM"
   const [inviteLoading, setInviteLoading] = useState(false)
+  // Значения плейсхолдеров приглашения. Набор ключей обязан совпадать с тем,
+  // что реальная отправка (cron follow-up) подставляет в текст: переменная,
+  // которой тут нет, останется у HR в превью литералом «{{company}}».
+  const inviteVars = useMemo(() => ({
+    name:          inviteFirstName,
+    vacancy:       inviteVacancyTitle,
+    company:       inviteCompanyName,
+    manager:       inviteManagerName,
+    demo_link:     inviteDemoUrl,
+    test_link:     inviteTestUrl,
+    schedule_link: inviteScheduleLink,
+  }), [inviteFirstName, inviteVacancyTitle, inviteCompanyName, inviteManagerName, inviteDemoUrl, inviteTestUrl, inviteScheduleLink])
   // #1: «Запланировать интервью» из карточки — создаёт событие календаря,
   // привязанное к кандидату+вакансии (появляется в табе «Интервью»).
   const [scheduleOpen, setScheduleOpen] = useState(false)
@@ -1688,6 +1704,10 @@ export function CandidateDrawer({
         scheduleLink?: string
         vacancyTitle?: string
         candidateFirstName?: string
+        companyName?: string
+        managerName?: string
+        demoUrl?: string
+        testUrl?: string
         timezoneLabel?: string
         days?: { date: string; label: string; slots: string[] }[]
       } | null
@@ -1701,6 +1721,10 @@ export function CandidateDrawer({
       setInviteScheduleLink(d.scheduleLink ?? "")
       setInviteVacancyTitle(d.vacancyTitle ?? "")
       setInviteFirstName(d.candidateFirstName ?? "")
+      setInviteCompanyName(d.companyName ?? "")
+      setInviteManagerName(d.managerName ?? "")
+      setInviteDemoUrl(d.demoUrl ?? "")
+      setInviteTestUrl(d.testUrl ?? "")
       setInviteTzLabel(d.timezoneLabel ?? "")
       setInviteDays(Array.isArray(d.days) ? d.days : [])
     } catch {
@@ -3563,7 +3587,7 @@ export function CandidateDrawer({
                 <EditableMessagePreview
                   text={inviteText}
                   onChange={setInviteText}
-                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle, schedule_link: inviteScheduleLink }}
+                  vars={inviteVars}
                   placeholders={["name", "vacancy", "schedule_link"]}
                   onSaveTemplate={saveInviteTemplate}
                 />
@@ -3625,7 +3649,7 @@ export function CandidateDrawer({
                   label="Вступительный текст (перед списком времени)"
                   text={inviteText}
                   onChange={setInviteText}
-                  vars={{ name: inviteFirstName, vacancy: inviteVacancyTitle, schedule_link: inviteScheduleLink }}
+                  vars={inviteVars}
                   placeholders={["name", "vacancy"]}
                   onSaveTemplate={saveInviteTemplate}
                 />
@@ -3634,11 +3658,7 @@ export function CandidateDrawer({
                   <div className="text-sm whitespace-pre-wrap break-words">
                     {inviteSelectedSlots.length === 0
                       ? "Выберите время выше — оно добавится в сообщение."
-                      : renderTemplate(buildInviteMessage(), {
-                          name: inviteFirstName,
-                          vacancy: inviteVacancyTitle,
-                          schedule_link: inviteScheduleLink,
-                        })}
+                      : renderTemplate(buildInviteMessage(), inviteVars)}
                   </div>
                 </div>
               </TabsContent>
