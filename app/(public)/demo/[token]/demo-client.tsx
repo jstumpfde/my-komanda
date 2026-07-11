@@ -1330,6 +1330,9 @@ export default function DemoPage() {
           phone:     fieldPhone.enabled ? formPhone.trim() : "",
           birthDate: fieldBirth.enabled && isValidBirthDateRu(formBirth) ? ruBirthToIso(formBirth) : undefined,
           city:      fieldCity.enabled  ? (formCity.trim() || undefined) : undefined,
+          // 152-ФЗ: чекбокс согласия — не только гейт кнопки; сервер фиксирует
+          // факт в candidates.consent_at (+ редакция политики).
+          consent:   formConsent,
           anketa: {
             telegram:             fieldTelegram.enabled ? (formTelegram.trim() || undefined) : undefined,
             experienceSummary:    formExperience.trim() || undefined,
