@@ -11,9 +11,15 @@
 // материалов пустые embedding — используем старое поведение (последние по
 // updatedAt, лимит MAX_PER_TYPE).
 
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { demoTemplates, knowledgeArticles } from "@/lib/db/schema"
+import {
+  demoTemplates,
+  knowledgeArticles,
+  knowledgeChunks,
+  knowledgeSourceDocuments,
+  knowledgeSources,
+} from "@/lib/db/schema"
 import {
   asVector,
   cosineSimilarity,
@@ -24,7 +30,32 @@ import {
 export interface RetrievalMaterialRef {
   id: string
   name: string
-  type: "demo" | "article"
+  type: "demo" | "article" | "drive_file"
+  /** Только для type === "drive_file" — «Яндекс.Диск → Прайсы» для цитаты в UI. */
+  sourceLabel?: string
+}
+
+// Провайдер → человекочитаемый ярлык для цитаты («источник: X, Яндекс.Диск → папка»).
+const PROVIDER_LABELS: Record<string, string> = {
+  yandex_disk: "Яндекс.Диск",
+  webdav: "Свой сервер (WebDAV)",
+  google_drive: "Google Drive",
+  dropbox: "Dropbox",
+}
+
+type DriveChunkRow = {
+  documentId: string
+  text: string
+  docName: string
+  docPath: string
+  provider: string
+}
+
+// Папка файла — dirname пути на диске, без имени файла (для цитаты «→ Прайсы»).
+function folderOf(path: string): string {
+  const idx = path.lastIndexOf("/")
+  if (idx <= 0) return ""
+  return path.slice(0, idx).replace(/^\//, "")
 }
 
 export interface RetrievalResult {
@@ -34,6 +65,11 @@ export interface RetrievalResult {
 }
 
 const EXCERPT_LEN = 300
+// Чанки файлов подключённых источников уже являются "нарезанной" релевантной
+// единицей (см. lib/knowledge/chunking.ts, цель ~1200 токенов) — обрезать их
+// до 300 символов, как демо/статьи, означало бы выбросить большую часть
+// смысла, который и был отобран cosine-скорингом. Даём больше места.
+const DRIVE_EXCERPT_LEN = 1500
 // Сколько материалов подставлять в контекст Claude.
 const DEFAULT_TOP_K = 8
 // Cap кандидатов при семантическом ранжировании (весь тенант, но не больше).
@@ -59,6 +95,7 @@ function demoExcerpt(sections: unknown): string {
 function assemble(
   demos: Array<{ id: string; name: string; sections: unknown }>,
   articles: Array<{ id: string; title: string; content: string | null }>,
+  driveChunks: DriveChunkRow[] = [],
 ): { context: string; materialsList: RetrievalMaterialRef[] } {
   const materialsList: RetrievalMaterialRef[] = []
   const parts: string[] = []
@@ -74,6 +111,15 @@ function assemble(
     const excerpt = stripHtml(a.content || "").slice(0, EXCERPT_LEN) || "(нет содержания)"
     parts.push(`[${idx}] «${a.title}» (статья)\n${excerpt}`)
     materialsList.push({ id: a.id, name: a.title, type: "article" })
+    idx++
+  }
+  for (const c of driveChunks) {
+    const providerLabel = PROVIDER_LABELS[c.provider] ?? c.provider
+    const folder = folderOf(c.docPath)
+    const sourceLabel = folder ? `${providerLabel} → ${folder}` : providerLabel
+    const excerpt = c.text.slice(0, DRIVE_EXCERPT_LEN) || "(нет содержания)"
+    parts.push(`[${idx}] «${c.docName}» (источник: ${sourceLabel})\n${excerpt}`)
+    materialsList.push({ id: c.documentId, name: c.docName, type: "drive_file", sourceLabel })
     idx++
   }
 
@@ -111,7 +157,7 @@ export async function retrieveKnowledgeContext(
     try {
       const questionVec = await generateEmbedding(questionText)
       if (questionVec) {
-        const [rawDemos, rawArticles] = await Promise.all([
+        const [rawDemos, rawArticles, rawChunks] = await Promise.all([
           db
             .select({
               id: demoTemplates.id,
@@ -137,11 +183,37 @@ export async function retrieveKnowledgeContext(
             ))
             .orderBy(desc(knowledgeArticles.updatedAt))
             .limit(candidateLimit),
+          // Файлы подключённых источников (Яндекс.Диск и т.д., концепт
+          // kb-connected-sources) — только проиндексированные, не удалённые и
+          // НЕ из папок с галочкой «не использовать в AI» (aiOptOut, enforced
+          // здесь же на уровне retrieval, а не постфактум на готовом ответе —
+          // золотой стандарт из концепта §access).
+          db
+            .select({
+              documentId: knowledgeChunks.documentId,
+              text: knowledgeChunks.text,
+              embedding: knowledgeChunks.embedding,
+              docName: knowledgeSourceDocuments.name,
+              docPath: knowledgeSourceDocuments.externalPath,
+              provider: knowledgeSources.provider,
+            })
+            .from(knowledgeChunks)
+            .innerJoin(knowledgeSourceDocuments, eq(knowledgeChunks.documentId, knowledgeSourceDocuments.id))
+            .innerJoin(knowledgeSources, eq(knowledgeSourceDocuments.sourceId, knowledgeSources.id))
+            .where(and(
+              eq(knowledgeChunks.tenantId, companyId),
+              eq(knowledgeSourceDocuments.status, "indexed"),
+              eq(knowledgeSourceDocuments.aiOptOut, false),
+              isNull(knowledgeSourceDocuments.deletedAt),
+            ))
+            .orderBy(desc(knowledgeSourceDocuments.lastIndexedAt))
+            .limit(candidateLimit),
         ])
 
         type Scored =
           | { score: number; kind: "demo"; row: typeof rawDemos[number] }
           | { score: number; kind: "article"; row: typeof rawArticles[number] }
+          | { score: number; kind: "chunk"; row: typeof rawChunks[number] }
 
         const scored: Scored[] = []
         for (const d of rawDemos) {
@@ -154,6 +226,11 @@ export async function retrieveKnowledgeContext(
           if (!vec) continue
           scored.push({ score: cosineSimilarity(questionVec, vec), kind: "article", row: a })
         }
+        for (const c of rawChunks) {
+          const vec = asVector(c.embedding)
+          if (!vec) continue
+          scored.push({ score: cosineSimilarity(questionVec, vec), kind: "chunk", row: c })
+        }
 
         if (scored.length > 0) {
           scored.sort((x, y) => y.score - x.score)
@@ -164,8 +241,17 @@ export async function retrieveKnowledgeContext(
           const articles = top
             .filter((s): s is Extract<Scored, { kind: "article" }> => s.kind === "article")
             .map((s) => ({ id: s.row.id, title: s.row.title, content: s.row.content }))
+          const driveChunks: DriveChunkRow[] = top
+            .filter((s): s is Extract<Scored, { kind: "chunk" }> => s.kind === "chunk")
+            .map((s) => ({
+              documentId: s.row.documentId,
+              text: s.row.text,
+              docName: s.row.docName,
+              docPath: s.row.docPath,
+              provider: s.row.provider,
+            }))
 
-          return { ...assemble(demos, articles), semanticUsed: true }
+          return { ...assemble(demos, articles, driveChunks), semanticUsed: true }
         }
       }
     } catch (err) {
@@ -202,5 +288,34 @@ export async function retrieveKnowledgeContext(
     console.error("[knowledge/retrieval] knowledge_articles query failed", err)
   }
 
-  return { ...assemble(demos, articles), semanticUsed: false }
+  // Файлы подключённых источников без эмбеддингов: берём первый чанк (ord=0)
+  // самых свежих проиндексированных документов — как приближение "оглавления"
+  // файла, раз ранжировать по смыслу нечем.
+  let driveChunks: DriveChunkRow[] = []
+  try {
+    driveChunks = await db
+      .select({
+        documentId: knowledgeChunks.documentId,
+        text: knowledgeChunks.text,
+        docName: knowledgeSourceDocuments.name,
+        docPath: knowledgeSourceDocuments.externalPath,
+        provider: knowledgeSources.provider,
+      })
+      .from(knowledgeChunks)
+      .innerJoin(knowledgeSourceDocuments, eq(knowledgeChunks.documentId, knowledgeSourceDocuments.id))
+      .innerJoin(knowledgeSources, eq(knowledgeSourceDocuments.sourceId, knowledgeSources.id))
+      .where(and(
+        eq(knowledgeChunks.tenantId, companyId),
+        eq(knowledgeChunks.ord, 0),
+        eq(knowledgeSourceDocuments.status, "indexed"),
+        eq(knowledgeSourceDocuments.aiOptOut, false),
+        isNull(knowledgeSourceDocuments.deletedAt),
+      ))
+      .orderBy(desc(knowledgeSourceDocuments.lastIndexedAt))
+      .limit(fallbackPerType)
+  } catch (err) {
+    console.error("[knowledge/retrieval] knowledge_chunks fallback query failed", err)
+  }
+
+  return { ...assemble(demos, articles, driveChunks), semanticUsed: false }
 }

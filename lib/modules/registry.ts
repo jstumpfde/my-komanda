@@ -87,6 +87,11 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Создать',        href: '/knowledge-v2/create',        icon: 'Plus' },
       { label: 'На проверке',    href: '/knowledge-v2/review',        icon: 'ClipboardCheck' },
       { label: 'AI-токены',      href: '/knowledge-v2/tokens',        icon: 'Coins' },
+      // Подключённые источники (концепт kb-connected-sources, фаза 1, 11.07):
+      // за фиче-флагом knowledgeDriveSourcesEnabled — страница сама решает,
+      // показывать ли себя (lib/knowledge-sources/feature-flag.ts), пункт
+      // меню виден всем, но недоступным компаниям страница объясняет статус.
+      { label: 'Источники',      href: '/knowledge-v2/sources',       icon: 'HardDrive' },
       { label: 'Настройки БЗ',   href: '/knowledge-v2/settings',      icon: 'Settings' },
     ],
   },
