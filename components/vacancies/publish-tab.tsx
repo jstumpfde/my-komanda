@@ -187,9 +187,9 @@ function generateFullPageHtml(
   // #48: fallback-аватар (буква на фоне primary) при пустом logoUrl. При битой
   // картинке onerror прячет <img> и показывает соседний fallback (не «сломанное
   // фото»). Оба элемента всегда в DOM — fallback скрыт, пока картинка грузится.
-  const fallbackLogo = `<div style="width:44px;height:44px;border-radius:12px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${escHtml(initial)}</div>`
+  const fallbackLogo = `<div style="width:72px;height:72px;border-radius:16px;background:${primary};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:28px">${escHtml(initial)}</div>`
   const logoHtml = logoUrl
-    ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(company)}" style="width:44px;height:44px;border-radius:12px;object-fit:contain;background:#fff" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none;width:44px;height:44px;border-radius:12px;background:${primary};align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px">${escHtml(initial)}</div>`
+    ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(company)}" style="width:72px;height:72px;border-radius:16px;object-fit:contain;background:#fff" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none;width:72px;height:72px;border-radius:16px;background:${primary};align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:28px">${escHtml(initial)}</div>`
     : fallbackLogo
   const salary = vacancy.salaryFrom && vacancy.salaryTo
     ? `${vacancy.salaryFrom.toLocaleString("ru-RU")} – ${vacancy.salaryTo.toLocaleString("ru-RU")} ₽`
@@ -219,8 +219,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 /* #48: единая белая подложка — шапка, преимущества и форма в одной карточке */
 .sheet{background:#fff;border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,.08);overflow:hidden;color:#0f172a}
 .sheet-inner{padding:28px 24px}
-.logo{display:flex;align-items:center;gap:10px;margin-bottom:20px}
-.logo-text{font-size:18px;font-weight:700;color:#0f172a}
+/* Лого отдельной строкой сверху, название под ним, всё по центру (решение Юрия) */
+.logo{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:20px;text-align:center}
+.logo-text{font-size:22px;font-weight:700;color:#0f172a}
 h1{font-size:26px;font-weight:800;color:#0f172a;margin-bottom:8px;line-height:1.2;text-align:center}
 .slogan{color:#475569;font-size:15px;font-weight:500;margin-bottom:8px;text-align:center}
 .meta{color:#64748b;font-size:14px;margin-bottom:20px;text-align:center}
@@ -741,16 +742,16 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
             >
               {/* #48: единая белая подложка — шапка + блоки + форма в одной карточке */}
               <div className="max-w-[300px] w-full bg-white rounded-2xl shadow-md p-4 space-y-3 text-slate-900">
-                {/* Logo (шапка теперь внутри белой карточки) */}
-                <div className="flex items-center gap-2">
+                {/* Logo: отдельной строкой сверху, название под ним, по центру (решение Юрия) */}
+                <div className="flex flex-col items-center gap-2 text-center">
                   {brand.logoUrl ? (
-                    <img src={brand.logoUrl} alt="" className="w-8 h-8 rounded-lg object-contain bg-white" />
+                    <img src={brand.logoUrl} alt="" className="w-12 h-12 rounded-xl object-contain bg-white" />
                   ) : (
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0" style={{ backgroundColor: brand.primaryColor }}>
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ backgroundColor: brand.primaryColor }}>
                       {(brand.companyName.trim() || "Ваша компания").charAt(0)}
                     </div>
                   )}
-                  <span className="text-sm font-bold truncate">{brand.companyName.trim() || "Ваша компания"}</span>
+                  <span className="text-base font-bold truncate max-w-full">{brand.companyName.trim() || "Ваша компания"}</span>
                 </div>
                 <h3 className="text-base font-bold text-center">{vacancyTitle}</h3>
                 <p className="text-xs text-center text-slate-500">
