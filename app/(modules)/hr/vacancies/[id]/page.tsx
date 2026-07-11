@@ -4652,6 +4652,7 @@ export default function VacancyPage() {
                     vacancySlug={id}
                     vacancyId={id}
                     vacancyCity={apiVacancy?.city ?? "Москва"}
+                    vacancyFormat={apiVacancy?.format}
                     salaryFrom={apiVacancy?.salaryMin}
                     salaryTo={apiVacancy?.salaryMax}
                     brandOverride={{ companyName: brandCompanyName, color: brandColor, logo: brandLogo, slogan: brandSlogan }}
