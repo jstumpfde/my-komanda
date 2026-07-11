@@ -4794,3 +4794,479 @@ export const bigLifeCovers = pgTable("big_life_covers", {
 ])
 export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
 export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
+
+// ─── AI-РОП (перенос call-agent, 0276) ──────────────────────────────────────
+// Модуль ai_rop (docs/architecture/AI-ROP-MODULE-PLAN-2026-07.md): перенос
+// продукта call-agent (Call-Pilot, БД `callagent` на радаре) внутрь
+// my-komanda как модуль. Оригинал на радаре НЕ трогаем — он продолжает
+// работать для Орлинка отдельно. Отличия от исходной схемы callagent:
+//  - все PK/tenant-FK переведены на uuid (companies.id/users.id), было bigint;
+//  - tenant_id → tenantId uuid REFERENCES companies.id (было tenants.id —
+//    отдельная таблица tenants; здесь tenants = companies, своей таблицы нет);
+//  - calls.bitrix_call_id был уникален ГЛОБАЛЬНО — здесь уникальность
+//    (tenantId, bitrixCallId) (rop_calls_tenant_bitrix_call_uniq), иначе два
+//    разных клиента с одинаковым call_id в своих Bitrix-порталах конфликтуют;
+//  - managers.id (bitrix user id как строка) был PK на одном тенанте — здесь
+//    составной PK (tenantId, bitrixManagerId) + добавлено userId (привязка
+//    к пользователю платформы, которой не было в оригинале);
+//  - settings(key TEXT PK, tenant_id) — глобальная таблица с известным багом
+//    (значения per-key делились между тенантами) — заменена на rop_settings
+//    с PK=companyId и явными колонками + settings jsonb для остального;
+//  - *_json колонки хранились как `text` (иногда с кривым default '[]'::jsonb
+//    поверх text-колонки) — здесь нормальный jsonb;
+//  - НЕ переносим: tenants/users/sessions/ca_login_attempts (auth
+//    платформенный), settings (глобальная), events (outbox, не используется),
+//    onboarding_requests/contact_requests (лендинговое), reminders (drizzle-
+//    задел call-agent, не путать с rop_reminders = reminders_auto).
+// Наименования колонок — camelCase в TS → snake_case в БД (drizzle-конвенция
+// проекта), без varchar(N) — везде text(), как и в остальной схеме.
+
+// Per-company настройки AI-РОП: Bitrix-реквизиты, dry-run флаги, модель
+// анализа, глоссарий, настройки расхождений (было полями tenants.discrepancy_*
+// в дампе callagent) + settings(jsonb) — бюджет/токен-биллинг/публичные флаги
+// (было в tenants.settings jsonb и в глобальной таблице settings по ключам).
+export const ropSettings = pgTable("rop_settings", {
+  companyId:                 uuid("company_id").primaryKey().references(() => companies.id, { onDelete: "cascade" }),
+  bitrixWebhookUrl:          text("bitrix_webhook_url"),
+  bitrixInboundToken:        text("bitrix_inbound_token"),
+  dryRunCrm:                 boolean("dry_run_crm").notNull().default(true),
+  dryRunMessages:            boolean("dry_run_messages").notNull().default(true),
+  analysisModel:             text("analysis_model"),
+  glossary:                  text("glossary"),
+  discrepancyEnabled:        boolean("discrepancy_enabled").default(false),
+  discrepancyRecipientMode:  text("discrepancy_recipient_mode").default("manager"),
+  discrepancyAdminUserIds:   text("discrepancy_admin_user_ids"),
+  discrepancyActionMode:     text("discrepancy_action_mode").default("manual"),
+  discrepancyCustomFields:   text("discrepancy_custom_fields"),
+  discrepancySeverityMin:    text("discrepancy_severity_min").default("medium"),
+  settings:                  jsonb("settings").default({}), // { budget?, tokenBilling?, public?, ... }
+  createdAt:                 timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:                 timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+export type RopSettings    = typeof ropSettings.$inferSelect
+export type NewRopSettings = typeof ropSettings.$inferInsert
+
+// Менеджеры Bitrix, привязанные к тенанту. id менеджера в оригинале — сам
+// bitrix user id (строка), PK был на одном тенанте — здесь составной
+// (tenantId, bitrixManagerId), т.к. два разных Bitrix-портала разных
+// компаний платформы могут иметь пользователя с одинаковым числовым id.
+// userId — НОВОЕ поле (которого не было в call-agent): опциональная привязка
+// к пользователю платформы my-komanda (для RLS "manager видит только свои
+// звонки" и для показа имени/аватара из платформенного профиля).
+export const ropManagers = pgTable("rop_managers", {
+  tenantId:             uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  bitrixManagerId:      text("bitrix_manager_id").notNull(),
+  userId:               uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  name:                 text("name"),
+  email:                text("email"),
+  isActive:             boolean("is_active").notNull().default(true),
+  defaultProduct:       text("default_product"),
+  crmSyncEnabled:       boolean("crm_sync_enabled").notNull().default(false),
+  excludedFromReports:  boolean("excluded_from_reports").default(false),
+  createdAt:            timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.bitrixManagerId] }),
+  index("rop_managers_user_idx").on(t.userId),
+])
+export type RopManager    = typeof ropManagers.$inferSelect
+export type NewRopManager = typeof ropManagers.$inferInsert
+
+// Центральная таблица — импортированные звонки/взаимодействия (Bitrix
+// телефония + email/чаты через interaction_type). Перенесены ВСЕ колонки
+// оригинальной `calls`. manager_id — bitrix user id (строка, как в
+// оригинале) — намеренно НЕ FK на rop_managers (в оригинале тоже не было
+// constraint'а, только совпадение по значению); userId — платформенный
+// пользователь, которому приписан звонок (было calls.user_id → users.id).
+export const ropCalls = pgTable("rop_calls", {
+  id:                   uuid("id").primaryKey().defaultRandom(),
+  tenantId:             uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId:               uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  channel:              text("channel").notNull().default("bitrix_telephony"),
+  type:                 text("type").notNull().default("call"),
+  bitrixCallId:         text("bitrix_call_id"),
+  bitrixDealId:         text("bitrix_deal_id"),
+  bitrixLeadId:         text("bitrix_lead_id"),
+  bitrixContactId:      text("bitrix_contact_id"),
+  bitrixActivityId:     text("bitrix_activity_id"),
+  managerId:            text("manager_id"),
+  managerName:          text("manager_name"),
+  clientPhone:          text("client_phone"),
+  direction:            text("direction"), // 'in' | 'out'
+  startedAt:            timestamp("started_at", { withTimezone: true }),
+  durationSec:          integer("duration_sec").notNull().default(0),
+  recordingUrl:         text("recording_url"),
+  recordingPath:        text("recording_path"),
+  status:               text("status").notNull().default("pending"), // pending|processing|done|failed|no_recording
+  error:                text("error"),
+  attempts:             integer("attempts").notNull().default(0),
+  detectedProduct:      text("detected_product"),
+  dealContextJson:      jsonb("deal_context_json"),
+  interactionType:      text("interaction_type").notNull().default("call"), // call|email|chat
+  contentText:          text("content_text"), // текст письма/чата для не-call взаимодействий
+  bitrixDealTitle:      text("bitrix_deal_title"),
+  bitrixLeadTitle:      text("bitrix_lead_title"),
+  bitrixContactName:    text("bitrix_contact_name"),
+  bitrixPortalUrl:      text("bitrix_portal_url"),
+  leadStatusId:         text("lead_status_id"),
+  leadOpportunity:      numeric("lead_opportunity"),
+  dealStageId:          text("deal_stage_id"),
+  dealOpportunity:      numeric("deal_opportunity"),
+  crmOutcomeSyncedAt:   timestamp("crm_outcome_synced_at", { withTimezone: true }),
+  createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("rop_calls_tenant_bitrix_call_uniq").on(t.tenantId, t.bitrixCallId),
+  index("rop_calls_tenant_idx").on(t.tenantId),
+  index("rop_calls_tenant_started_idx").on(t.tenantId, t.startedAt),
+  index("rop_calls_tenant_status_idx").on(t.tenantId, t.status), // очередь воркера
+  index("rop_calls_status_attempts_retry_idx").on(t.status, t.attempts)
+    .where(sql`${t.status} IN ('failed', 'no_recording')`), // как calls_status_attempts_retry_idx в оригинале
+  index("rop_calls_manager_idx").on(t.managerId),
+  index("rop_calls_tenant_manager_idx").on(t.tenantId, t.managerId),
+  index("rop_calls_started_at_idx").on(t.startedAt),
+  index("rop_calls_lead_status_idx").on(t.tenantId, t.leadStatusId).where(sql`${t.leadStatusId} IS NOT NULL`),
+])
+export type RopCall    = typeof ropCalls.$inferSelect
+export type NewRopCall = typeof ropCalls.$inferInsert
+
+// Транскрипт звонка. PK = callId (один транскрипт на звонок).
+export const ropTranscripts = pgTable("rop_transcripts", {
+  callId:        uuid("call_id").primaryKey().references(() => ropCalls.id, { onDelete: "cascade" }),
+  text:          text("text").notNull(),
+  segmentsJson:  jsonb("segments_json"),
+  dialogueJson:  jsonb("dialogue_json"),
+  language:      text("language"),
+  model:         text("model"),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type RopTranscript    = typeof ropTranscripts.$inferSelect
+export type NewRopTranscript = typeof ropTranscripts.$inferInsert
+
+// AI-разбор звонка. PK = callId (один анализ на звонок, перезаписывается при
+// пересчёте). Все *_json колонки — jsonb (в оригинале хранились как text).
+export const ropAnalyses = pgTable("rop_analyses", {
+  callId:              uuid("call_id").primaryKey().references(() => ropCalls.id, { onDelete: "cascade" }),
+  summary:             text("summary"),
+  sentiment:           text("sentiment"),
+  managerScore:        doublePrecision("manager_score"),
+  scriptCompliance:    doublePrecision("script_compliance"),
+  nextAction:          text("next_action"),
+  objectionsJson:      jsonb("objections_json"),
+  topicsJson:          jsonb("topics_json"),
+  checklistScoresJson: jsonb("checklist_scores_json"),
+  clientName:          text("client_name"),
+  detectedProduct:     text("detected_product"),
+  rawJson:             jsonb("raw_json"),
+  model:               text("model"),
+  coachingTipsJson:    jsonb("coaching_tips_json"),
+  callStage:           text("call_stage"),
+  ropNotesJson:        jsonb("rop_notes_json"),
+  callbackAgreed:      boolean("callback_agreed").notNull().default(false),
+  callbackPhrase:      text("callback_phrase"),
+  createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type RopAnalysis    = typeof ropAnalyses.$inferSelect
+export type NewRopAnalysis = typeof ropAnalyses.$inferInsert
+
+// Скрипты продаж + чек-листы (per-tenant), перенос sales_scripts.
+export const ropSalesScripts = pgTable("rop_sales_scripts", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  tenantId:       uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:           text("name").notNull(),
+  product:        text("product"),
+  direction:      text("direction").notNull().default("all"), // 'in' | 'out' | 'all'
+  contentMd:      text("content_md").notNull().default(""),
+  checklistJson:  jsonb("checklist_json").default([]),
+  keyPhrases:     text("key_phrases"),
+  isActive:       boolean("is_active").notNull().default(true),
+  createdAt:      timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:      timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_sales_scripts_tenant_idx").on(t.tenantId),
+])
+export type RopSalesScript    = typeof ropSalesScripts.$inferSelect
+export type NewRopSalesScript = typeof ropSalesScripts.$inferInsert
+
+// Расхождения карточки CRM vs транскрипт (перенос card_discrepancies).
+export const ropDiscrepancies = pgTable("rop_discrepancies", {
+  id:                  uuid("id").primaryKey().defaultRandom(),
+  tenantId:            uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  callId:              uuid("call_id").notNull().references(() => ropCalls.id, { onDelete: "cascade" }),
+  entityType:          text("entity_type"),
+  entityId:            text("entity_id"),
+  fieldName:           text("field_name").notNull(),
+  fieldLabel:          text("field_label"),
+  cardValue:           text("card_value"),
+  transcriptEvidence:  text("transcript_evidence"),
+  suggestedValue:      text("suggested_value"),
+  severity:            text("severity").notNull(), // low|medium|high
+  status:              text("status").notNull().default("pending"), // pending|applied|dismissed
+  routedToUserId:      uuid("routed_to_user_id").references(() => users.id, { onDelete: "set null" }),
+  aiModel:             text("ai_model"),
+  createdAt:           timestamp("created_at", { withTimezone: true }).defaultNow(),
+  resolvedAt:          timestamp("resolved_at", { withTimezone: true }),
+  resolvedByUserId:    uuid("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+}, (t) => [
+  index("rop_discrepancies_tenant_idx").on(t.tenantId),
+  index("rop_discrepancies_call_idx").on(t.callId),
+  index("rop_discrepancies_routed_idx").on(t.routedToUserId, t.status),
+  index("rop_discrepancies_tenant_status_idx").on(t.tenantId, t.status, t.createdAt),
+])
+export type RopDiscrepancy    = typeof ropDiscrepancies.$inferSelect
+export type NewRopDiscrepancy = typeof ropDiscrepancies.$inferInsert
+
+// Журнал записей в CRM (Bitrix) — идемпотентность через idempotency_key,
+// перенос crm_write_log. Индекс на idempotency_key НЕ уникальный — как было
+// в оригинале (идемпотентность проверяется в коде SELECT-перед-INSERT).
+export const ropCrmWriteLog = pgTable("rop_crm_write_log", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  tenantId:         uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  callId:           uuid("call_id").notNull().references(() => ropCalls.id, { onDelete: "cascade" }),
+  action:           text("action").notNull(),
+  entityType:       text("entity_type"),
+  entityId:         text("entity_id"),
+  mode:             text("mode").notNull(),   // dry_run|live
+  status:           text("status").notNull(), // ok|error
+  payloadJson:      jsonb("payload_json").notNull(),
+  resultJson:       jsonb("result_json"),
+  idempotencyKey:   text("idempotency_key").notNull(),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_crm_log_call_idx").on(t.callId, t.action),
+  index("rop_crm_log_idemp_idx").on(t.idempotencyKey),
+  index("rop_crm_log_tenant_at_idx").on(t.tenantId, t.createdAt),
+])
+export type RopCrmWriteLog    = typeof ropCrmWriteLog.$inferSelect
+export type NewRopCrmWriteLog = typeof ropCrmWriteLog.$inferInsert
+
+// Автонапоминания менеджерам (перенос reminders_auto; reminders — drizzle-
+// задел call-agent без реального использования — НЕ переносим).
+export const ropReminders = pgTable("rop_reminders", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  tenantId:         uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId:           uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  bitrixManagerId:  text("bitrix_manager_id"),
+  callId:           uuid("call_id").references(() => ropCalls.id, { onDelete: "set null" }),
+  title:            text("title").notNull(),
+  dueAt:            timestamp("due_at", { withTimezone: true }).notNull(),
+  status:           text("status").notNull().default("pending"), // pending|done|dismissed
+  source:           text("source").notNull().default("auto"),    // auto|manual
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt:      timestamp("completed_at", { withTimezone: true }),
+}, (t) => [
+  index("rop_reminders_tenant_idx").on(t.tenantId),
+  index("rop_reminders_call_idx").on(t.callId),
+  index("rop_reminders_due_idx").on(t.dueAt, t.status),
+  index("rop_reminders_manager_status_idx").on(t.bitrixManagerId, t.status, t.dueAt),
+])
+export type RopReminder    = typeof ropReminders.$inferSelect
+export type NewRopReminder = typeof ropReminders.$inferInsert
+
+// Расписания автоотчётов в Bitrix IM (перенос report_schedules).
+export const ropReportSchedules = pgTable("rop_report_schedules", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  tenantId:         uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  name:             text("name").notNull(),
+  scope:            text("scope").notNull(),          // team|manager
+  managerId:        text("manager_id"),
+  recipientKind:    text("recipient_kind").notNull(), // bitrix_user|bitrix_chat
+  recipientId:      text("recipient_id").notNull(),
+  recipientName:    text("recipient_name"),
+  frequency:        text("frequency").notNull(),      // daily|weekly
+  timeHhmm:         text("time_hhmm").notNull(),
+  daysOfWeek:       text("days_of_week"),
+  periodKind:       text("period_kind").notNull().default("yesterday"),
+  enabled:          boolean("enabled").default(true),
+  lastRunAt:        timestamp("last_run_at", { withTimezone: true }),
+  lastRunStatus:    text("last_run_status"),
+  lastRunError:     text("last_run_error"),
+  nextRunAt:        timestamp("next_run_at", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("rop_report_schedules_tenant_idx").on(t.tenantId),
+  index("rop_report_schedules_due_idx").on(t.enabled, t.nextRunAt),
+])
+export type RopReportSchedule    = typeof ropReportSchedules.$inferSelect
+export type NewRopReportSchedule = typeof ropReportSchedules.$inferInsert
+
+// Бюджет-гард: события расхода (STT-секунды, AI-вызовы и т.п.), перенос
+// usage_events. Отдельно от ai_usage_log платформы (тот считает $ по всем
+// модулям) — здесь единицы продукта (kind), как было в оригинале.
+export const ropUsageEvents = pgTable("rop_usage_events", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  kind:        text("kind").notNull(), // stt_seconds|ai_call|...
+  units:       integer("units").notNull(),
+  callId:      uuid("call_id").references(() => ropCalls.id, { onDelete: "set null" }),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_usage_tenant_kind_at_idx").on(t.tenantId, t.kind, t.createdAt),
+])
+export type RopUsageEvent    = typeof ropUsageEvents.$inferSelect
+export type NewRopUsageEvent = typeof ropUsageEvents.$inferInsert
+
+// Токен-биллинг: журнал начислений/списаний (перенос ca_token_ledger).
+export const ropTokenLedger = pgTable("rop_token_ledger", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  delta:       integer("delta").notNull(), // + начисление / - списание
+  reason:      text("reason").notNull(),   // plan_grant|call_analysis|promo|referral|manual...
+  refCallId:   uuid("ref_call_id").references(() => ropCalls.id, { onDelete: "set null" }),
+  note:        text("note"),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_token_ledger_tenant_idx").on(t.tenantId, t.createdAt),
+])
+export type RopTokenLedger    = typeof ropTokenLedger.$inferSelect
+export type NewRopTokenLedger = typeof ropTokenLedger.$inferInsert
+
+// ── Биллинг-каталог AI-РОП (платформенный уровень, без tenantId) ───────────
+// Тарифы/промокоды/партнёрка/платежи — переносятся из ca_plans/ca_promos/
+// ca_referrals/ca_partners/ca_payments/ca_billing_reminders. Управление —
+// /admin/platform → таб «AI-РОП» (isPlatformAdmin), см. план п.11.
+
+export const ropPlans = pgTable("rop_plans", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  name:            text("name").notNull(),
+  priceMonthly:    integer("price_monthly").notNull(), // в тех же единицах, что оригинал (₽)
+  priceAnnual:     integer("price_annual"),
+  callsLimit:      integer("calls_limit").notNull(),
+  managersLimit:   integer("managers_limit"),
+  tokensIncluded:  integer("tokens_included"),
+  featuresJson:    jsonb("features_json"),
+  active:          boolean("active").default(true),
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+export type RopPlan    = typeof ropPlans.$inferSelect
+export type NewRopPlan = typeof ropPlans.$inferInsert
+
+export const ropPromos = pgTable("rop_promos", {
+  id:            uuid("id").primaryKey().defaultRandom(),
+  code:          text("code").notNull().unique(),
+  description:   text("description"),
+  discountPct:   integer("discount_pct").default(0),
+  bonusCalls:    integer("bonus_calls").default(0),
+  bonusTokens:   integer("bonus_tokens").default(0),
+  usesCount:     integer("uses_count").default(0),
+  maxUses:       integer("max_uses"),
+  active:        boolean("active").default(true),
+  expiresAt:     timestamp("expires_at", { withTimezone: true }),
+  createdAt:     timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+export type RopPromo    = typeof ropPromos.$inferSelect
+export type NewRopPromo = typeof ropPromos.$inferInsert
+
+export const ropReferrals = pgTable("rop_referrals", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  code:             text("code").notNull().unique(),
+  name:             text("name"),
+  createdByUserId:  uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  tenantId:         uuid("tenant_id").references(() => companies.id, { onDelete: "set null" }), // опционально: реферал привязан к тенанту-приглашающему
+  usesCount:        integer("uses_count").default(0),
+  maxUses:          integer("max_uses"),
+  discountPct:      integer("discount_pct").default(0),
+  expiresAt:        timestamp("expires_at", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("rop_referrals_tenant_idx").on(t.tenantId),
+])
+export type RopReferral    = typeof ropReferrals.$inferSelect
+export type NewRopReferral = typeof ropReferrals.$inferInsert
+
+export const ropPartners = pgTable("rop_partners", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  name:            text("name").notNull(),
+  email:           text("email"),
+  contact:         text("contact"),
+  commissionPct:   integer("commission_pct").default(10),
+  refCode:         text("ref_code").unique(),
+  clientsCount:    integer("clients_count").default(0),
+  revenueTotal:    integer("revenue_total").default(0),
+  status:          text("status").default("active"), // active|paused
+  notes:           text("notes"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+export type RopPartner    = typeof ropPartners.$inferSelect
+export type NewRopPartner = typeof ropPartners.$inferInsert
+
+// tenantId nullable: платёж может быть заведён до онбординга тенанта
+// (tenantName — свободная метка на этот случай, как в оригинале).
+export const ropPayments = pgTable("rop_payments", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  tenantId:        uuid("tenant_id").references(() => companies.id, { onDelete: "set null" }),
+  tenantName:      text("tenant_name"),
+  amount:          integer("amount").notNull(), // в тех же единицах, что оригинал (₽)
+  currency:        text("currency").default("RUB"),
+  plan:            text("plan"),
+  status:          text("status").default("pending"), // pending|paid|failed|refunded
+  paymentMethod:   text("payment_method"),
+  externalId:      text("external_id"),
+  periodFrom:      date("period_from"),
+  periodTo:        date("period_to"),
+  notes:           text("notes"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("rop_payments_tenant_idx").on(t.tenantId),
+])
+export type RopPayment    = typeof ropPayments.$inferSelect
+export type NewRopPayment = typeof ropPayments.$inferInsert
+
+// Дедуп биллинг-уведомлений (перенос ca_billing_reminders): один и тот же
+// (tenant, kind, mark) не отправляется повторно.
+export const ropBillingReminders = pgTable("rop_billing_reminders", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  tenantId:  uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  kind:      text("kind").notNull(),  // trial_ending|low_balance|payment_failed...
+  mark:      text("mark").notNull(),  // конкретная метка внутри kind (напр. "-3d")
+  sentAt:    timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("rop_billing_reminders_uniq").on(t.tenantId, t.kind, t.mark),
+])
+export type RopBillingReminder    = typeof ropBillingReminders.$inferSelect
+export type NewRopBillingReminder = typeof ropBillingReminders.$inferInsert
+
+// Кластеры возражений (AI-кластеризация библиотеки возражений), перенос
+// ca_objection_clusters. PK = tenantId — один вычисленный снимок на тенанта,
+// пересчитывается целиком (как было в оригинале).
+export const ropObjectionClusters = pgTable("rop_objection_clusters", {
+  tenantId:    uuid("tenant_id").primaryKey().references(() => companies.id, { onDelete: "cascade" }),
+  mapJson:     jsonb("map_json").notNull(),
+  computedAt:  timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+})
+export type RopObjectionClusters    = typeof ropObjectionClusters.$inferSelect
+export type NewRopObjectionClusters = typeof ropObjectionClusters.$inferInsert
+
+// Журнал просмотров публичного дашборда/отчёта (перенос ca_report_views).
+export const ropReportViews = pgTable("rop_report_views", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  tenantId:    uuid("tenant_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  token:       text("token").notNull(),
+  viewerId:    text("viewer_id"),
+  kind:        text("kind").notNull().default("dashboard"), // dashboard|report
+  ip:          text("ip"),
+  userAgent:   text("user_agent"),
+  viewedAt:    timestamp("viewed_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_report_views_tenant_idx").on(t.tenantId, t.viewedAt),
+  index("rop_report_views_viewer_idx").on(t.viewerId, t.viewedAt),
+])
+export type RopReportView    = typeof ropReportViews.$inferSelect
+export type NewRopReportView = typeof ropReportViews.$inferInsert
+
+// Публичная ссылка на дашборд AI-РОП (по образцу reportShares у HR-отчёта,
+// см. выше vacancySpecs/reportShares — HR-таблицу не переиспользуем, у
+// AI-РОП своя, т.к. независимый цикл отзыва токена).
+export const ropReportShares = pgTable("rop_report_shares", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  token:      text("token").notNull().unique(),
+  companyId:  uuid("company_id").notNull(),
+  createdBy:  uuid("created_by"),
+  createdAt:  timestamp("created_at", { withTimezone: true }).defaultNow(),
+  revokedAt:  timestamp("revoked_at", { withTimezone: true }),
+}, (t) => [
+  index("rop_report_shares_company_idx").on(t.companyId),
+])
+export type RopReportShare    = typeof ropReportShares.$inferSelect
+export type NewRopReportShare = typeof ropReportShares.$inferInsert
