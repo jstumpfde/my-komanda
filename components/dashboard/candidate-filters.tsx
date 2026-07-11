@@ -39,8 +39,8 @@ export interface FilterState {
   /** Минимальный AI-скор по резюме (поле candidates.resumeScore).
    *  0 = «не задан», фильтр не применяется. */
   scoreMinResume: number
-  /** Минимальный AI-скор по анкете (поле candidates.aiScore).
-   *  0 = «не задан», фильтр не применяется. */
+  /** Минимальный AI-скор по анкете (поле candidates.demoAnswersScore —
+   *  колонка «Анкета»). 0 = «не задан», фильтр не применяется. */
   scoreMinAnketa: number
   sources: string[]
   workFormats: string[]

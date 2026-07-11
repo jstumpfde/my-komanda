@@ -17,6 +17,9 @@ type SortKey =
   | "resumeScore"
   | "rubricScore"
   | "testScore"
+  // Колонка «Анкета» (demo_answers_score) — до 11.07 серверного ключа не было,
+  // клик по заголовку тихо сортировал только видимые 20 строк на клиенте.
+  | "answersScore"
   | "salary"
   | "responseDate"
   | "status"
@@ -30,7 +33,7 @@ type SortKey =
   | "nextInterview"
 
 const ALLOWED_SORT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
-  "favorite", "aiScore", "resumeScore", "rubricScore", "testScore", "salary", "responseDate", "status", "progress",
+  "favorite", "aiScore", "resumeScore", "rubricScore", "testScore", "answersScore", "salary", "responseDate", "status", "progress",
   "createdAt", "name", "stage", "city", "source", "hrQueue", "nextInterview",
 ])
 
@@ -157,6 +160,14 @@ function buildOrderBy(key: SortKey | null, dir: "asc" | "desc"): SQL[] {
       dir === "asc"
         ? sql`${candidates.resumeScore} ASC NULLS LAST`
         : sql`${candidates.resumeScore} DESC NULLS LAST`,
+      desc(candidates.createdAt),
+      tiebreak,
+    ]
+    case "answersScore": return [
+      // «Анкета» = demo_answers_score; NULL (не отвечал) — всегда в конец.
+      dir === "asc"
+        ? sql`${candidates.demoAnswersScore} ASC NULLS LAST`
+        : sql`${candidates.demoAnswersScore} DESC NULLS LAST`,
       desc(candidates.createdAt),
       tiebreak,
     ]
@@ -965,12 +976,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Минимальный AI-скор по анкете (после прохождения демо).
+    // Минимальный AI-скор по анкете — колонка «Анкета» = demo_answers_score
+    // (балл ответов демо-анкеты). До 11.07 фильтр бил в candidates.aiScore
+    // (AI-скрининг резюме) — другое поле, у большинства NULL: фильтр либо
+    // прятал всех, либо пропускал кандидатов без анкеты.
     const scoreMinAnketaParam = url.searchParams.get("scoreMinAnketa")
     if (scoreMinAnketaParam && Number.isFinite(Number(scoreMinAnketaParam))) {
       const v = Math.max(0, Math.floor(Number(scoreMinAnketaParam)))
       if (v > 0) {
-        filterConds.push(sql`(${candidates.aiScore} IS NOT NULL AND ${candidates.aiScore} >= ${v})`)
+        filterConds.push(sql`(${candidates.demoAnswersScore} IS NOT NULL AND ${candidates.demoAnswersScore} >= ${v})`)
       }
     }
 

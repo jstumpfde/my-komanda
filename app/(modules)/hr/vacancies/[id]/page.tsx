@@ -585,7 +585,7 @@ export default function VacancyPage() {
   // списке. Из-за этого legacy-парсер listSort отбраковывал сортировку по
   // «AI-резм» как невалидную, и стрелка на этой колонке не появлялась (тогда
   // как на остальных — появлялась). Добавлен для паритета со всеми колонками.
-  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "name", "aiScore", "resumeScore", "testScore", "progress", "salary", "responseDate", "status", "city", "source"]
+  const VALID_SORT_KEYS: ListSortKey[] = ["favorite", "name", "aiScore", "resumeScore", "answersScore", "testScore", "progress", "salary", "responseDate", "status", "city", "source"]
   const sortParam = searchParams?.get("sort") ?? null
   const orderParam = searchParams?.get("order") ?? null
   const listSort: ListSortState | null = sortParam && (VALID_SORT_KEYS as string[]).includes(sortParam)
@@ -2355,6 +2355,9 @@ export default function VacancyPage() {
     name: "name",
     aiScore: "aiScore",
     resumeScore: "resumeScore",
+    // Колонка «Анкета» (demo_answers_score) — до 11.07 ключа не было в мапе,
+    // клик сортировал только загруженные 20 строк на клиенте.
+    answersScore: "answersScore",
     testScore: "testScore",
     salary: "salary",
     responseDate: "createdAt",

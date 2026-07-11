@@ -177,7 +177,7 @@ export interface CandidatesFilters {
   /** @deprecated alias для scoreMinAnketa */
   scoreMin?: number
   scoreMinResume?: number             // фильтр по candidates.resumeScore
-  scoreMinAnketa?: number             // фильтр по candidates.aiScore (после анкеты)
+  scoreMinAnketa?: number             // фильтр по candidates.demoAnswersScore (колонка «Анкета»)
   hideRejected?: boolean              // сервер: stage != 'rejected'
   hideNoSalary?: boolean              // сервер: исключить кандидатов без указанной ЗП
   activeNow?: boolean                 // сервер: активность за последние 30 мин (демо/тест)
@@ -401,11 +401,11 @@ const PAGINATED_PAGE_SIZES = [20, 50, 100] as const
 type PageSize = (typeof PAGINATED_PAGE_SIZES)[number]
 
 export type PaginatedSortKey =
-  | "createdAt" | "name" | "aiScore" | "resumeScore" | "testScore" | "salary" | "stage" | "progress"
+  | "createdAt" | "name" | "aiScore" | "resumeScore" | "testScore" | "answersScore" | "salary" | "stage" | "progress"
   | "city" | "source" | "favorite" | "hrQueue" | "nextInterview"
 
 const PAGINATED_SORT_KEYS: readonly PaginatedSortKey[] = [
-  "createdAt", "name", "aiScore", "resumeScore", "testScore", "salary", "stage", "progress",
+  "createdAt", "name", "aiScore", "resumeScore", "testScore", "answersScore", "salary", "stage", "progress",
   "city", "source", "favorite", "hrQueue", "nextInterview",
 ]
 
