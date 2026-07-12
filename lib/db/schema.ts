@@ -4794,3 +4794,40 @@ export const bigLifeCovers = pgTable("big_life_covers", {
 ])
 export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
 export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
+
+// ─── Big Life: заказы из корзины (drizzle/0275) ────────────────────────────
+// Захват заказа с biglife.company24.pro (Обложки + Ридер) — БЕЗ оплаты
+// (Юрий пока не дал ключи Робокассы, см. handoff): корзина на статике копит
+// позиции в localStorage, чекаут шлёт сюда весь список одним заказом.
+// items — снэпшот корзины на момент отправки (coverId/coverTitle/price/qty),
+// а не join к big_life_covers — переживает переиздание/переименование
+// обложки и не ломается, если строку обложки потом удалят из архива.
+// companyId — тот же тенант Big Life (см. lib/big-life/auth.ts), видимость
+// заказов только через requireBigLifeAccess() на /big-life/orders.
+export const bigLifeOrders = pgTable("big_life_orders", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  companyId:         uuid("company_id").notNull().references(() => companies.id),
+  items:             jsonb("items").notNull(),        // [{coverId, coverTitle, price, qty}]
+  totalPrice:        integer("total_price").notNull(), // ₽
+  deliveryMethod:    text("delivery_method").notNull(), // 'russia_post' | 'moscow_courier'
+  deliveryAddress:   text("delivery_address").notNull(),
+  contactName:       text("contact_name").notNull(),
+  phone:             text("phone").notNull(),
+  // 152-ФЗ: обработка ПД и оферта — обязательны (гейт на кнопке в чекауте +
+  // повторная проверка на сервере), рассылка — опционально. Тот же паттерн,
+  // что и в /portfolio + POST /api/public/landing-lead (lib/legal/log-consent.ts):
+  // privacy_policy и marketing пишутся ещё и в общий журнал consent_log
+  // (/admin/platform → Согласия); отдельного consentType под оферту там нет,
+  // поэтому её факт/время фиксируем только здесь, в самом заказе.
+  consentPrivacyAt:   timestamp("consent_privacy_at", { withTimezone: true }).notNull(),
+  consentOfferAt:     timestamp("consent_offer_at", { withTimezone: true }).notNull(),
+  consentMarketingAt: timestamp("consent_marketing_at", { withTimezone: true }),
+  status:            text("status").notNull().default("new"), // 'new' | 'contacted' | 'done' | 'cancelled'
+  ipHash:            text("ip_hash"),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("big_life_orders_company_idx").on(t.companyId),
+  index("big_life_orders_created_idx").on(t.createdAt),
+])
+export type BigLifeOrder    = typeof bigLifeOrders.$inferSelect
+export type NewBigLifeOrder = typeof bigLifeOrders.$inferInsert

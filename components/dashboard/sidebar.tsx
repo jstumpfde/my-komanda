@@ -13,7 +13,7 @@ import {
   AlertTriangle, UserMinus, Brain, Radar, Bot, Store, TrendingDown, Handshake,
   BookMarked, GraduationCap, Target, PieChart, FilePlus, Lock, Library,
   Sparkles, Plus, Coins, SlidersHorizontal, Sunrise, Activity, Inbox, Network,
-  Mail, Send, LineChart, Map, Image,
+  Mail, Send, LineChart, Map, Image, ShoppingCart,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -1181,6 +1181,25 @@ export function DashboardSidebar() {
               >
                 <Image className="size-4 shrink-0" />
                 <span className="flex-1 text-left">Обложки</span>
+              </Link>
+            )
+          })()}
+
+          {/* «Заказы Big Life» — корзина/чекаут статики (Covers + Reader),
+              тот же гейт видимости, что и «Обложки» выше. */}
+          {user?.companyId === BIGLIFE_COMPANY_ID && (() => {
+            const ordersActive = pathname === '/big-life/orders'
+            return (
+              <Link
+                href="/big-life/orders"
+                style={ordersActive ? { borderLeft: '3px solid #a78bfa' } : { borderLeft: '3px solid transparent' }}
+                className={cn(
+                  "flex items-center gap-2.5 w-full px-3 py-2.5 text-sm font-semibold transition-all duration-150 rounded-none rounded-r-lg hover:bg-sidebar-accent",
+                  ordersActive ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70",
+                )}
+              >
+                <ShoppingCart className="size-4 shrink-0" />
+                <span className="flex-1 text-left">Заказы</span>
               </Link>
             )
           })()}
