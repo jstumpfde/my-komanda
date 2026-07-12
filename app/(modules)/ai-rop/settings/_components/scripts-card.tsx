@@ -2,11 +2,13 @@
 
 // Скрипты продаж и чек-листы — CRUD (rop_sales_scripts) + «Из шаблона» (4
 // готовых шаблона Орлинка — lib/ai-rop/script-templates.ts::TEMPLATES,
-// применяются server-side по templateKey, текст шаблонов НЕ бандлится в клиент).
-// Полноценный markdown/.docx-импорт — следующая под-фаза (план п.12).
-import { useState } from "react"
+// применяются server-side по templateKey, текст шаблонов НЕ бандлится в клиент)
+// + загрузка .docx (mammoth.extractRawText на сервере, план п.12) — текст
+// вставляется в поле «Текст скрипта» вместо текущего содержимого.
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ListChecks, Plus, Pencil, Trash2, ChevronDown } from "lucide-react"
+import { ListChecks, Plus, Pencil, Trash2, ChevronDown, Upload, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,10 +52,33 @@ function ScriptEditorSheet({ script, open, onOpenChange }: { script: ScriptRow |
   const [contentMd, setContentMd] = useState(script?.contentMd ?? "")
   const [checklist, setChecklist] = useState<ChecklistItemForm[]>(script?.checklistJson ?? [])
   const [busy, setBusy] = useState(false)
+  const [docxBusy, setDocxBusy] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   function updateItem(i: number, patch: Partial<ChecklistItemForm>) {
     setChecklist((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)))
+  }
+
+  async function uploadDocx(file: File) {
+    setDocxBusy(true)
+    try {
+      const body = new FormData()
+      body.append("file", file)
+      const res = await fetch("/api/modules/ai-rop/scripts/upload-docx", { method: "POST", body })
+      const json = await res.json()
+      if (!res.ok || !json.ok) {
+        toast.error(json.error || "Не удалось прочитать .docx")
+        return
+      }
+      setContentMd(json.text)
+      toast.success(`Текст загружен из ${json.fileName}`)
+    } catch {
+      toast.error("Не удалось прочитать .docx")
+    } finally {
+      setDocxBusy(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
   }
 
   async function save() {
@@ -112,8 +137,23 @@ function ScriptEditorSheet({ script, open, onOpenChange }: { script: ScriptRow |
           </div>
 
           <div>
-            <Label className="mb-1.5 block text-xs text-muted-foreground">Текст скрипта (Markdown, опционально)</Label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Текст скрипта (Markdown, опционально)</Label>
+              <Button
+                type="button" size="sm" variant="ghost" className="h-7 gap-1 text-xs"
+                disabled={docxBusy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {docxBusy ? <Loader2 className="size-3 animate-spin" /> : <Upload className="size-3" />}
+                Загрузить .docx
+              </Button>
+              <input
+                ref={fileInputRef} type="file" accept=".docx" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDocx(f) }}
+              />
+            </div>
             <Textarea value={contentMd} onChange={(e) => setContentMd(e.target.value)} rows={8} className="font-mono text-xs" />
+            <p className="mt-1 text-[11px] text-muted-foreground">Загрузка .docx заменит текущий текст извлечённым содержимым файла.</p>
           </div>
         </SheetBody>
         <SheetFooter>

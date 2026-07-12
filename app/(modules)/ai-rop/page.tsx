@@ -101,7 +101,7 @@ export default async function AiRopDashboardPage(props: {
   const productTotal = data.productStats.reduce((s, p) => s + p.calls, 0) || 1
 
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={true} className="ai-rop-print-root">
       <DashboardSidebar />
       <SidebarInset>
         <DashboardHeader />
@@ -122,14 +122,16 @@ export default async function AiRopDashboardPage(props: {
                 </p>
               </div>
               {viewer.isTeamViewer && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 no-print">
                   <PrintDashboardButton />
                   <ShareDashboardButton initialToken={shareToken} baseUrl={baseUrl} />
                 </div>
               )}
             </div>
 
-            <DashboardFilters managers={viewer.isTeamViewer ? data.managersList : undefined} />
+            <div className="no-print">
+              <DashboardFilters managers={viewer.isTeamViewer ? data.managersList : undefined} />
+            </div>
 
             {viewer.isManager && <CoachInsights companyId={viewer.companyId} bitrixManagerId={viewer.bitrixManagerId} />}
 
