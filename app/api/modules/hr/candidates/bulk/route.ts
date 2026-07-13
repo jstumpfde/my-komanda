@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server"
 import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, hhCandidates, hhResponses } from "@/lib/db/schema"
+import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { logAudit, ipFromRequest } from "@/lib/audit/log"
 import { ALL_STAGE_SLUGS, LEGACY_STAGE_LABELS, type StageSlug } from "@/lib/stages"
+import { hardDeleteCandidatesByIds } from "@/lib/candidates/hard-delete-ids"
 
 const HH_BULK_DELAY_MS = 500
 
@@ -315,25 +316,10 @@ export async function POST(req: NextRequest) {
       }
 
       case "hard_delete": {
-        // Удалить навсегда. Порядок важен из-за FK:
-        //   1) обнуляем hh_responses.local_candidate_id (без FK, но чтобы не
-        //      оставлять висячую ссылку и не путать дедуп);
-        //   2) удаляем hh_candidates (FK без каскада — иначе delete упрётся);
-        //   3) удаляем candidates (cascade добьёт test_submissions /
-        //      qualification_answers / follow_up_messages; outbound → set null).
-        const result = await db.transaction(async (tx) => {
-          await tx
-            .update(hhResponses)
-            .set({ localCandidateId: null })
-            .where(inArray(hhResponses.localCandidateId, ownedIds))
-          await tx.delete(hhCandidates).where(inArray(hhCandidates.candidateId, ownedIds))
-          const del = await tx
-            .delete(candidates)
-            .where(inArray(candidates.id, ownedIds))
-            .returning({ id: candidates.id })
-          return del.length
-        })
-        affected = result
+        // Удалить навсегда — общая логика вынесена в hardDeleteCandidatesByIds
+        // (lib/candidates/hard-delete-ids.ts), её же использует крон
+        // ghost-candidate-cleanup для авто-очистки кандидатов-призраков.
+        affected = await hardDeleteCandidatesByIds(ownedIds)
         break
       }
 

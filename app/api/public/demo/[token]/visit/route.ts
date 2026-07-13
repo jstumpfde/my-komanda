@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates } from "@/lib/db/schema"
+import { candidates, vacancies } from "@/lib/db/schema"
 import { isShortId, generateCandidateShortId } from "@/lib/short-id"
 import { checkPublicTokenRateLimit } from "@/lib/public/rate-limit-public"
 import { generateCandidateToken } from "@/lib/candidate-tokens"
 import { markDemoOpened } from "@/lib/candidates/mark-demo-opened"
+import { auth } from "@/auth"
+import { isStaffPreviewVisit } from "@/lib/public/staff-preview"
 // База редиректа — из env (НЕ req.url): Next 16 подставляет внутренний origin
 // (http://localhost:3000), кандидаты за nginx получали битый Location (02.07).
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
@@ -47,12 +49,33 @@ export async function GET(
 
   // Owner — нужна вакансия для нового кандидата.
   const [owner] = await db
-    .select({ id: candidates.id, vacancyId: candidates.vacancyId, shortId: candidates.shortId })
+    .select({
+      id:        candidates.id,
+      vacancyId: candidates.vacancyId,
+      shortId:   candidates.shortId,
+      companyId: vacancies.companyId,
+    })
     .from(candidates)
+    .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
     .where(eq(candidates.shortId, token))
     .limit(1)
   if (!owner) {
     return NextResponse.redirect(new URL(`/demo/${token}`, getAppBaseUrl()))
+  }
+
+  // Staff preview (13.07): сотрудник компании-владельца вакансии (или
+  // платформенный админ) залогинен в платформу и открыл публичную
+  // referral-ссылку demo просто посмотреть, как это выглядит кандидату —
+  // напр. новое окно браузера без куки myk_candidate_uuid под ЭТОГО
+  // кандидата. Раньше это создавало кандидата-призрака ("Новый кандидат",
+  // source~referral) на каждый такой заход. Теперь — НЕ трогаем БД вообще
+  // (ни кандидата, ни cookie, ни markDemoOpened) и отправляем на уже
+  // существующий read-only ?as=hr preview-режим
+  // (app/(public)/demo/[token]/page.tsx + demo-client.tsx isPreviewMode),
+  // который ничего не сохраняет.
+  const session = await auth().catch(() => null)
+  if (isStaffPreviewVisit(session, owner.companyId)) {
+    return NextResponse.redirect(new URL(`/demo/${token}?as=hr`, getAppBaseUrl()))
   }
 
   // Если у посетителя уже есть cookie с валидным кандидатом — отправим к нему,
