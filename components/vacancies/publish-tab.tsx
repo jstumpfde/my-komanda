@@ -30,6 +30,8 @@ interface PublishTabProps {
   vacancyTitle: string
   vacancySlug: string
   vacancyCity?: string
+  // Формат работы (office/hybrid/remote) — влияет на дефолтные буллеты лендинга.
+  vacancyFormat?: string | null
   salaryFrom?: number
   salaryTo?: number
   brandOverride?: {
@@ -131,17 +133,21 @@ function htmlHasContent(html: string): boolean {
 }
 
 // Дефолтные блоки (если HR ничего не задал) — часть динамическая (доход×1.5 от
-// нижней вилки, город). Возвращаем как rich-html (эмодзи inline).
+// нижней вилки, город, формат работы). Возвращаем как rich-html (эмодзи inline).
 // #падеж: город склоняется в предложный падеж (inCityRu) — «в Москве», а не
 // «в Москва» (баг из landing-publish-tab-backlog.md, п.1).
-function defaultBlocks(v: { city?: string; salaryFrom?: number }): LandingBlock[] {
+// #формат: на удалённой вакансии (format=remote) буллет «офис» противоречил бы
+// сути вакансии — вместо него буллет про удалёнку. Гибрид/офис — офис с городом.
+export function defaultBlocks(v: { city?: string; salaryFrom?: number; format?: string | null }): LandingBlock[] {
   const lines = [
     v.salaryFrom
       ? `💰 Доход от ${Math.round(v.salaryFrom * 1.5).toLocaleString("ru-RU")} ₽ через 3 месяца`
       : "💰 Доход выше среднего по рынку через 3 месяца",
     "🎓 Обучение и наставник с первого дня",
     "📈 Карьерный рост до руководителя за 6-12 мес.",
-    `📍 Современный офис${v.city ? " " + inCityRu(v.city) : ""}`,
+    v.format === "remote"
+      ? "🏠 Удалённая работа из любой точки"
+      : `📍 Современный офис${v.city ? " " + inCityRu(v.city) : ""}`,
   ]
   return [{ html: lines.map(l => `<div>${escHtml(l)}</div>`).join("") }]
 }
@@ -159,15 +165,15 @@ function blockToHtml(b: LandingBlockInput): LandingBlock {
 
 // Нормализация входа: новые landingBlocks ({html}|{icon,text}), либо legacy
 // landingBenefits (string[]), либо дефолт.
-function resolveBlocks(blocks: LandingBlockInput[] | undefined, benefits: string[] | undefined, v: { city?: string; salaryFrom?: number }): LandingBlock[] {
+export function resolveBlocks(blocks: LandingBlockInput[] | undefined, benefits: string[] | undefined, v: { city?: string; salaryFrom?: number; format?: string | null }): LandingBlock[] {
   if (blocks && blocks.length > 0) return blocks.map(blockToHtml)
   if (benefits && benefits.length > 0) return [{ html: benefits.map(t => `<div>${escHtml(t)}</div>`).join("") }]
   return defaultBlocks(v)
 }
 
-function generateFullPageHtml(
+export function generateFullPageHtml(
   brand: BrandConfig,
-  vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number },
+  vacancy: { title: string; slug: string; city?: string; salaryFrom?: number; salaryTo?: number; format?: string | null },
   override?: BrandOverride,
   formFields?: MiniFormFieldForHtml[],
   blocks?: LandingBlock[],
@@ -372,7 +378,7 @@ function RichBlockEditor({ value, onChange, placeholder }: {
   )
 }
 
-export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom, salaryTo, brandOverride, formFields, vacancyId, blocks, benefits, button, descriptionJson, onSaved }: PublishTabProps) {
+export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, vacancyFormat, salaryFrom, salaryTo, brandOverride, formFields, vacancyId, blocks, benefits, button, descriptionJson, onSaved }: PublishTabProps) {
   const [brand, setBrand] = useState<BrandConfig | null>(null)
   const [copied, setCopied] = useState(false)
   const [activeInstruction, setActiveInstruction] = useState<string | null>(null)
@@ -380,7 +386,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   // #47: rich-текстовые блоки над формой. Если HR ещё ничего не сохранял —
   // дефолтные (динамические по зарплате/городу). Поддерживаем legacy landingBenefits.
   const [blockList, setBlockList] = useState<LandingBlock[]>(
-    resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }),
+    resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom, format: vacancyFormat }),
   )
   // #49: настройки кнопки формы.
   const [btnCfg, setBtnCfg] = useState<LandingButton>(button ?? {})
@@ -395,9 +401,9 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
   // Это НЕ правка пользователя → сбрасываем флаг, чтобы автосейв не сработал.
   useEffect(() => {
     isUserEditRef.current = false
-    setBlockList(resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom }))
+    setBlockList(resolveBlocks(blocks, benefits, { city: vacancyCity, salaryFrom, format: vacancyFormat }))
     setBtnCfg(button ?? {})
-  }, [blocks, benefits, button, vacancyCity, salaryFrom])
+  }, [blocks, benefits, button, vacancyCity, salaryFrom, vacancyFormat])
 
   // Правка пользователя: помечаем флаг, дальше сработает автосейв (debounce).
   const editBlocks = (updater: (prev: LandingBlock[]) => LandingBlock[]) => {
@@ -478,7 +484,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleCopyCode = async () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks, btnCfg)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo, format: vacancyFormat }, brandOverride, formFields, cleanBlocks, btnCfg)
     await navigator.clipboard.writeText(html)
     setCopied(true)
     toast.success("HTML-код скопирован в буфер обмена")
@@ -487,7 +493,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handlePreview = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks, btnCfg)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo, format: vacancyFormat }, brandOverride, formFields, cleanBlocks, btnCfg)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     window.open(url, "_blank")
@@ -496,7 +502,7 @@ export function PublishTab({ vacancyTitle, vacancySlug, vacancyCity, salaryFrom,
 
   const handleDownload = () => {
     if (!brand) return
-    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo }, brandOverride, formFields, cleanBlocks, btnCfg)
+    const html = generateFullPageHtml(brand, { title: vacancyTitle, slug: vacancySlug, city: vacancyCity, salaryFrom, salaryTo, format: vacancyFormat }, brandOverride, formFields, cleanBlocks, btnCfg)
     const blob = new Blob([html], { type: "text/html" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
