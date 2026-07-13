@@ -68,6 +68,56 @@ export const SETTINGS_MIGRATIONS: SettingsMigration[] = [
       return { affectedCount: 1 }
     },
   },
+  {
+    // Инцидент 13.07 (вакансия «Менеджер по продажам IT», 624a9677…): до фикса
+    // 29.06/11.07 наименования hh-стадий были перепутаны — resumeThresholds.
+    // inviteHhStage="consider" считался «Первичный контакт», хотя на hh.ru
+    // это «Подумать» (phone_interview — реальный «Первичный контакт»).
+    // Схема (lib/core/spec/types.ts) и UI (spec-editor.tsx) дефолт уже
+    // "phone_interview", from-legacy.ts тоже пишет "phone_interview" — но
+    // УЖЕ СОХРАНЁННЫЕ specs с явным "consider" остаются как есть (дефолт
+    // zod применяется только к отсутствующему полю). Одноразовый скрипт
+    // scripts/hh-fix-primary-contact-stage.ts 08.07 поправил ОДНУ вакансию
+    // вручную — здесь платформенно докатываем на все специи, где
+    // auto-invite активно шлёт кандидатов не в ту hh-папку.
+    id: "2026-07-13-fix-consider-invite-hh-stage",
+    description: "vacancy_specs.spec.resumeThresholds.inviteHhStage: consider → phone_interview (стадии были перепутаны до 29.06/11.07)",
+    apply: async (db) => {
+      const result = await db.execute<{ vacancy_id: string }>(sql`
+        UPDATE vacancy_specs
+        SET spec = jsonb_set(
+          spec,
+          '{resumeThresholds,inviteHhStage}',
+          '"phone_interview"'::jsonb
+        )
+        WHERE spec->'resumeThresholds'->>'inviteHhStage' = 'consider'
+        RETURNING vacancy_id
+      `)
+      return {
+        affectedCount: result.length,
+        rollbackData:  result.map(r => r.vacancy_id),
+      }
+    },
+    // Откат — на случай если инвайт в phone_interview окажется хуже, чем
+    // consider, для части затронутых вакансий (например, у hh нет такой
+    // папки в конкретном аккаунте). rollbackData — vacancy_id, затронутые
+    // apply(); откатываем ТОЛЬКО их, а не все specs с "phone_interview"
+    // (иначе задели бы и specs, которые изначально были на phone_interview).
+    rollback: async (db, rollbackData) => {
+      const vacancyIds = rollbackData as string[]
+      for (const vacancyId of vacancyIds) {
+        await db.execute(sql`
+          UPDATE vacancy_specs
+          SET spec = jsonb_set(
+            spec,
+            '{resumeThresholds,inviteHhStage}',
+            '"consider"'::jsonb
+          )
+          WHERE vacancy_id = ${vacancyId}
+        `)
+      }
+    },
+  },
 ]
 
 export interface RunMigrationsReport {
