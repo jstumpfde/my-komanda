@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { inviteLinks, users } from "@/lib/db/schema"
-import { eq, and, or, isNull, gt, sql } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { triggerOnboarding } from "@/lib/knowledge/onboarding"
 
 // POST /api/invites/accept — принять приглашение (нужна авторизация)
@@ -14,20 +14,27 @@ export async function POST(req: NextRequest) {
   const { token } = body as { token?: string }
   if (!token) return NextResponse.json({ error: "token required" }, { status: 400 })
 
-  // Найти активную ссылку
+  // Найти ссылку по токену; активность/срок проверяем НИЖЕ — после проверки
+  // идемпотентности, чтобы уже вступивший не упирался в исчерпанную ссылку
   const [link] = await db
     .select()
     .from(inviteLinks)
-    .where(
-      and(
-        eq(inviteLinks.token, token),
-        eq(inviteLinks.isActive, true),
-        or(isNull(inviteLinks.expiresAt), gt(inviteLinks.expiresAt, new Date())),
-      )
-    )
+    .where(eq(inviteLinks.token, token))
     .limit(1)
 
   if (!link) {
+    return NextResponse.json({ error: "Ссылка недействительна или истекла" }, { status: 404 })
+  }
+
+  // Идемпотентность: пользователь уже состоит в ЭТОЙ компании (типовой случай —
+  // аккаунт создан по этой же ссылке через /api/invites/register, автовход не
+  // сработал, человек вошёл вручную и снова жмёт «принять») — успех без
+  // повторного расхода использования.
+  if (session.user.companyId === link.companyId) {
+    return NextResponse.json({ ok: true, companyId: link.companyId, role: session.user.role })
+  }
+
+  if (!link.isActive || (link.expiresAt !== null && link.expiresAt <= new Date())) {
     return NextResponse.json({ error: "Ссылка недействительна или истекла" }, { status: 404 })
   }
 
