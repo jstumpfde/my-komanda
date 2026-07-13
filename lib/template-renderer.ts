@@ -16,6 +16,8 @@
 // scan-incoming (call-intent), cron follow-up, prequalification reminders,
 // anketa confirmation, automation send-message и т.д.
 
+import { inCityRu } from "./city-case-ru"
+
 const ALIASES: Record<string, string> = {
   // ─── имя ─────────────────
   "имя":                       "name",
@@ -77,6 +79,17 @@ const ALIASES: Record<string, string> = {
   "new_date":                  "new_date",
   "новое_время":               "new_time",
   "new_time":                  "new_time",
+  // ─── город: именительный (city) и «в …» — предложный падеж (city_in).
+  //     city_in автоматически выводится из city через lib/city-case-ru.ts;
+  //     если точка отправки city не передаёт — см. passthrough в
+  //     renderTemplate (литерал сохраняется, warn не шумит) ───
+  "город":                     "city",
+  "Город":                     "city",
+  "city":                      "city",
+  "City":                      "city",
+  "в_городе":                  "city_in",
+  "В_городе":                  "city_in",
+  "city_in":                   "city_in",
 }
 
 // Регулярка единым проходом ловит:
@@ -107,6 +120,9 @@ export function renderTemplate(
   vars: Record<string, string>,
 ): string {
   if (!text) return ""
+  // «в_городе»/city_in выводится из city автоматически (единая грамматика
+  // городов — lib/city-case-ru.ts), явно переданный city_in важнее.
+  const cityIn = vars.city_in ?? (vars.city !== undefined ? inCityRu(vars.city) : undefined)
   return text.replace(PLACEHOLDER_RE, (match, doubleBrace?: string, singleBrace?: string, square?: string) => {
     const raw = doubleBrace ?? singleBrace ?? square ?? ""
     const canonical = resolveKey(raw)
@@ -115,8 +131,14 @@ export function renderTemplate(
       // текст в фигурных скобках и т.п.). Не warn'им — слишком шумно.
       return match
     }
-    const value = vars[canonical]
+    const value = canonical === "city_in" ? cityIn : vars[canonical]
     if (value === undefined) {
+      if (canonical === "city" || canonical === "city_in") {
+        // Город есть не во всех точках отправки: пока вызывающий код его не
+        // передаёт, сохраняем текст байт-в-байт (как до введения переменной)
+        // и не шумим warn'ом.
+        return match
+      }
       console.warn(`[template-renderer] Unknown variable "${canonical}" (matched "${match}") — left as literal`)
       return `{{${canonical}}}`
     }

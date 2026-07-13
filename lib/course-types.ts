@@ -1,3 +1,5 @@
+import { renderDemoVars, demoVarExamplesMap, DEMO_PICKER_VARIABLES } from "./demo-vars"
+
 export type BlockType = "text" | "image" | "video" | "audio" | "file" | "info" | "button" | "task" | "media" | "stories" | "pdf"
 
 export interface StoriesCard {
@@ -163,16 +165,10 @@ export interface DemoSection {
   demoIds: string[]
 }
 
-export const VARIABLES = [
-  { key: "имя", label: "Имя кандидата", example: "Иван" },
-  { key: "компания", label: "Компания", example: "TechCorp" },
-  { key: "должность", label: "Должность", example: "Менеджер по продажам" },
-  { key: "зарплата_от", label: "Зарплата от", example: "80 000" },
-  { key: "зарплата_до", label: "Зарплата до", example: "150 000" },
-  { key: "город", label: "Город", example: "Москва" },
-  { key: "офис", label: "Адрес офиса", example: "ул. Примерная, 1" },
-  { key: "график", label: "График", example: "Пн-Пт, 9:00-18:00" },
-]
+// Единый список переменных — lib/demo-vars.ts (DEMO_PICKER_VARIABLES).
+// Локальная копия дрейфовала: рекламировала {{офис}}/{{график}} до того, как
+// рендер демо их знал, — кандидат видел сырые «{{офис}}».
+export const VARIABLES = DEMO_PICKER_VARIABLES
 
 export const BLOCK_TYPE_META: { type: BlockType; icon: string; label: string }[] = [
   { type: "text", icon: "T", label: "Текст" },
@@ -257,7 +253,7 @@ export const DEFAULT_LESSONS: Lesson[] = [
     { ...createBlock("info"), id: "b9", infoStyle: "success" as const, content: "💰 Оклад: {{зарплата_от}} – {{зарплата_до}} ₽\n\n📊 Бонусная система:\n• 100% плана → +20%\n• 120% плана → +35%\n• 150% плана → +50%\n\nПримеры дохода:\n• Новичок (3 мес): ~{{зарплата_от}} ₽\n• Опытный (6 мес): ~{{зарплата_до}} ₽" },
   ]),
   lesson("l10", "📍", "Офис, график и команда", [
-    textBlock("b10a", "Наш офис — современное пространство в центре {{город}}.\n\n• Кухня и зона отдыха\n• Парковка для сотрудников\n• Удобная транспортная доступность"),
+    textBlock("b10a", "Наш офис — современное пространство в центре города.\n\n• Кухня и зона отдыха\n• Парковка для сотрудников\n• Удобная транспортная доступность"),
     { ...createBlock("image"), id: "b10b", imageLayout: "image-right" as ImageLayout },
   ]),
   lesson("l11", "📈", "Рост и карьера", [
@@ -323,7 +319,9 @@ export function createDemo(title: string, templateLessons?: Lesson[]): Demo {
   }
 }
 
+// Подстановка примеров в превью/витрине — через общий lib/demo-vars.ts
+// (локальная регулярка с `\w` не матчила кириллицу — плейсхолдеры оставались
+// сырыми). Примеры значений — из того же единого списка, что и пикеры.
 export function replaceVars(text: string): string {
-  const map: Record<string, string> = { "имя": "Иван", "компания": "TechCorp", "должность": "Менеджер по продажам", "зарплата_от": "80 000", "зарплата_до": "150 000", "город": "Москва", "офис": "ул. Примерная, 1", "график": "Пн-Пт, 9:00-18:00" }
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => map[key] || `{{${key}}}`)
+  return renderDemoVars(text, demoVarExamplesMap())
 }
