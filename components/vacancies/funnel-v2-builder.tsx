@@ -274,19 +274,31 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
         <SheetBody className="flex-1 overflow-y-auto px-5 py-4">
         <div className="mx-auto w-full max-w-5xl space-y-5">
 
-          {/* Тип этой стадии */}
+          {/* Тип этой стадии — компактный Select, не ряд кнопок (UX-фикс 13.07:
+              ряд из 11 pill-кнопок визуально путался с левым списком стадий воронки —
+              оба выглядели как навигация, хотя тип стадии почти всегда задаётся один
+              раз при создании через «+ Добавить стадию», сеточный выбор там не трогаем). */}
           <section className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Тип этой стадии</Label>
-            <p className="text-[11px] text-muted-foreground/70 -mt-0.5">Стадия — один шаг пути кандидата. Тип задаёт, что кандидат делает на этом шаге. Последовательность шагов — в списке слева.</p>
-            <div className="flex flex-wrap gap-1">
-              {STAGE_ACTIONS.map(a => {
-                const active = a.type === stage.action
-                return (
-                  <button key={a.type} type="button"
-                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, messages: stage.messages, title: stage.title, hhStatus: stage.hhStatus } : { action: a.type, dozhimChain: dozhimChainFor(stage.dozhim, a.type, dripTemplates), dozhimChainOpened: dozhimChainForOpened(stage.dozhim, a.type, dripTemplates) })}
-                    className={cn("text-[11px] px-2 py-1 rounded-md border transition-colors", active ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{a.label}</button>
-                )
-              })}
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs text-muted-foreground">Тип стадии</Label>
+              <Select
+                value={stage.action}
+                onValueChange={(v) => {
+                  const a = v as StageActionType
+                  patch(a === "interview"
+                    ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, messages: stage.messages, title: stage.title, hhStatus: stage.hhStatus }
+                    : { action: a, dozhimChain: dozhimChainFor(stage.dozhim, a, dripTemplates), dozhimChainOpened: dozhimChainForOpened(stage.dozhim, a, dripTemplates) })
+                }}
+              >
+                <SelectTrigger className="h-7 w-auto text-xs gap-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAGE_ACTIONS.map(a => (
+                    <SelectItem key={a.type} value={a.type} className="text-xs">{a.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <p className="text-[11px] text-muted-foreground/80">{meta.desc}</p>
           </section>
