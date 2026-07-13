@@ -16,7 +16,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, hhResponses } from "@/lib/db/schema"
-import { isKnownGivenName, normalizeNameToken } from "@/lib/messaging/russian-given-names"
+import { isKnownGivenName, looksLikePatronymic, normalizeNameToken } from "@/lib/messaging/russian-given-names"
 import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 
 export interface CandidateFirstName {
@@ -73,12 +73,14 @@ function word1(s: string): string {
 // Если словарь молчит (имя редкое/нерусское) — валидный hh first_name, иначе
 // fallback по ФИО. Возвращает токен с оригинальным регистром либо «Здравствуйте».
 export type NameSource =
-  | "override"      // ручная коррекция HR
-  | "hh_first"      // hh first_name опознан словарём как имя (норма)
-  | "hh_last_swap"  // имя нашлось в hh last_name — поля перепутаны
-  | "fullname"      // имя нашлось в словах candidates.name
-  | "hh_first_raw"  // словарь молчит, взяли hh first_name как есть (МОЖЕТ быть фамилией)
-  | "neutral"       // имени нет — нейтральное «Здравствуйте»
+  | "override"              // ручная коррекция HR
+  | "hh_first"               // hh first_name опознан словарём как имя (норма)
+  | "hh_last_swap"           // имя нашлось в hh last_name — поля перепутаны
+  | "fullname"                // имя нашлось в словах candidates.name
+  | "hh_middle_confirmed"    // hh middle_name (отчество) заполнен → first_name подтверждён структурно
+  | "patronymic_pattern"     // candidates.name из 3 слов, 3-е слово — отчество по суффиксу → 2-е слово имя
+  | "hh_first_raw"           // словарь молчит, взяли hh first_name как есть (МОЖЕТ быть фамилией)
+  | "neutral"                 // имени нет — нейтральное «Здравствуйте»
 
 export interface GivenNameMeta {
   firstName: string
@@ -100,6 +102,7 @@ export function resolveGivenNameMeta(opts: {
   override?: string | null
   hhFirst?: string | null
   hhLast?:  string | null
+  hhMiddle?: string | null
   fullName?: string | null
   learned?: Set<string>
 }): GivenNameMeta {
@@ -110,6 +113,7 @@ export function resolveGivenNameMeta(opts: {
 
   const hhFirst  = (opts.hhFirst ?? "").trim()
   const hhLast   = (opts.hhLast ?? "").trim()
+  const hhMiddle = (opts.hhMiddle ?? "").trim()
   const fullName = (opts.fullName ?? "").trim()
   const learned  = opts.learned
   const fullWords = fullName.split(/\s+/).filter(Boolean)
@@ -129,6 +133,30 @@ export function resolveGivenNameMeta(opts: {
       return { firstName: w, source: "fullname", confident: true }
     }
   }
+
+  // hh middle_name (отчество отдельным полем резюме, hh Resume API) — самый
+  // надёжный структурный сигнал из всех: если оно заполнено и валидно, значит
+  // кандидат разнёс ФИО по ТРЁМ раздельным полям hh (Фамилия/Имя/Отчество), а
+  // не вписал всё в одно как попало. Это подтверждает, что hh first_name —
+  // действительно имя, даже если словарь его не знает (редкое/иностранное).
+  // Стоит ПОСЛЕ словарных hh_first/hh_last_swap/fullname (их не трогаем — если
+  // словарь уже дал уверенный ответ, он и остаётся), но ПЕРЕД неуверенным
+  // hh_first_raw и позиционным fallback'ом.
+  if (hhMiddle && isRealName(hhMiddle) && w1f && isRealName(w1f)) {
+    return { firstName: w1f, source: "hh_middle_confirmed", confident: true }
+  }
+
+  // Морфологический якорь по отчеству (без словаря конкретных имён). Работает
+  // ТОЛЬКО когда candidates.name — РОВНО 3 слова и последнее (индекс 2)
+  // распознаётся как отчество по суффиксу (-ович/-евич/-ич/-овна/-евна/
+  // -инична/-ична, см. looksLikePatronymic) — стандартный русский порядок
+  // «Фамилия Имя Отчество». Тогда слово ПЕРЕД отчеством (индекс 1) — имя.
+  // Намеренно НЕ ищем отчество в произвольном месте строки и НЕ применяем к
+  // 2-словным ФИО (там порядок неоднозначен — остаётся на fallbackFromFullName).
+  if (fullWords.length === 3 && looksLikePatronymic(fullWords[2]) && isRealName(fullWords[1])) {
+    return { firstName: fullWords[1], source: "patronymic_pattern", confident: true }
+  }
+
   if (w1f && learned && learned.has(normalizeNameToken(w1f)) && isRealName(w1f)) {
     // Выученное платформой имя (встретилось у ≥3 разных кандидатов, не похоже
     // на фамилию) — трактуем как опознанное словарём.
@@ -147,6 +175,7 @@ export function pickGivenName(opts: {
   override?: string | null
   hhFirst?: string | null
   hhLast?:  string | null
+  hhMiddle?: string | null
   fullName?: string | null
   learned?: Set<string>
 }): string {
@@ -163,13 +192,15 @@ export async function getCandidateFirstName(candidateId: string): Promise<Candid
   const fullName = (cand?.name ?? "").trim()
   const override = (cand?.firstNameOverride ?? "").trim()
 
-  // 2. hh_responses.raw_data->'resume' — first_name И last_name. Кандидат может
-  //    иметь несколько откликов — берём первый, где есть имя/фамилия.
+  // 2. hh_responses.raw_data->'resume' — first_name, last_name И middle_name
+  //    (отчество — отдельное поле hh Resume API). Кандидат может иметь
+  //    несколько откликов — берём первый, где есть соответствующее поле.
   //    ВАЖНО: hh-поля бывают ПЕРЕПУТАНЫ самим кандидатом (вписал фамилию в «Имя»,
   //    имя в «Фамилию») — напр. first_name="Макаренко", last_name="Сергей".
-  //    Поэтому ниже не доверяем порядку, а опознаём имя по словарю.
-  let hhFirstName = ""
-  let hhLastName  = ""
+  //    Поэтому ниже не доверяем порядку, а опознаём имя по словарю/структуре.
+  let hhFirstName  = ""
+  let hhLastName   = ""
+  let hhMiddleName = ""
   try {
     const rows = await db
       .select({ raw: hhResponses.rawData })
@@ -177,12 +208,14 @@ export async function getCandidateFirstName(candidateId: string): Promise<Candid
       .where(eq(hhResponses.localCandidateId, candidateId))
       .limit(5)
     for (const r of rows) {
-      const resume = (r.raw as { resume?: { first_name?: unknown; last_name?: unknown } } | null)?.resume
+      const resume = (r.raw as { resume?: { first_name?: unknown; last_name?: unknown; middle_name?: unknown } } | null)?.resume
       const fn = resume?.first_name
       const ln = resume?.last_name
-      if (!hhFirstName && typeof fn === "string" && fn.trim()) hhFirstName = fn.trim()
-      if (!hhLastName  && typeof ln === "string" && ln.trim()) hhLastName  = ln.trim()
-      if (hhFirstName && hhLastName) break
+      const mn = resume?.middle_name
+      if (!hhFirstName  && typeof fn === "string" && fn.trim()) hhFirstName  = fn.trim()
+      if (!hhLastName   && typeof ln === "string" && ln.trim()) hhLastName   = ln.trim()
+      if (!hhMiddleName && typeof mn === "string" && mn.trim()) hhMiddleName = mn.trim()
+      if (hhFirstName && hhLastName && hhMiddleName) break
     }
   } catch (err) {
     // Таблицы/связки может не быть в части окружений — тихо уходим в fallback.
@@ -193,12 +226,15 @@ export async function getCandidateFirstName(candidateId: string): Promise<Candid
   //     async-контекст уже есть здесь — подгружаем Set, fail-safe внутри модуля.
   const learned = await getLearnedNamesSet()
 
-  // 3. Единый чистый резолвер (override HR → словарь имён, устойчив к перепутанным полям hh).
-  const firstName = pickGivenName({ override, hhFirst: hhFirstName, hhLast: hhLastName, fullName, learned })
-  // Ручная коррекция или опознанное имя — это НЕ fallback.
-  const recognized =
-    (!!override && isRealName(override)) ||
-    isKnownGivenName(firstName) || (!!hhFirstName && isRealName(hhFirstName) && firstName === word1(hhFirstName))
+  // 3. Единый чистый резолвер (override HR → словарь имён/структура hh → эвристики).
+  const meta = resolveGivenNameMeta({
+    override, hhFirst: hhFirstName, hhLast: hhLastName, hhMiddle: hhMiddleName, fullName, learned,
+  })
+  const firstName = meta.firstName
+  // confident у мета-резолвера ТОЧНО отражает «это НЕ fallback» — используем
+  // его напрямую вместо пересборки условия (раньше пересобранное условие не
+  // учитывало новые уверенные источники hh_middle_confirmed/patronymic_pattern).
+  const recognized = meta.confident
   if (!recognized) {
     console.log("[candidate-name] fallback used", { candidateId, name: fullName })
   }

@@ -82,3 +82,43 @@ export function looksLikeSurname(token: string | null | undefined): boolean {
   const norm = normalizeNameToken(first)
   return SURNAME_SUFFIXES.some((suf) => norm.endsWith(suf))
 }
+
+// ── Отчество по морфологическому суффиксу (05.07 → 13.07: якорь для резолвера
+// имени, см. lib/messaging/candidate-name.ts) ───────────────────────────────
+//
+// Отчество почти всегда узнаваемо по суффиксу — без словаря конкретных имён:
+//   муж.: -ович / -евич / -ич
+//   жен.: -овна / -евна / -инична / -ична
+//
+// Ловушка: часть фамилий (балканских/еврейских) оканчивается на те же суффиксы
+// (Джокович, Обренович, Карагеоргиевич, Видич), но НЕ является отчеством.
+// Список ниже — известные фамилии-омонимы, чтобы функция их не путала.
+// Настоящие частые отчества («Петрович», «Иванович», «Ильич») НЕ добавляем
+// сюда — они отчества в подавляющем большинстве случаев.
+const PATRONYMIC_SUFFIXES_MALE = ["ович", "евич", "ич"]
+const PATRONYMIC_SUFFIXES_FEMALE = ["овна", "евна", "инична", "ична"]
+
+const PATRONYMIC_LOOKALIKE_SURNAMES = new Set([
+  "джокович", "обренович", "карагеоргиевич", "видич", "янкович", "радович",
+  "милошевич", "хорватович", "стоянович", "николич", "иванишевич",
+])
+
+/**
+ * Похоже ли слово на ОТЧЕСТВО по суффиксу? Чисто морфологическая проверка,
+ * без словаря конкретных имён — поэтому работает и для редких/иностранных
+ * на вид отчеств. Вызывающий код обязан ограничивать применение позицией
+ * в ФИО (см. patronymic_pattern в candidate-name.ts) — сама функция не
+ * знает о позиции и НЕ должна использоваться для поиска отчества в
+ * произвольном месте строки.
+ */
+export function looksLikePatronymic(token: string | null | undefined): boolean {
+  if (!token) return false
+  const first = token.trim().split(/\s+/)[0] ?? ""
+  if (!first) return false
+  const norm = normalizeNameToken(first)
+  if (PATRONYMIC_LOOKALIKE_SURNAMES.has(norm)) return false
+  return (
+    PATRONYMIC_SUFFIXES_MALE.some((suf) => norm.endsWith(suf)) ||
+    PATRONYMIC_SUFFIXES_FEMALE.some((suf) => norm.endsWith(suf))
+  )
+}
