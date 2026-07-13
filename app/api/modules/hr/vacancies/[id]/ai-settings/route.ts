@@ -96,6 +96,12 @@ export async function PUT(
     if (body.autoRejectEnabled !== undefined) {
       settings.autoRejectEnabled = body.autoRejectEnabled === true
     }
+    // Пилот «агента коммуникаций» (Юрий 10.07): тумблер AI-переписывания
+    // текста дожимов под контекст кандидата. По умолчанию выкл — см.
+    // lib/comms-agent/adapt-followup-message.ts.
+    if (body.dozhimAgentEnabled !== undefined) {
+      settings.dozhimAgentEnabled = body.dozhimAgentEnabled === true
+    }
     if (body.inviteMessage !== undefined) {
       const text = typeof body.inviteMessage === "string" ? body.inviteMessage.slice(0, 2000) : ""
       // P0-43: первое сообщение должно содержать плейсхолдер ссылки на демо.
