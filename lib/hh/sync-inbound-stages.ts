@@ -77,8 +77,24 @@ export async function resolveNegotiationId(candidateId: string, companyId: strin
   return resp?.hhResponseId ?? null
 }
 
-// Живой запрос текущего состояния negotiation. Возвращает state.id либо null
-// (403/404/сеть/таймаут — штатное «не получилось», синк не падает).
+// Живой запрос текущей hh-ПАПКИ (коллекции работодателя) negotiation.
+// Возвращает employer_state.id либо null (403/404/сеть/таймаут — штатное
+// «не получилось», синк не падает).
+//
+// ВАЖНО (fix 13.07): читаем `employer_state.id`, а НЕ `state.id`.
+// GET /negotiations/{id} (деталь) отдаёт ДВА поля состояния:
+//   - state.id          — ГРУБЫЙ lifecycle отклика (response/interview/…),
+//                         обращённый к кандидату; НЕ совпадает с папкой HR.
+//   - employer_state.id  — реальная папка/коллекция работодателя
+//                         (phone_interview/consider/assessment/interview/
+//                         discard_by_employer/hired) — то, что HR видит и
+//                         настраивает, и под что спроектирован
+//                         hhStateToPlatformStage (см. lib/hh/stage-mapping.ts).
+// До фикса функция читала state.id → грубый статус не совпадал с папкой и
+// (а) двигал candidates.stage мимо реальной hh-папки во входящем синке,
+// (б) генерил ложные critical-алерты в lib/hiring-watchdog/hh-reconcile.ts.
+// Список /negotiations/{collection} (import-responses) — другой случай: там
+// item.state.id уже равен коллекции, поэтому тот путь трогать не нужно.
 // Экспортировано (13.07): переиспользуется watchdog-сверкой (см. выше).
 export async function fetchNegotiationState(accessToken: string, negotiationId: string): Promise<string | null> {
   try {
@@ -87,8 +103,8 @@ export async function fetchNegotiationState(accessToken: string, negotiationId: 
       signal: AbortSignal.timeout(HH_FETCH_TIMEOUT_MS),
     })
     if (!res.ok) return null
-    const data = (await res.json()) as { state?: { id?: string } }
-    return data?.state?.id ?? null
+    const data = (await res.json()) as { employer_state?: { id?: string } }
+    return data?.employer_state?.id ?? null
   } catch {
     return null
   }
