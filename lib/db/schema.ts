@@ -3522,6 +3522,13 @@ export const followUpMessages = pgTable("follow_up_messages", {
   status:       text("status").notNull().default("pending"), // 'pending' | 'sent' | 'failed' | 'cancelled'
   // Ветка дожима: 'not_opened' (А) | 'opened_not_finished' (Б).
   branch:       text("branch").notNull().default("not_opened"),
+  // drizzle/0276 — production-след агента коммуникаций (Фаза 1 «единого
+  // центра коммуникаций», 11.07). sentText — реально ушедший кандидату текст
+  // (literal ИЛИ AI-адаптированный), messageText остаётся шаблоном ДО рендера.
+  // aiAdapted — true, если текст этого касания переписан comms-agent'ом
+  // (lib/comms-agent/adapt-followup-message.ts, adapted.safe===true).
+  sentText:     text("sent_text"),
+  aiAdapted:    boolean("ai_adapted").notNull().default(false),
   errorMessage: text("error_message"),
   // Д0 цепочки — исходная точка отсчёта расписания касаний. Обычно
   // совпадает с negotiation.created_at hh-отклика. scheduled_at от

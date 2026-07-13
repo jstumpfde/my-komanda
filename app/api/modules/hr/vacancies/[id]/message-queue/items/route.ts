@@ -112,6 +112,11 @@ export async function GET(
         status:       followUpMessages.status,
         branch:       followUpMessages.branch,
         touchNumber:  followUpMessages.touchNumber,
+        // drizzle/0276 — Фаза 1 «единого центра коммуникаций»: реально ушедший
+        // текст (может отличаться от шаблона messageText, если переписан
+        // comms-agent'ом) + флаг, что он вообще адаптирован AI.
+        sentText:     followUpMessages.sentText,
+        aiAdapted:    followUpMessages.aiAdapted,
       })
       .from(followUpMessages)
       .where(and(
@@ -207,6 +212,10 @@ export async function GET(
         branch:       m.branch,
         touchNumber:  m.touchNumber,
         preview,
+        // drizzle/0276: реально ушедший текст (заготовка ≠ отправлено, если
+        // AI-адаптирован) + флаг адаптации — для бейджа «адаптировано агентом».
+        sentText:     m.sentText,
+        aiAdapted:    m.aiAdapted,
       }
     })
 

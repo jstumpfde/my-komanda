@@ -34,6 +34,11 @@ interface QueueItem {
   branch: string
   touchNumber: number
   preview: string
+  // drizzle/0276 — Фаза 1 «единого центра коммуникаций»: реально ушедший
+  // текст (может отличаться от preview-заготовки, если переписан
+  // comms-agent'ом) + флаг адаптации. Заполнены только для status='sent'.
+  sentText: string | null
+  aiAdapted: boolean
 }
 
 const BRANCH_LABELS: Record<string, string> = {
@@ -562,11 +567,41 @@ export function MessageQueueJournal({ vacancyId, onChanged }: Props) {
                       )}
                     </DataCell>
                     {/* Сообщение целиком — без обрезки и «нажмите, чтобы
-                        развернуть» (Юрий 03.07: превью = сообщение полностью). */}
+                        развернуть» (Юрий 03.07: превью = сообщение полностью).
+                        drizzle/0276: для уже отправленных (status='sent') с
+                        sentText показываем реально ушедший текст, а не заново
+                        отрендеренный шаблон — он мог быть переписан
+                        comms-agent'ом (aiAdapted). Заготовку (шаблон) видно
+                        по разворачиванию строки (та же стрелка, что и раньше). */}
                     <DataCell className="align-top">
-                      <p className="text-xs text-foreground/90 whitespace-pre-wrap">
-                        {m.preview}
-                      </p>
+                      {m.status === "sent" && m.sentText ? (
+                        <div className="space-y-1.5">
+                          {m.aiAdapted && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] h-5 text-violet-700 dark:text-violet-400 border-violet-300/60 bg-violet-500/10"
+                              title="Текст этого касания переписан агентом коммуникаций под контекст диалога — исходную заготовку см. по стрелке слева"
+                            >
+                              🪄 адаптировано агентом
+                            </Badge>
+                          )}
+                          <p className="text-xs text-foreground/90 whitespace-pre-wrap">
+                            {m.sentText}
+                          </p>
+                          {m.aiAdapted && isExpanded && (
+                            <div className="mt-1.5 pt-1.5 border-t border-border/40">
+                              <p className="text-[10px] text-muted-foreground mb-0.5">Заготовка (шаблон до адаптации):</p>
+                              <p className="text-xs text-muted-foreground/80 whitespace-pre-wrap italic">
+                                {m.preview}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-foreground/90 whitespace-pre-wrap">
+                          {m.preview}
+                        </p>
+                      )}
                     </DataCell>
                     {/* Уйдёт в: для отправленных — время отправки, иначе плановое.
                         Крупно HH:MM (МСК), под ним дата и причина ожидания. */}
