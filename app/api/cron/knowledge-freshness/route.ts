@@ -13,6 +13,9 @@ import {
 // Scans knowledge base materials, updates stale/expired status, and notifies
 // each tenant's director / hr_lead (DB notification + Telegram, if connected).
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "knowledge-freshness"
 
 const REVIEW_DAYS: Record<string, number> = {
   "1m": 30,
@@ -53,6 +56,7 @@ async function sendTelegram(token: string, chatId: string, text: string) {
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
+  const run = await startCronRun(CRON_NAME).catch(() => null)
 
   const now = new Date()
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -269,6 +273,7 @@ export async function POST(req: NextRequest) {
     const totalExpired = flagged.filter((i) => i.reason === "expired").length
     const totalReview = flagged.filter((i) => i.reason === "review").length
 
+    if (run) await finishCronRun(run.id, "ok", { checked: allArticles.length + allDemos.length, expired: totalExpired, review: totalReview, notified })
     return NextResponse.json({
       ok: true,
       checked: allArticles.length + allDemos.length,
@@ -278,6 +283,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     console.error("[cron/knowledge-freshness]", err)
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
 }
