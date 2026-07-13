@@ -13,7 +13,13 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancySpecs } from "@/lib/db/schema"
 import type { CandidateSpec } from "./types"
-import { CandidateSpecSchema, normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers } from "./types"
+import {
+  CandidateSpecSchema,
+  normalizeMustHave,
+  normalizeNiceToHave,
+  normalizeDealBreakers,
+  normalizeLegacyInviteHhStage,
+} from "./types"
 
 // Исполнитель запросов: глобальный db ИЛИ tx внутри db.transaction — чтобы
 // saveSpec можно было вызвать атомарно вместе с другими записями (ТЗ №3).
@@ -38,6 +44,16 @@ type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
  * дальнейшие patch()-спреды в UI больше не могут «потерять» поле. Невалидные
  * записи (не должны появляться, но на всякий случай) — возвращаем как есть,
  * чтобы не уронить рантайм скоринга.
+ *
+ * БАГФИКС 13.07 (инцидент consider→phone_interview, Task 1 плана
+ * funnel-v2-hardening): "consider" убрали из enum'а inviteHhStage (коммит
+ * 6c7a1734), но часть вакансий на проде уже сохранила это значение в БД.
+ * Без нормализации ПЕРЕД safeParse такие записи проваливают всю схему целиком
+ * → откат на сырой fallback ниже с непонятым "consider" → PUT валидирует ЭТО
+ * ЖЕ значение обратно (HR его не трогал) → 400 на сохранение ЛЮБОГО поля
+ * Портрета этой вакансии. normalizeLegacyInviteHhStage() чинит его на входе —
+ * Task 1 остаётся безопасным сам по себе, не завися от порядка/одновременности
+ * деплоя с платформенной миграцией данных (Task 2 плана).
  */
 export async function getSpec(vacancyId: string): Promise<CandidateSpec | null> {
   const [row] = await db
@@ -47,12 +63,14 @@ export async function getSpec(vacancyId: string): Promise<CandidateSpec | null> 
     .limit(1)
 
   if (!row) return null
-  const parsed = CandidateSpecSchema.safeParse(row.spec)
+  const normalizedSpec = normalizeLegacyInviteHhStage(row.spec)
+  const parsed = CandidateSpecSchema.safeParse(normalizedSpec)
   if (parsed.success) return parsed.data
   // Не должно происходить (saveSpec всегда пишет валидированные данные), но
   // если старая/повреждённая запись всё же не проходит схему целиком —
-  // не роняем рантайм скоринга, отдаём как было.
-  return row.spec as CandidateSpec
+  // не роняем рантайм скоринга, отдаём как было (уже с нормализованным
+  // inviteHhStage, если он был единственной проблемой).
+  return normalizedSpec as CandidateSpec
 }
 
 // ─── Запись ──────────────────────────────────────────────────────────────────
