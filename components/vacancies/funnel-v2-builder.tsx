@@ -643,7 +643,15 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
 // ── Врезка «до стадий»: входной скан резюме из Портрета (read-only, НЕ стадия
 // воронки — без номера, тонкая строка-справка, чтобы не сливаться с реальной
 // стадией 1 «Отклик — скан резюме» ниже) ────────────────────────────────────
-interface SpecSummary { upper?: number; lower?: number; rejectAction?: "none" | "pending_manual" | "pending_rejection"; autoInvite?: boolean; stops: string[]; criteriaCount: number }
+interface SpecSummary { upper?: number; lower?: number; rejectAction?: "none" | "pending_manual" | "pending_rejection"; autoInvite?: boolean; stops: string[]; criteriaCount: number; inviteDelaySeconds?: number; offHoursEnabled?: boolean; offHoursDelaySeconds?: number }
+// «180» → «3 мин», «15» → «15 сек», «90» → «1 мин 30 сек».
+function fmtDelay(sec: number): string {
+  if (sec <= 0) return "без задержки"
+  if (sec < 60) return `${sec} сек`
+  const m = Math.floor(sec / 60), s = sec % 60
+  return s === 0 ? `${m} мин` : `${m} мин ${s} сек`
+}
+
 function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary | null; loading: boolean; onOpen?: () => void }) {
   const empty = !loading && summary && summary.criteriaCount === 0 && summary.stops.length === 0
   return (
@@ -657,6 +665,8 @@ function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary 
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">пороги &lt;{summary.lower ?? 40} / {summary.lower ?? 40}–{(summary.upper ?? 75) - 1} / ≥{summary.upper ?? 75}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">зона отказа: {summary.rejectAction === "pending_rejection" ? "авто-отказ" : summary.rejectAction === "pending_manual" ? "ручной разбор" : "выкл"}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
+            {typeof summary.inviteDelaySeconds === "number" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">задержка 1-го сообщения: {fmtDelay(summary.inviteDelaySeconds)}</span>}
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">нерабочее время: {summary.offHoursEnabled ? `вкл${typeof summary.offHoursDelaySeconds === "number" ? `, +${fmtDelay(summary.offHoursDelaySeconds)}` : ""}` : "выкл"}</span>
             {summary.stops.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">стоп: {summary.stops.join(", ")}</span>}
             {empty && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/60">пусто → 100% проходят дальше</span>}
           </>) : <span className="text-[10px] text-muted-foreground/60">Портрет не настроен → проходят все</span>}
@@ -809,7 +819,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
         const nice = Array.isArray(spec.niceToHave) ? spec.niceToHave.length : 0
         const must = Array.isArray(spec.mustHave) ? spec.mustHave.length : 0
         const deal = Array.isArray(spec.dealBreakers) ? spec.dealBreakers.length : 0
-        setSummary({ upper: typeof rt.upperThreshold === "number" ? rt.upperThreshold : undefined, lower: typeof rt.lowerThreshold === "number" ? rt.lowerThreshold : undefined, rejectAction: rt.rejectAction === "pending_manual" || rt.rejectAction === "pending_rejection" ? rt.rejectAction as "pending_manual" | "pending_rejection" : rt.autoRejectEnabled === true ? "pending_rejection" : "none", autoInvite: rt.autoInviteEnabled === true, stops, criteriaCount: nice + must + deal })
+        setSummary({ upper: typeof rt.upperThreshold === "number" ? rt.upperThreshold : undefined, lower: typeof rt.lowerThreshold === "number" ? rt.lowerThreshold : undefined, rejectAction: rt.rejectAction === "pending_manual" || rt.rejectAction === "pending_rejection" ? rt.rejectAction as "pending_manual" | "pending_rejection" : rt.autoRejectEnabled === true ? "pending_rejection" : "none", autoInvite: rt.autoInviteEnabled === true, stops, criteriaCount: nice + must + deal, inviteDelaySeconds: typeof rt.inviteDelaySeconds === "number" ? rt.inviteDelaySeconds : undefined, offHoursEnabled: rt.offHoursEnabled !== false, offHoursDelaySeconds: typeof rt.offHoursDelaySeconds === "number" ? rt.offHoursDelaySeconds : undefined })
       })
       .catch(() => { if (!cancelled) setSummary(null) })
       .finally(() => { if (!cancelled) setSpecLoading(false) })
