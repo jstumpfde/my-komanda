@@ -385,6 +385,21 @@ export interface CompanyHiringDefaults {
   // undefined/null → используется платформенный дефолт. 0 — зарезервировано
   // под «безлимит» на будущее, сейчас UI такого не предлагает.
   aiMonthlyTokenLimit?: number | null
+  // Задача 13.07 (координатор): кастомные стадии-фильтры на /hr/interviews —
+  // раньше жили в localStorage браузера (per-браузер, не per-компания — баг:
+  // у разных HR разные наборы, при смене браузера/устройства пропадали).
+  // Перенесены сюда, per-company. Форма Stage/StageCondition — на клиенте
+  // (app/(modules)/hr/interviews/page.tsx), здесь — минимально типизировано,
+  // чтобы не тащить клиентские типы в схему.
+  interviewStages?: Array<{
+    id: string; name: string; emoji: string; color: string; condition: string; isDefault: boolean
+  }>
+  // Ручные назначения кастомного тега на интервью для condition:"manual" —
+  // Record<stageId, interviewId[]>. Мердж на уровне ключа (см. NESTED_KEYS
+  // в hiring-defaults/route.ts), чтобы PATCH одной стадии не затирал остальные.
+  // Условие "outcome_passed" НЕ хранится здесь — читает существующее
+  // calendar_events.interview_decision (см. lib/interviews/stage-filters.ts).
+  interviewManualAssignments?: Record<string, string[]>
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
