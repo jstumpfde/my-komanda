@@ -83,7 +83,7 @@ export const SETTINGS_MIGRATIONS: SettingsMigration[] = [
     id: "2026-07-13-fix-consider-invite-hh-stage",
     description: "vacancy_specs.spec.resumeThresholds.inviteHhStage: consider → phone_interview (стадии были перепутаны до 29.06/11.07)",
     apply: async (db) => {
-      const result = await db.execute(sql`
+      const result = await db.execute<{ vacancy_id: string }>(sql`
         UPDATE vacancy_specs
         SET spec = jsonb_set(
           spec,
@@ -93,7 +93,29 @@ export const SETTINGS_MIGRATIONS: SettingsMigration[] = [
         WHERE spec->'resumeThresholds'->>'inviteHhStage' = 'consider'
         RETURNING vacancy_id
       `)
-      return { affectedCount: result.length }
+      return {
+        affectedCount: result.length,
+        rollbackData:  result.map(r => r.vacancy_id),
+      }
+    },
+    // Откат — на случай если инвайт в phone_interview окажется хуже, чем
+    // consider, для части затронутых вакансий (например, у hh нет такой
+    // папки в конкретном аккаунте). rollbackData — vacancy_id, затронутые
+    // apply(); откатываем ТОЛЬКО их, а не все specs с "phone_interview"
+    // (иначе задели бы и specs, которые изначально были на phone_interview).
+    rollback: async (db, rollbackData) => {
+      const vacancyIds = rollbackData as string[]
+      for (const vacancyId of vacancyIds) {
+        await db.execute(sql`
+          UPDATE vacancy_specs
+          SET spec = jsonb_set(
+            spec,
+            '{resumeThresholds,inviteHhStage}',
+            '"consider"'::jsonb
+          )
+          WHERE vacancy_id = ${vacancyId}
+        `)
+      }
     },
   },
 ]
