@@ -28,6 +28,7 @@ import {
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { logAiCall } from "@/lib/ai/usage-log"
+import { logAiCallFailure } from "@/lib/ai/failure-log"
 import { buildExtractFactsPrompt } from "@/lib/ai/prompts/extract-facts"
 import { buildCompareRequirementsPrompt } from "@/lib/ai/prompts/compare-requirements"
 import {
@@ -293,12 +294,21 @@ export async function scoreCandidateV2(
     resumeText,
   })
 
-  const extractMsg = await anthropic.messages.create({
-    model:       AI_MODEL_MAIN,
-    thinking: { type: "disabled" },
-    max_tokens:  1500,
-    messages:    [{ role: "user", content: extractPrompt }],
-  })
+  let extractMsg: Awaited<ReturnType<typeof anthropic.messages.create>>
+  try {
+    extractMsg = await anthropic.messages.create({
+      model:       AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
+      max_tokens:  1500,
+      messages:    [{ role: "user", content: extractPrompt }],
+    })
+  } catch (err) {
+    // Сторож найма (drizzle/0277): платформенный детектор массового сбоя AI —
+    // логируем и пробрасываем дальше (поведение вызова не меняем).
+    const errMsg = err instanceof Error ? err.message : String(err)
+    void logAiCallFailure({ source: "score-candidate-v2", errorMessage: errMsg, companyId: vacancy.companyId, vacancyId })
+    throw err
+  }
   void addVacancyTokens(vacancyId, extractMsg.usage)
   void logAiCall({
     tenantId:     vacancy.companyId,
@@ -323,12 +333,19 @@ export async function scoreCandidateV2(
     scoringWeights: weights,
   })
 
-  const compareMsg = await anthropic.messages.create({
-    model:       AI_MODEL_MAIN,
-    thinking: { type: "disabled" },
-    max_tokens:  1500,
-    messages:    [{ role: "user", content: comparePrompt }],
-  })
+  let compareMsg: Awaited<ReturnType<typeof anthropic.messages.create>>
+  try {
+    compareMsg = await anthropic.messages.create({
+      model:       AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
+      max_tokens:  1500,
+      messages:    [{ role: "user", content: comparePrompt }],
+    })
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    void logAiCallFailure({ source: "score-candidate-v2", errorMessage: errMsg, companyId: vacancy.companyId, vacancyId })
+    throw err
+  }
   void addVacancyTokens(vacancyId, compareMsg.usage)
   void logAiCall({
     tenantId:     vacancy.companyId,

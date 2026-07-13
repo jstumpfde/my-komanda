@@ -2698,6 +2698,18 @@ export const aiUsageLog = pgTable("ai_usage_log", {
   createdAt:    timestamp("created_at").defaultNow(),
 })
 
+// Сторож найма — быстрый детектор массового сбоя AI-вызовов (drizzle/0277,
+// инцидент 13.07). Компактно, отдельно от ai_usage_log (там tenant_id NOT
+// NULL и это лог успешных вызовов) — см. lib/ai/failure-log.ts::logAiCallFailure.
+export const aiCallFailures = pgTable("ai_call_failures", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  source:       text("source").notNull(),  // 'screen-resume' | 'axis-scorer' | 'score-test' | 'score-candidate-v2' | 'score-answers'
+  companyId:    uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:    uuid("vacancy_id").references(() => vacancies.id, { onDelete: "cascade" }),
+  errorMessage: text("error_message"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+})
+
 // Question logs: для агента аудита пробелов базы знаний
 export const knowledgeQuestionLogs = pgTable("knowledge_question_logs", {
   id:          uuid("id").primaryKey().defaultRandom(),
