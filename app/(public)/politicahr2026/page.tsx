@@ -89,7 +89,13 @@ export default async function PolitikaHr2026Page({
   const params = await searchParams
   const slug = (params.company ?? "").trim()
 
-  const policy = slug ? await getCompanyPolicy(slug) : await getCentralPolicy()
+  // Фолбэк: у компании нет ни своего HTML, ни реквизитов (inn+email) для
+  // шаблона, либо subdomain не найден — показываем центральную политику
+  // платформы. Сюда ведёт чекбокс согласия из публичной анкеты кандидата,
+  // документ должен быть всегда (не «временно недоступен»). Редакция в
+  // candidates.consent_doc_version зеркалит эту логику — см.
+  // resolveHrPolicyVersion в app/api/public/demo/[token]/apply/route.ts.
+  const policy = (slug ? await getCompanyPolicy(slug) : null) ?? await getCentralPolicy()
 
   const versionLabel = policy?.updatedAt
     ? `Версия от ${new Date(policy.updatedAt).toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })}`

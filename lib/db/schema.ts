@@ -1669,6 +1669,17 @@ export const candidates = pgTable("candidates", {
   // /niches/filledAt). Отдельно от anketa_answers — там массив демо-блоков.
   // Не перезаписывает основные поля name/phone/email/city/birth_date.
   surveyResponses: jsonb("survey_responses"),
+  // 152-ФЗ (0275): согласие кандидата на обработку ПД — чекбокс в публичной
+  // анкете демо (ссылка на /politicahr2026). Связка per-tenant «оператор =
+  // компания-наниматель / субъект = кандидат», поэтому НЕ пишется в
+  // платформенный consent_log (см. комментарий там); паттерн —
+  // landing_leads.consent_at. NULL = согласие не фиксировалось (hh-импорт:
+  // правовое основание — согласие кандидата на стороне hh.ru; либо анкета
+  // заполнена до ввода поля). Первое согласие не перезаписывается повторными.
+  consentAt: timestamp("consent_at", { withTimezone: true }),
+  // Редакция политики на момент согласия: дата legal_documents('privacy_policy')
+  // .updated_at, напр. "2026-07-04", либо "default", если документ не заведён.
+  consentDocVersion: text("consent_doc_version"),
   aiScore: integer("ai_score"),
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
@@ -4298,6 +4309,11 @@ export type NewTelegramDmLead = typeof telegramDmLeads.$inferInsert
 // при будущих правках текста можно было доказать, на какую именно редакцию
 // было дано согласие. details — свободный jsonb (напр. выбранные категории
 // cookie: {analytics: true, marketing: false}).
+// ГРАНИЦА (0275): сюда пишутся ТОЛЬКО согласия, данные Company24.pro как
+// оператору ПД (регистрация, партнёрка, лиды лендинга/портфолио). Согласия
+// кандидатов из анкеты демо — другая связка (оператор = компания-наниматель),
+// они живут per-tenant в candidates.consent_at и в этот журнал/счётчик
+// /admin/platform → «Согласия» попадать не должны.
 export const consentLog = pgTable("consent_log", {
   id:              uuid("id").primaryKey().defaultRandom(),
   userId:          uuid("user_id").references(() => users.id, { onDelete: "set null" }),

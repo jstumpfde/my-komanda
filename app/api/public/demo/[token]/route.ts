@@ -103,6 +103,10 @@ export async function GET(
         companyName: companies.name,
         companyBrandName: companies.brandName,
         companyLogo: companies.logoUrl,
+        // 152-ФЗ: subdomain для ссылки чекбокса согласия на политику КОМПАНИИ
+        // (/politicahr2026?company=<subdomain>) — оператор ПД у анкеты кандидата
+        // это компания-наниматель, не платформа.
+        companySubdomain: companies.subdomain,
         brandPrimaryColor: companies.brandPrimaryColor,
         brandBgColor: companies.brandBgColor,
         brandTextColor: companies.brandTextColor,
@@ -181,6 +185,7 @@ export async function GET(
           vacancyTitle:       vacancy.title,
           companyName:        vacancy.companyBrandName || vacancy.companyName,
           companyLogo:        vacancy.companyLogo,
+          companySubdomain:   vacancy.companySubdomain,
           brandPrimaryColor:  vacancy.brandPrimaryColor,
           brandBgColor:       vacancy.brandBgColor,
           brandTextColor:     vacancy.brandTextColor,
@@ -393,6 +398,7 @@ export async function GET(
       vacancyTitle: vacancy.title,
       companyName: vacancy.companyBrandName || vacancy.companyName,
       companyLogo: vacancy.companyLogo,
+      companySubdomain: vacancy.companySubdomain,
       brandPrimaryColor: vacancy.brandPrimaryColor,
       brandBgColor: vacancy.brandBgColor,
       brandTextColor: vacancy.brandTextColor,
