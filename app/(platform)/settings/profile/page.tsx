@@ -13,7 +13,8 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, Clock, Send, MessageCircle, Video } from "lucide-react"
+import { Loader2, User, Mail, Lock, Shield, Save, Eye, EyeOff, Camera, Trash2, Clock, MessageCircle, Video } from "lucide-react"
+import { ManagerReminderBotCard } from "@/components/telegram/manager-reminder-bot-card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -111,40 +112,6 @@ function ProfileSettingsPageInner() {
 
   const updateScheduleDay = (dayId: string, patch: Partial<ScheduleDay>) =>
     setScheduleDays(prev => ({ ...prev, [dayId]: { ...(prev[dayId] ?? DEFAULT_DAYS[dayId]), ...patch } }))
-
-  // Напоминания об интервью в Telegram (@Ren_HR_bot, платформенный бот)
-  const [managerChatId, setManagerChatId] = useState<string | null>(null)
-  const [reminderLinkCode, setReminderLinkCode] = useState<{ code: string; botUsername: string; expiresAt: string } | null>(null)
-  const [generatingReminderCode, setGeneratingReminderCode] = useState(false)
-  const [unlinkingReminder, setUnlinkingReminder] = useState(false)
-
-  const handleGenerateReminderCode = async () => {
-    setGeneratingReminderCode(true)
-    try {
-      const res = await fetch("/api/telegram/manager-bot/link-code", { method: "POST" })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { toast.error(json.error ?? "Не удалось получить код"); return }
-      const data = json.data ?? json
-      setReminderLinkCode({ code: data.code, botUsername: data.botUsername, expiresAt: data.expiresAt })
-    } catch { toast.error("Ошибка сети") }
-    finally { setGeneratingReminderCode(false) }
-  }
-
-  const handleUnlinkReminderBot = async () => {
-    setUnlinkingReminder(true)
-    try {
-      const res = await fetch("/api/auth/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ managerReminderChatId: null }),
-      })
-      if (!res.ok) { toast.error("Не удалось отключить"); return }
-      setManagerChatId(null)
-      setReminderLinkCode(null)
-      toast.success("Бот напоминаний отключён")
-    } catch { toast.error("Ошибка сети") }
-    finally { setUnlinkingReminder(false) }
-  }
 
   // Контакты для оперативной связи с кандидатом (Юрий 10.07) — подставляются
   // в сообщение со ссылкой на встречу («подтвердите получение»).
@@ -264,7 +231,6 @@ function ProfileSettingsPageInner() {
         setFirstName(p.firstName ?? "")
         setLastName(p.lastName ?? "")
         setAvatarUrl((p as unknown as { avatarUrl?: string }).avatarUrl ?? null)
-        setManagerChatId(p.managerReminderChatId ?? null)
         setContactTelegram(p.contactTelegram ?? "")
         setContactMax(p.contactMax ?? "")
         setContactPhone(p.contactPhone ?? "")
@@ -744,50 +710,9 @@ function ProfileSettingsPageInner() {
               </Card>
 
               {/* ═══ Напоминания об интервью в Telegram ══════════════════
-                  Личный chat_id в платформенном боте @Ren_HR_bot
-                  (users.manager_reminder_chat_id, миграция 0270). Каденция —
-                  та же, что у кандидата: за сутки / утром / за час / за 15 мин. */}
-              <Card>
-                <CardHeader className="pb-2 pt-4 px-5">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Send className="w-4 h-4" />
-                    Напоминания об интервью в Telegram
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-5 pb-4 pt-0 space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    Если вы назначаете интервью кандидатам, бот пришлёт напоминание за сутки, утром в день встречи, за час и за 15 минут до начала — так же, как получает кандидат.
-                  </p>
-
-                  {managerChatId ? (
-                    <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
-                      <span className="text-sm flex items-center gap-2">
-                        <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">Подключено</Badge>
-                      </span>
-                      <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={handleUnlinkReminderBot} disabled={unlinkingReminder}>
-                        {unlinkingReminder ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Отключить"}
-                      </Button>
-                    </div>
-                  ) : reminderLinkCode ? (
-                    <div className="rounded-lg border bg-muted/30 px-3 py-3 space-y-2">
-                      <p className="text-sm">
-                        Откройте{" "}
-                        <a href={`https://t.me/${reminderLinkCode.botUsername}`} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
-                          @{reminderLinkCode.botUsername}
-                        </a>{" "}
-                        и отправьте боту команду:
-                      </p>
-                      <code className="block text-sm font-mono bg-background rounded px-2 py-1.5 border">/start {reminderLinkCode.code}</code>
-                      <p className="text-xs text-muted-foreground">Код действует 15 минут и одноразовый.</p>
-                    </div>
-                  ) : (
-                    <Button variant="outline" size="sm" className="gap-2" onClick={handleGenerateReminderCode} disabled={generatingReminderCode}>
-                      {generatingReminderCode ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                      Подключить Telegram
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
+                  Общий компонент (тот же — в шестерёнке календаря).
+                  users.manager_reminder_chat_id, миграция 0270. */}
+              <ManagerReminderBotCard />
 
               {/* ═══ Zoom (личный, Юрий 10.07) ══════════════════════════
                   Каждый менеджер подключает СВОЙ Zoom-аккаунт — используется

@@ -17,6 +17,7 @@ import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows,
 import { isNonWorkingDay } from "@/lib/schedule/holidays"
 import { getHolidaysForCountry } from "@/lib/holidays"
 import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
+import { METHOD_DEFAULT_DURATIONS, DEFAULT_METHOD_BUFFER } from "@/lib/hiring/interview-methods"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
@@ -34,12 +35,14 @@ const DEFAULT_MAX    = 8
 const DAY_LABELS_RU  = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"]
 const MONTH_SHORT_RU = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"]
 
+// Дефолтные способы (компания ничего не настроила) — длительность/буфер из
+// канонических дефолтов lib/hiring/interview-methods (один источник, #6 11.07).
 const DEFAULT_METHODS: MethodConfig[] = [
-  { method:"phone",   label:"Телефон",        enabled:true,  duration:30, buffer:10 },
-  { method:"zoom",    label:"Zoom",           enabled:false, duration:60, buffer:10 },
-  { method:"telemost",label:"Яндекс Телемост",enabled:true,  duration:60, buffer:10 },
-  { method:"meet",    label:"Google Meet",    enabled:false, duration:60, buffer:10 },
-  { method:"office",  label:"Офис",           enabled:true,  duration:60, buffer:15 },
+  { method:"phone",   label:"Телефон",        enabled:true,  duration:METHOD_DEFAULT_DURATIONS.phone,    buffer:DEFAULT_METHOD_BUFFER },
+  { method:"zoom",    label:"Zoom",           enabled:false, duration:METHOD_DEFAULT_DURATIONS.zoom,     buffer:DEFAULT_METHOD_BUFFER },
+  { method:"telemost",label:"Яндекс Телемост",enabled:true,  duration:METHOD_DEFAULT_DURATIONS.telemost, buffer:DEFAULT_METHOD_BUFFER },
+  { method:"meet",    label:"Google Meet",    enabled:false, duration:METHOD_DEFAULT_DURATIONS.meet,     buffer:DEFAULT_METHOD_BUFFER },
+  { method:"office",  label:"Офис",           enabled:true,  duration:METHOD_DEFAULT_DURATIONS.office,   buffer:DEFAULT_METHOD_BUFFER },
 ]
 
 const METHOD_LABELS: Record<string, string> = {
@@ -306,7 +309,7 @@ export async function GET(
     const defaultMethod  = pinned?.method ?? "phone"
 
     // Для слотов используем длительность выбранного метода
-    const defaultDuration = pinned?.duration ?? 60
+    const defaultDuration = pinned?.duration ?? METHOD_DEFAULT_DURATIONS.office
 
     // 5. Уже занятые слоты этой компании (type='interview', ближайшие 16 дней)
     // Берём UTC-границы с запасом (+16 д), чтобы не срезать последний день в
