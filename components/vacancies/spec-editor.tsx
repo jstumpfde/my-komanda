@@ -2661,12 +2661,11 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
                 <Label className="text-xs">Стадия в hh.ru при приглашении</Label>
                 <Select
                   value={rt.inviteHhStage ?? "phone_interview"}
-                  onValueChange={v => patchThresholds(rt => ({ ...rt, inviteHhStage: v as "phone_interview" | "consider" | "interview" | "assessment" }))}
+                  onValueChange={v => patchThresholds(rt => ({ ...rt, inviteHhStage: v as "phone_interview" | "interview" | "assessment" }))}
                 >
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="phone_interview">Первичный контакт</SelectItem>
-                    <SelectItem value="consider">Подумать</SelectItem>
                     <SelectItem value="interview">Собеседование</SelectItem>
                     <SelectItem value="assessment">Тестовое задание</SelectItem>
                   </SelectContent>
@@ -2675,7 +2674,7 @@ export function SpecEditor({ vacancyId, onSaved, portraitScoring, onAdopted, onN
               </div>
               {/* #3 Итог: куда реально переводится кандидат */}
               <p className="text-[11px] text-muted-foreground rounded-md bg-muted/40 px-2.5 py-1.5 leading-relaxed">
-                Итог: приглашённый получит ссылку на <b>{rt.inviteContentBlockId ? (inviteBlockChoices.find(b => b.id === rt.inviteContentBlockId)?.title ?? "выбранный блок") : "боевой демо-блок"}</b> и перейдёт в воронке hh.ru в стадию <b>{({ consider: "Подумать", phone_interview: "Первичный контакт", interview: "Собеседование", assessment: "Тестовое задание" } as Record<string, string>)[rt.inviteHhStage ?? "phone_interview"]}</b>.
+                Итог: приглашённый получит ссылку на <b>{rt.inviteContentBlockId ? (inviteBlockChoices.find(b => b.id === rt.inviteContentBlockId)?.title ?? "выбранный блок") : "боевой демо-блок"}</b> и перейдёт в воронке hh.ru в стадию <b>{({ phone_interview: "Первичный контакт", interview: "Собеседование", assessment: "Тестовое задание" } as Record<string, string>)[rt.inviteHhStage ?? "phone_interview"]}</b>.
               </p>
             </>)}
           </div>
