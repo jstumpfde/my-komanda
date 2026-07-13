@@ -1,0 +1,255 @@
+export interface CronEntry {
+  name: string
+  endpoint: string
+  schedule: string | null
+  description: string
+}
+
+export const CRON_REGISTRY: CronEntry[] = [
+  {
+    name: "adaptation",
+    endpoint: "/api/cron/adaptation",
+    schedule: null,
+    description: "Адаптационный онбординг: отправка шагов и обновление прогресса",
+  },
+  {
+    name: "ai-chatbot-watcher",
+    endpoint: "/api/cron/ai-chatbot-watcher",
+    schedule: "0 * * * *",
+    description: "AI-аудит диалогов с кандидатами: мониторинг нарушений промпта",
+  },
+  {
+    name: "auto-invoices",
+    endpoint: "/api/cron/auto-invoices",
+    schedule: "*/15 * * * *",
+    description: "Автовыставление счетов за 7 дней до конца оплаченного периода",
+  },
+  {
+    name: "avito-incoming-messages",
+    endpoint: "/api/cron/avito-incoming-messages",
+    schedule: "*/15 * * * *",
+    description: "Резервная обработка входящих сообщений Авито (fallback к webhook)",
+  },
+  {
+    name: "b9-status-sanity",
+    endpoint: "/api/cron/b9-status-sanity",
+    schedule: "0 * * * *",
+    description: "Sanity-check расхождений статусов кандидатов (B9, только SELECT)",
+  },
+  {
+    name: "check-subscriptions",
+    endpoint: "/api/cron/check-subscriptions",
+    schedule: null,
+    description: "Перевод компаний с истёкшим триалом в статус expired",
+  },
+  {
+    name: "data-retention",
+    endpoint: "/api/cron/data-retention",
+    schedule: "0 1 * * *",
+    description: "ФЗ-152: обезличивание персональных данных отказанных кандидатов",
+  },
+  {
+    name: "dev-activity",
+    endpoint: "/api/cron/dev-activity",
+    schedule: "*/15 * * * *",
+    description: "Сбор активности подрядчика (git/SSH) и оценка Claude",
+  },
+  {
+    name: "flight-risk-alerts",
+    endpoint: "/api/cron/flight-risk-alerts",
+    schedule: null,
+    description: "Уведомления по сотрудникам с высоким/критическим риском увольнения",
+  },
+  {
+    name: "follow-up",
+    endpoint: "/api/cron/follow-up",
+    schedule: "*/5 * * * *",
+    description: "Дожим кандидатов: отправка запланированных follow-up сообщений",
+  },
+  {
+    name: "funnel-v2-tick",
+    endpoint: "/api/cron/funnel-v2-tick",
+    schedule: "*/5 * * * *",
+    description: "Тик рантайма воронки v2: планирование отправок",
+  },
+  {
+    name: "health-check",
+    endpoint: "/api/cron/health-check",
+    schedule: null,
+    description: "Проверка свежести прогонов критичных кронов (UptimeRobot)",
+  },
+  {
+    name: "hh-cleanup-stuck",
+    endpoint: "/api/cron/hh-cleanup-stuck",
+    schedule: null,
+    description: "Перевод зависших hh-откликов (с завершёнными кандидатами) в orphaned",
+  },
+  {
+    name: "hh-import",
+    endpoint: "/api/cron/hh-import",
+    schedule: "* * * * *",
+    description: "Импорт откликов с hh.ru и разбор очереди (каждую минуту)",
+  },
+  {
+    name: "hh-import-burst",
+    endpoint: "/api/cron/hh-import-burst",
+    schedule: null,
+    description: "Пакетный импорт hh.ru в N итераций (UI-кнопка «Разобрать всё»)",
+  },
+  {
+    name: "hh-incoming-messages",
+    endpoint: "/api/cron/hh-incoming-messages",
+    schedule: "*/5 * * * *",
+    description: "Входящие сообщения из hh-чата: классификация и автоответы",
+  },
+  {
+    name: "hh-negotiation-sync",
+    endpoint: "/api/cron/hh-negotiation-sync",
+    schedule: "0 6 * * *",
+    description: "Синк стадий hh → платформа (входящие переходы отклика)",
+  },
+  {
+    name: "hh-token-refresh",
+    endpoint: "/api/cron/hh-token-refresh",
+    schedule: "0 5 * * *",
+    description: "Обновление истёкших OAuth-токенов hh.ru у дормантных компаний",
+  },
+  {
+    name: "hh-vacancy-sync",
+    endpoint: "/api/cron/hh-vacancy-sync",
+    schedule: "30 2 * * *",
+    description: "Синк статуса публикации вакансий на hh (hh_archived, hh_expires_at)",
+  },
+  {
+    name: "hiring-watchdog",
+    endpoint: "/api/cron/hiring-watchdog",
+    schedule: "*/10 * * * *",
+    description: "Сторож найма: мониторинг работоспособности воронки hh/очереди/AI",
+  },
+  {
+    name: "hot-candidate-alerts",
+    endpoint: "/api/cron/hot-candidate-alerts",
+    schedule: "*/30 * * * *",
+    description: "Алерт «горячий кандидат стынет» — HR уведомление при незапущенном демо",
+  },
+  {
+    name: "interview-reminders",
+    endpoint: "/api/cron/interview-reminders",
+    schedule: "*/5 * * * *",
+    description: "Напоминания об интервью: 4 порога (за сутки / утро 9:00 / час / 15 мин)",
+  },
+  {
+    name: "knowledge-freshness",
+    endpoint: "/api/cron/knowledge-freshness",
+    schedule: null,
+    description: "Флаг устаревших материалов БЗ и уведомления директору/hr_lead",
+  },
+  {
+    name: "knowledge-gaps",
+    endpoint: "/api/cron/knowledge-gaps",
+    schedule: null,
+    description: "Еженедельный отчёт по неотвеченным вопросам БЗ + AI-рекомендации",
+  },
+  {
+    name: "knowledge-progress",
+    endpoint: "/api/cron/knowledge-progress",
+    schedule: null,
+    description: "Еженедельный отчёт по прогрессу обучения (завершили/отстают/просрочили)",
+  },
+  {
+    name: "knowledge-reminders",
+    endpoint: "/api/cron/knowledge-reminders",
+    schedule: null,
+    description: "Ежедневные напоминания сотруднику о дедлайне курса (< 3 дней)",
+  },
+  {
+    name: "knowledge-review",
+    endpoint: "/api/cron/knowledge-review",
+    schedule: null,
+    description: "Флаг материалов БЗ, требующих ревью по циклу или сроку",
+  },
+  {
+    name: "learn-given-names",
+    endpoint: "/api/cron/learn-given-names",
+    schedule: "*/15 * * * *",
+    description: "Самообучающийся платформенный справочник имён кандидатов (Claude)",
+  },
+  {
+    name: "pending-rejections",
+    endpoint: "/api/cron/pending-rejections",
+    schedule: "*/5 * * * *",
+    description: "Исполнение отложенных отказов кандидатам в рабочее время",
+  },
+  {
+    name: "prequalification",
+    endpoint: "/api/cron/prequalification",
+    schedule: "*/15 * * * *",
+    description: "Предквалификация: напоминания Д+1/Д+3 и таймаут без ответа",
+  },
+  {
+    name: "price-monitor-tick",
+    endpoint: "/api/cron/price-monitor-tick",
+    schedule: "*/15 * * * *",
+    description: "Тик мониторинга цен: обновление due-объектов",
+  },
+  {
+    name: "pulse-alerts",
+    endpoint: "/api/cron/pulse-alerts",
+    schedule: null,
+    description: "Алерты по низким оценкам пульс-опросов сотрудников",
+  },
+  {
+    name: "recalculate-flight-risk",
+    endpoint: "/api/cron/recalculate-flight-risk",
+    schedule: null,
+    description: "Пересчёт баллов риска увольнения по всем сотрудникам",
+  },
+  {
+    name: "recalculate-integrator-levels",
+    endpoint: "/api/cron/recalculate-integrator-levels",
+    schedule: null,
+    description: "Пересчёт уровней интеграторов по числу клиентов",
+  },
+  {
+    name: "sales-follow-up",
+    endpoint: "/api/cron/sales-follow-up",
+    schedule: "*/15 * * * *",
+    description: "Дожим лидов продаж: шаблонные сообщения по активным диалогам",
+  },
+  {
+    name: "talent-pool-cleanup",
+    endpoint: "/api/cron/talent-pool-cleanup",
+    schedule: "30 0 * * *",
+    description: "Жизненный цикл Резерва: архив → корзина → удаление навсегда",
+  },
+  {
+    name: "telegram-posting-tick",
+    endpoint: "/api/cron/telegram-posting-tick",
+    schedule: "*/5 * * * *",
+    description: "Очередь отложенных Telegram-постов платформы (scheduled_at <= now)",
+  },
+  {
+    name: "test-scoring-retry",
+    endpoint: "/api/cron/test-scoring-retry",
+    schedule: "*/10 * * * *",
+    description: "Повтор зависших AI-скорингов теста (страховка от сбоев прокси)",
+  },
+  {
+    name: "tip-reaper",
+    endpoint: "/api/cron/tip-reaper",
+    schedule: "*/15 * * * *",
+    description: "Подчистка зависших прогонов модуля «Типология» (pending/generating)",
+  },
+  {
+    name: "trash-cleanup",
+    endpoint: "/api/cron/trash-cleanup",
+    schedule: "0 0 * * *",
+    description: "Удаление навсегда вакансий/компаний/шаблонов из корзины по сроку",
+  },
+  {
+    name: "yandex-direct-agent",
+    endpoint: "/api/cron/yandex-direct-agent",
+    schedule: "0 3,9,15,21 * * *",
+    description: "AI-агент Яндекс.Директа: синк кампаний + оптимизация / автопилот",
+  },
+]

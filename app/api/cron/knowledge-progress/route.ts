@@ -10,6 +10,9 @@ import {
 } from "@/lib/db/schema"
 
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "knowledge-progress"
 
 // POST /api/cron/knowledge-progress — Protected by X-Cron-Secret header.
 // Weekly: для каждого тенанта — сводка по прогрессу обучения (завершили /
@@ -53,6 +56,7 @@ function progressPercent(progress: unknown, materials: unknown): number {
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
+  const run = await startCronRun(CRON_NAME).catch(() => null)
 
   const now = new Date()
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -164,6 +168,7 @@ export async function POST(req: NextRequest) {
       notified++
     }
 
+    if (run) await finishCronRun(run.id, "ok", { tenants: statsByTenant.size, completed: totCompleted, behind: totBehind, overdue: totOverdue, notified })
     return NextResponse.json({
       ok: true,
       tenants: statsByTenant.size,
@@ -175,6 +180,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     console.error("[cron/knowledge-progress]", err)
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
 }
