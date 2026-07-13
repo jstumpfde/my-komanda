@@ -169,6 +169,7 @@ function mapActionToLegacyStage(action: string): string | null {
     "test":             "test_task_sent",
     "task":             "test_task_sent",
     "interview":        "interview",
+    "decision":         "decision",
     "offer":            "final_decision",
     "hired":            "hired",
     "security_check":   "interview",
