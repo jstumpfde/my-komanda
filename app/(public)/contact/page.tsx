@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { SUPPORT_EMAIL } from "@/lib/constants"
 
 export const metadata: Metadata = {
   title: "Контакты | Company24",
@@ -16,10 +17,10 @@ export default function ContactPage() {
         <p className="text-lg md:text-xl text-gray-300 leading-relaxed">
           Свяжитесь с нами по почте:{" "}
           <a
-            href="mailto:hello@company24.pro"
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
           >
-            hello@company24.pro
+            {SUPPORT_EMAIL}
           </a>
           .
         </p>

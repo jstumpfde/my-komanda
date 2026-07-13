@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Briefcase, ArrowRight, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
+import { SUPPORT_EMAIL } from "@/lib/constants"
 
 // ─── VK / Яндекс иконки (простые монохром-бейджи в брендовых цветах) ──────────
 
@@ -212,7 +213,7 @@ function LoginForm({ vkEnabled, yandexEnabled }: { vkEnabled: boolean; yandexEna
               </Button>
 
               <p className="text-xs text-muted-foreground text-center mt-4">
-                <a href="mailto:hello@company24.pro">Нужна помощь?</a>
+                <a href={`mailto:${SUPPORT_EMAIL}`}>Нужна помощь?</a>
               </p>
             </form>
 
