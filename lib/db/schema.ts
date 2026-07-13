@@ -3851,3 +3851,62 @@ export const outreachIntegrations = pgTable("outreach_integrations", {
 })
 export type OutreachIntegration    = typeof outreachIntegrations.$inferSelect
 export type NewOutreachIntegration = typeof outreachIntegrations.$inferInsert
+
+// ─── Content Radar (модуль /kwigtg) ──────────────────────────────────────────
+// Личный «радар контента»: Telegram-каналы, Instagram сохранёнки/Директ.
+// radar_topics — дерево тем/подтем (parent_id). radar_items — единицы контента
+// с транскриптом, AI-сутью, темой/тегами и статусом «применяю / не применяю».
+export const radarTopics = pgTable("radar_topics", {
+  id:        uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  parentId:  uuid("parent_id"),                              // self-ref → подтема
+  name:      text("name").notNull(),
+  slug:      text("slug"),
+  color:     text("color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  index("radar_topics_company_idx").on(t.companyId),
+  index("radar_topics_parent_idx").on(t.parentId),
+])
+
+export type RadarSource     = "telegram" | "instagram_saved" | "instagram_dm"
+export type RadarItemStatus = "new" | "apply" | "skip" | "later"
+
+export const radarItems = pgTable("radar_items", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  companyId:      uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId:         uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  source:         text("source").$type<RadarSource>().notNull(),
+  sourceAccount:  text("source_account"),                   // откуда (канал/аккаунт)
+  viewedOn:       text("viewed_on"),                        // на каком моём аккаунте смотрел
+  externalId:     text("external_id"),                      // id в источнике (дедуп)
+  url:            text("url"),
+  mediaType:      text("media_type"),                       // video | image | text | link
+  mediaUrl:       text("media_url"),
+  title:          text("title"),
+  rawText:        text("raw_text"),
+  transcript:     text("transcript"),
+  summary:        text("summary"),
+  topicId:        uuid("topic_id").references(() => radarTopics.id, { onDelete: "set null" }),
+  tags:           jsonb("tags").$type<string[]>().notNull().default([]),
+  service:        text("service"),
+  status:         text("status").$type<RadarItemStatus>().notNull().default("new"),
+  pipelineStatus: text("pipeline_status").notNull().default("pending"),  // pending|transcribed|categorized|error
+  capturedAt:     timestamp("captured_at", { withTimezone: true }),
+  raw:            jsonb("raw"),
+  createdAt:      timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt:      timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (t) => [
+  uniqueIndex("radar_items_source_ext_idx").on(t.source, t.externalId),
+  index("radar_items_company_idx").on(t.companyId),
+  index("radar_items_user_idx").on(t.userId),
+  index("radar_items_topic_idx").on(t.topicId),
+  index("radar_items_status_idx").on(t.status),
+  index("radar_items_source_idx").on(t.source),
+])
+
+export type RadarTopic    = typeof radarTopics.$inferSelect
+export type NewRadarTopic = typeof radarTopics.$inferInsert
+export type RadarItem     = typeof radarItems.$inferSelect
+export type NewRadarItem  = typeof radarItems.$inferInsert
