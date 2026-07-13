@@ -65,7 +65,7 @@ export function classifyHhToken(integration: { isActive: boolean } | null): Watc
     dedupKey: "", // проставляется вызывающей стороной (нужен companyId)
     title:    "hh отключён",
     message:  "hh.ru интеграция деактивирована (refresh_token отвергнут) — нужна ручная переподключка в Настройках → Интеграции.",
-    actionUrl: "/hr/settings/integrations",
+    actionUrl: "/settings/integrations",
   }
 }
 
