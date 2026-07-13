@@ -49,6 +49,23 @@ export function aiScoringStuckDedupKey(companyId: string): string {
   return `ai_scoring_stuck:${companyId}`
 }
 
+// Платформенный (не per-company) — стабильный ключ, БЕЗ временного бакета.
+// Пока проблема продолжается, повторные прогоны находят открытый алерт по
+// этому же ключу и не создают дубль/не шлют Telegram повторно (см. upsertAlert).
+// Когда сбои прекращаются — исчезает из currentDedupKeys текущего прогона →
+// autoResolveStale закрывает алерт (тот же паттерн, что hh_import_stale).
+export function aiOutageSpikeDedupKey(): string {
+  return "ai_outage_spike"
+}
+
+export function blindInviteNoScoreDedupKey(): string {
+  return "blind_invite_no_score"
+}
+
+export function hhStageMismatchDedupKey(candidateId: string): string {
+  return `hh_stage_mismatch:${candidateId}`
+}
+
 // ─── Классификация hh-токена ────────────────────────────────────────────────
 // getValidToken() из lib/hh-helpers.ts возвращает null в двух принципиально
 // разных случаях: (1) интеграции нет вообще / isActive=false — деактивирована
@@ -178,6 +195,81 @@ export function classifyAiScoringStuck(
     title:    "AI-скоринг сбоит",
     message:  `${stuckCount} кандидат(ов) за 24ч застряли с entry_gate_ai_scoring_stuck — AI не смог оценить резюме, нужен ручной разбор.`,
     actionUrl: "/hr/candidates",
+  }
+}
+
+// ─── Классификация массового сбоя AI-вызовов (инцидент 13.07) ──────────────
+// screenResume/scoreResumeByAxes (и др. AI-скореры) при сбое API тихо глотали
+// ошибку → console.warn + return null, без структурированного лога. Лимит
+// Anthropic исчерпан несколько часов подряд остался незамеченным (38
+// кандидатов зависли без балла). lib/ai/failure-log.ts::logAiCallFailure
+// теперь пишет каждый такой сбой в ai_call_failures; здесь — платформенный
+// (across companies) порог за короткое скользящее окно. severity=critical
+// (в отличие от classifyAiScoringStuck выше — этот сигнал куда быстрее и
+// точнее указывает на первопричину, должен долетать до Telegram немедленно).
+export function classifyAiOutageSpike(
+  failureCount: number,
+  windowMinutes: number,
+  threshold = 5,
+): WatchdogIssue | null {
+  if (failureCount < threshold) return null
+  return {
+    severity: "critical",
+    dedupKey: aiOutageSpikeDedupKey(),
+    companyId: null,
+    title:    "AI недоступен — массовый сбой вызовов",
+    message:  `${failureCount} сбоев AI-вызовов (скоринг резюме/тестов/анкет) за последние ${windowMinutes} мин. Вероятная причина — исчерпан лимит Anthropic API или сбой прокси: проверьте console.anthropic.com/settings/limits и claude-proxy.jstumpf-de.workers.dev. Пока не починено — кандидаты не получают AI-оценку, часть приглашений может зависнуть.`,
+    actionUrl: "/admin/platform",
+  }
+}
+
+// ─── Классификация «слепого инвайта» без resume_score ───────────────────────
+// Вакансии БЕЗ настроенного входного гейта (isEntryGateConfigured=false) при
+// сбое AI-скоринга сохраняют legacy-поведение: приглашение уходит БЕЗ балла
+// (см. комментарий «слепой инвайт при сбое AI» в lib/hh/process-queue.ts).
+// Такой кандидат НЕ получает entry_gate_ai_scoring_stuck (эта причина ставится
+// только когда гейт настроен) — invisible для classifyAiScoringStuck выше.
+// Платформенный (не per-company) грубый индикатор: много кандидатов без
+// resume_score, продвинутых по воронке — обычно и есть первый видимый симптом
+// того же самого сбоя AI, который ловит classifyAiOutageSpike точнее.
+export function classifyBlindInviteNoScore(
+  count: number,
+  threshold = 5,
+): WatchdogIssue | null {
+  if (count < threshold) return null
+  return {
+    severity: "critical",
+    dedupKey: blindInviteNoScoreDedupKey(),
+    companyId: null,
+    title:    "Кандидаты продвинуты без AI-оценки резюме",
+    message:  `${count} кандидат(ов) платформенно за последние 48ч продвинуты по воронке (stage≠new) без resume_score — похоже на «слепой инвайт» при сбое AI-скоринга (вакансии без входного гейта). Проверьте, не сбоит ли AI (см. также «AI недоступен»), и разберите кандидатов вручную.`,
+    actionUrl: "/hr/candidates",
+  }
+}
+
+// ─── Классификация расхождения «наша стадия vs реальная hh-папка» ──────────
+// Инцидент 13.07: changeNegotiationState() в одном PUT и шлёт сообщение, и
+// переводит hh-папку — у части кандидатов из-за устаревшего inviteHhStage=
+// "consider" в vacancy_specs папка переводилась НЕ туда. Симметрично отправке
+// (см. lib/hh/process-queue.ts:764 + lib/hh-api.ts:364-369): ожидаемое hh-
+// состояние = spec.resumeThresholds.inviteHhStage конкретной вакансии
+// (дефолт phone_interview) — двойной action↔state маппинг там взаимно
+// сокращается до тождества, поэтому сравниваем напрямую.
+export function classifyHhStageMismatch(
+  candidateId: string,
+  companyId: string,
+  vacancyId: string,
+  expectedHhState: string,
+  actualHhState: string,
+): WatchdogIssue | null {
+  if (expectedHhState === actualHhState) return null
+  return {
+    severity: "critical",
+    dedupKey: hhStageMismatchDedupKey(candidateId),
+    companyId,
+    title:    "Кандидат на hh не в той папке",
+    message:  `Кандидат приглашён (ожидали hh-папку «${expectedHhState}»), но на hh.ru реально находится в «${actualHhState}» — наша воронка разошлась с hh. Проверьте вручную (могла отправиться не туда из-за настройки «Приглашать в стадию hh» в Портрете).`,
+    actionUrl: `/hr/vacancies/${vacancyId}`,
   }
 }
 

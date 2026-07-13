@@ -50,7 +50,9 @@ export interface InboundSyncResult {
 
 // Резолвим negotiation id кандидата (тот же двухшаговый lookup, что и в
 // channel-stage/route.ts и sync-stage.ts).
-async function resolveNegotiationId(candidateId: string, companyId: string): Promise<string | null> {
+// Экспортировано (13.07): переиспользуется watchdog-сверкой
+// lib/hiring-watchdog/hh-reconcile.ts — тот же поиск актуального negotiationId.
+export async function resolveNegotiationId(candidateId: string, companyId: string): Promise<string | null> {
   const [direct] = await db
     .select({ hhResponseId: hhResponses.hhResponseId })
     .from(hhResponses)
@@ -77,7 +79,8 @@ async function resolveNegotiationId(candidateId: string, companyId: string): Pro
 
 // Живой запрос текущего состояния negotiation. Возвращает state.id либо null
 // (403/404/сеть/таймаут — штатное «не получилось», синк не падает).
-async function fetchNegotiationState(accessToken: string, negotiationId: string): Promise<string | null> {
+// Экспортировано (13.07): переиспользуется watchdog-сверкой (см. выше).
+export async function fetchNegotiationState(accessToken: string, negotiationId: string): Promise<string | null> {
   try {
     const res = await fetch(`${HH_API_BASE}/negotiations/${negotiationId}`, {
       headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": USER_AGENT },

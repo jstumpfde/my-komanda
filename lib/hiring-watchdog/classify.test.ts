@@ -11,12 +11,18 @@ import {
   classifyOldPublicationCleanup,
   classifyCronStale,
   classifyAiScoringStuck,
+  classifyAiOutageSpike,
+  classifyBlindInviteNoScore,
+  classifyHhStageMismatch,
   hhTokenDeadDedupKey,
   hhImportStaleDedupKey,
   stuckQueueDedupKey,
   sendFailuresDedupKey,
   cronStaleDedupKey,
   aiScoringStuckDedupKey,
+  aiOutageSpikeDedupKey,
+  blindInviteNoScoreDedupKey,
+  hhStageMismatchDedupKey,
   minutesSince,
   shouldNotifyTelegram,
 } from "./classify"
@@ -224,4 +230,79 @@ test("minutesSince: считает целые минуты (округление
 test("minutesSince: ровно 0 минут для текущего момента", () => {
   const now = new Date("2026-07-07T12:00:00Z")
   assert.equal(minutesSince(now, now), 0)
+})
+
+// ─── AI outage spike (13.07 — детектор массового сбоя AI-вызовов) ──────────
+
+test("AI outage: dedup-ключ платформенный, стабильный, без временного бакета", () => {
+  assert.equal(aiOutageSpikeDedupKey(), "ai_outage_spike")
+  assert.equal(aiOutageSpikeDedupKey(), aiOutageSpikeDedupKey())
+})
+
+test("AI outage: < порога (5) → не проблема", () => {
+  assert.equal(classifyAiOutageSpike(4, 15, 5), null)
+})
+
+test("AI outage: ровно на пороге → CRITICAL платформенный", () => {
+  const issue = classifyAiOutageSpike(5, 15, 5)
+  assert.ok(issue)
+  assert.equal(issue!.severity, "critical")
+  assert.equal(issue!.companyId, null)
+  assert.equal(issue!.dedupKey, "ai_outage_spike")
+})
+
+test("AI outage: сообщение содержит число сбоев, окно и наводку на причину", () => {
+  const issue = classifyAiOutageSpike(9, 15, 5)
+  assert.ok(issue)
+  assert.match(issue!.message, /9/)
+  assert.match(issue!.message, /15/)
+  assert.match(issue!.message, /Anthropic/i)
+})
+
+test("AI outage: дефолтный порог = 5", () => {
+  assert.equal(classifyAiOutageSpike(4, 15), null)
+  assert.ok(classifyAiOutageSpike(5, 15))
+})
+
+// ─── Слепой инвайт без resume_score (13.07) ─────────────────────────────────
+
+test("слепой инвайт: dedup-ключ платформенный, стабильный", () => {
+  assert.equal(blindInviteNoScoreDedupKey(), "blind_invite_no_score")
+})
+
+test("слепой инвайт: < порога (5) → не проблема", () => {
+  assert.equal(classifyBlindInviteNoScore(4, 5), null)
+})
+
+test("слепой инвайт: ровно на пороге → CRITICAL платформенный", () => {
+  const issue = classifyBlindInviteNoScore(5, 5)
+  assert.ok(issue)
+  assert.equal(issue!.severity, "critical")
+  assert.equal(issue!.companyId, null)
+  assert.equal(issue!.dedupKey, "blind_invite_no_score")
+  assert.match(issue!.message, /5/)
+})
+
+// ─── Сверка «наша стадия vs реальная hh-папка» (13.07) ──────────────────────
+
+test("hh-сверка: dedup-ключ по кандидату (не по компании/вакансии)", () => {
+  assert.equal(hhStageMismatchDedupKey("cand-1"), "hh_stage_mismatch:cand-1")
+  assert.notEqual(hhStageMismatchDedupKey("cand-1"), hhStageMismatchDedupKey("cand-2"))
+})
+
+test("hh-сверка: ожидание совпадает с реальностью → не проблема", () => {
+  assert.equal(
+    classifyHhStageMismatch("cand-1", "company-1", "vac-1", "phone_interview", "phone_interview"),
+    null,
+  )
+})
+
+test("hh-сверка: расхождение (инцидент 13.07 — stale inviteHhStage=consider) → CRITICAL", () => {
+  const issue = classifyHhStageMismatch("cand-1", "company-1", "vac-1", "phone_interview", "consider")
+  assert.ok(issue)
+  assert.equal(issue!.severity, "critical")
+  assert.equal(issue!.companyId, "company-1")
+  assert.equal(issue!.dedupKey, "hh_stage_mismatch:cand-1")
+  assert.match(issue!.message, /phone_interview/)
+  assert.match(issue!.message, /consider/)
 })
