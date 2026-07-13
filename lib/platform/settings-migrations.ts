@@ -68,6 +68,34 @@ export const SETTINGS_MIGRATIONS: SettingsMigration[] = [
       return { affectedCount: 1 }
     },
   },
+  {
+    // Инцидент 13.07 (вакансия «Менеджер по продажам IT», 624a9677…): до фикса
+    // 29.06/11.07 наименования hh-стадий были перепутаны — resumeThresholds.
+    // inviteHhStage="consider" считался «Первичный контакт», хотя на hh.ru
+    // это «Подумать» (phone_interview — реальный «Первичный контакт»).
+    // Схема (lib/core/spec/types.ts) и UI (spec-editor.tsx) дефолт уже
+    // "phone_interview", from-legacy.ts тоже пишет "phone_interview" — но
+    // УЖЕ СОХРАНЁННЫЕ specs с явным "consider" остаются как есть (дефолт
+    // zod применяется только к отсутствующему полю). Одноразовый скрипт
+    // scripts/hh-fix-primary-contact-stage.ts 08.07 поправил ОДНУ вакансию
+    // вручную — здесь платформенно докатываем на все специи, где
+    // auto-invite активно шлёт кандидатов не в ту hh-папку.
+    id: "2026-07-13-fix-consider-invite-hh-stage",
+    description: "vacancy_specs.spec.resumeThresholds.inviteHhStage: consider → phone_interview (стадии были перепутаны до 29.06/11.07)",
+    apply: async (db) => {
+      const result = await db.execute(sql`
+        UPDATE vacancy_specs
+        SET spec = jsonb_set(
+          spec,
+          '{resumeThresholds,inviteHhStage}',
+          '"phone_interview"'::jsonb
+        )
+        WHERE spec->'resumeThresholds'->>'inviteHhStage' = 'consider'
+        RETURNING vacancy_id
+      `)
+      return { affectedCount: result.length }
+    },
+  },
 ]
 
 export interface RunMigrationsReport {
