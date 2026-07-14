@@ -39,7 +39,12 @@ const PER_CANDIDATE_DELAY_MS = 200 // вежливо к rate-limit hh
 // Используется как fallback, когда порядок текущей стадии в каноне неизвестен
 // (экзотический/side-slug). Основная защита — сравнение по каноническому
 // порядку (см. shouldMoveForward ниже).
-const NON_REGRESSABLE = new Set(["hired", "started_work", "rejected"])
+// talent_pool/pending (predeploy-guard 14.07) — живые ручные side-branch
+// стадии (кнопки «В резерв»/«Подумаем», авто-резерв funnel-v2 score-gate) —
+// у них нет канонического sortOrder (не входят в PLATFORM_STAGES/
+// LEGACY_STAGE_ALIAS), поэтому без явной защиты попадали в permissive
+// fallback ниже и утекали в тот же класс регрессии, что и demo_opened.
+const NON_REGRESSABLE = new Set(["hired", "started_work", "rejected", "talent_pool", "pending"])
 
 // Legacy-slug'и второй системы статусов (см. lib/stages.ts LEGACY_STAGE_LABELS)
 // приводим к каноническому «родственнику», чтобы сравнение порядка работало и
