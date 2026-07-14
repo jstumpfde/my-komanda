@@ -658,6 +658,19 @@ async function processOneTouch(
       console.info(`[cron/follow-up] ${msg.candidateId} skip_low_portrait score=${scoreRow?.resumeScore} threshold=${campaign.minPortraitScore} branch=${msg.branch}`)
       // Не отменяем (кандидат может быть пересчитан позже) — держим pending,
       // следующий тик перепроверит. Симметрично с outbound_paused/mutex skip.
+      //
+      // Инцидент 11-14.07 (head-of-line blocking): раньше scheduled_at тут НЕ
+      // менялся → одна и та же порция обречённых pending-строк (ORDER BY
+      // scheduled_at ASC LIMIT 200, см. processCampaignTouches) заново
+      // попадала в выборку каждый тик и съедала всё окно LIMIT — до нуля
+      // отправок падало вообще всё, включая касания вроде schedule_invite/
+      // second_demo_invite, которых этот гейт не касается (они просто не
+      // долетали до SELECT). Балл может подняться после рескора — переносим
+      // scheduled_at на +6ч, чтобы строка ушла из головы очереди, но тик её
+      // ещё раз переоценил.
+      await db.update(followUpMessages)
+        .set({ scheduledAt: new Date(now.getTime() + 6 * 60 * 60 * 1000) })
+        .where(eq(followUpMessages.id, msg.id))
       return { outcome: "skipped", reason: gateDecision.reason }
     }
   }
@@ -676,6 +689,15 @@ async function processOneTouch(
       return { outcome: "cancelled", reason: mutex.reason }
     }
     // action === "skip" — оставляем pending, следующий cron перепроверит.
+    //
+    // Инцидент 11-14.07 (head-of-line blocking, см. комментарий у гейта
+    // Портрета выше): scheduled_at раньше не двигался → legacy-хвост
+    // вакансий, переведённых на v2, вечно торчал в голове очереди (ORDER BY
+    // scheduled_at ASC LIMIT 200) и съедал весь LIMIT каждый тик. Мьютекс
+    // обратим (v2 могут выключить обратно) — переносим на +24ч вместо cancel.
+    await db.update(followUpMessages)
+      .set({ scheduledAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) })
+      .where(eq(followUpMessages.id, msg.id))
     return { outcome: "skipped", reason: mutex.reason }
   }
 
