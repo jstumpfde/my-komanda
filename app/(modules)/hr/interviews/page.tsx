@@ -16,16 +16,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuCheckboxItem,
+  DropdownMenuSeparator, DropdownMenuCheckboxItem, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
 import { Video, Building2, ExternalLink, ChevronLeft, ChevronRight, List, CalendarDays, CalendarRange, Clock, Settings, Plus, GripVertical, Pencil, Trash2, Save, X, LayoutGrid, Phone, Check, Minus, FileText, ClipboardCheck, Sparkles, CalendarClock, Link2, UserCheck, Loader2, Tag } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { CalendarView } from "@/components/calendar/calendar-view"
-import { getStageLabel } from "@/lib/stages"
+import { getStageLabel, PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
 import { REJECTION_REASONS } from "@/lib/hr/rejection-reasons"
 import { StageMessageControl } from "@/components/candidates/stage-message-control"
-import { filterByStageCondition, type StageCondition, type InterviewDecision } from "@/lib/interviews/stage-filters"
+import { filterByStageCondition, hideSupersededCancelled, type StageCondition, type InterviewDecision } from "@/lib/interviews/stage-filters"
+import { DemoProgressBar, calcDemoPercent, type DemoProgressData } from "@/components/hr/demo-progress-bar"
+import { getDemoProgressGroup, getDemoProgressPercent } from "@/lib/demo-progress-groups"
 
 // ─── Типы ────────────────────────────────────────────────────
 
@@ -61,11 +63,33 @@ const INTERVIEW_DECISION_OPTIONS: { id: NonNullable<InterviewDecision>; label: s
   { id: "reserve", label: "В резерв" },
 ]
 
+// Отдельная стадия «Отменённые» (status="Отменено") — отменённые интервью
+// живут только здесь, из активных табов (Предстоящие/Сегодня/Прошедшие) они
+// исключены (см. lib/interviews/stage-filters.ts). Дефолтная (не удаляется).
+const CANCELLED_STAGE: Stage = { id: "cancelled", name: "Отменённые", emoji: "❌", color: "#9ca3af", condition: "status_cancelled", isDefault: true }
+
 const DEFAULT_STAGES: Stage[] = [
   { id: "upcoming", name: "Предстоящие", emoji: "📅", color: "#3b82f6", condition: "date_after", isDefault: true },
   { id: "today", name: "Сегодня", emoji: "🌅", color: "#f59e0b", condition: "date_today", isDefault: true },
   { id: "past", name: "Прошедшие", emoji: "✅", color: "#22c55e", condition: "date_before", isDefault: true },
+  CANCELLED_STAGE,
 ]
+
+// Владелец 14.07 свёл раздел «Интервью» к 5 табам: Все + Предстоящие + Сегодня
+// + Прошедшие + Отменённые. Устаревшие «Повторные»/«Прошёл» (condition
+// repeat_interview / outcome_passed) убраны — они путали (исход интервью теперь
+// отмечается прямо на карточке через «Отметить исход», см. InterviewOutcomeMenu).
+// Миграция: стрипаем эти два condition-типа у компаний, сохранивших стадии
+// раньше, и гарантируем дефолтный таб «Отменённые». changed=true → перезаписать
+// сохранённый список (одноразово, как legacy-миграция).
+const RETIRED_CONDITIONS: StageCondition[] = ["repeat_interview", "outcome_passed"]
+function migrateInterviewStages(list: Stage[]): { stages: Stage[]; changed: boolean } {
+  const stripped = list.filter(s => !RETIRED_CONDITIONS.includes(s.condition))
+  const withCancelled = stripped.some(s => s.condition === "status_cancelled")
+    ? stripped
+    : [...stripped, CANCELLED_STAGE]
+  return { stages: withCancelled, changed: withCancelled.length !== list.length }
+}
 
 // Задача 1c (13.07): стадии раньше жили ТОЛЬКО в localStorage браузера
 // (per-браузер, не per-компания — у Revoluterra стадии «Повторные»/«Прошёл»
@@ -86,12 +110,14 @@ function loadLocalStagesLegacy(): Stage[] | null {
   } catch { return null }
 }
 
-const CONDITION_LABELS: Record<StageCondition, string> = {
-  manual: "Вручную", date_before: "До сегодня", date_today: "Сегодня", date_after: "После сегодня",
+// Условия, доступные HR при создании/редактировании кастомной стадии.
+// «Повторное интервью»/«Исход: прошёл» (repeat_interview/outcome_passed)
+// НЕ предлагаем — раздел сведён к 5 табам, исход отмечается на карточке
+// (см. миграцию migrateInterviewStages и InterviewOutcomeMenu). Типы условий
+// остаются в lib/interviews/stage-filters.ts для обратной совместимости.
+const CONDITION_LABELS: Partial<Record<StageCondition, string>> = {
+  manual: "Вручную", date_before: "Прошедшие", date_today: "Сегодня", date_after: "Предстоящие",
   status_confirmed: "Статус: Подтверждено", status_pending: "Статус: Ожидает", status_cancelled: "Статус: Отменено",
-  // 1b: новые условия попадания.
-  repeat_interview: "Повторное интервью",
-  outcome_passed: "Исход: прошёл (Дальше/Оффер)",
 }
 
 const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞", "🎯", "🏆", "🔔", "💼", "🎥", "🤝"]
@@ -99,12 +125,16 @@ const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞
 // ─── Данные ──────────────────────────────────────────────────
 
 interface Interview {
-  id: string; date: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
+  id: string; date: Date; endAt: Date; time: string; endTime: string; candidate: string; vacancy: string; interviewer: string; type: InterviewType; format: InterviewFormat; status: InterviewStatus
   candidateId: string | null
   vacancyId: string | null
   // Контекст кандидата (из JOIN в /calendar) — для наполнения карточки.
   aiScore: number | null; resumeScore: number | null; phone: string | null; stage: string | null
   anketaFilled: boolean; tested: boolean; testScore: number | null; answersScore: number | null
+  // Обогащение карточки (город/зарплата/демо/источник) — те же поля, что и на
+  // карточке кандидата (components/dashboard/candidate-card.tsx).
+  city: string | null; salaryMin: number | null; salaryMax: number | null; source: string | null
+  demoProgressJson: DemoProgressData | null
   // Виртуальная карточка «Интервью проведено (по стадии)» — кандидат уже на
   // стадии final_decision/decision/hired, но события календаря нет (интервью
   // прошло вне системы или бронирование не создавалось). См. п.2 задачи 04.07.
@@ -120,7 +150,16 @@ interface Interview {
 // календаря — «ждёт назначения времени» (п.1 задачи 04.07).
 interface WaitingCandidate {
   id: string; name: string; stage: string | null; phone: string | null; token: string | null
+  // Номера пройденных демо-блоков (API отдаёт completedDemoBlockIndexes) — для
+  // индикатора «⚠ не прошёл Демо-3» у кандидатов stage='interview'. Стадию НЕ
+  // трогаем (владелец 14.07): кандидат остаётся в списке и может быть записан.
+  completedDemoBlockIndexes: number[]
 }
+
+// Наивысший демо-блок воронки (Демо-3). Кандидат на стадии interview, у
+// которого этого индекса нет в completedDemoBlockIndexes, Демо-3 ещё не прошёл —
+// показываем лёгкий бейдж (напоминание кандидату шлёт отдельный агент).
+const HIGHEST_DEMO_BLOCK_INDEX = 3
 
 // ВРЕМЕННАЯ РАЗОВАЯ ПОМЕТКА (не системная фича!) — 14.07.2026.
 // Координатор вручную сверил nginx-логи (IP ручных кликов HR) с БД и
@@ -176,9 +215,25 @@ interface CalEvent {
   interviewDecision?: string | null
   candAiScore?: number | null; candResumeScore?: number | null; candScore?: number | null; candPhone?: string | null; candStage?: string | null
   candAnketaFilled?: boolean; candTested?: boolean; candTestScore?: number | null; candAnswersScore?: number | null
+  candCity?: string | null; candSalaryMin?: number | null; candSalaryMax?: number | null; candSource?: string | null
+  candDemoProgressJson?: DemoProgressData | null
 }
 function timeStr(dt: Date): string {
   return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`
+}
+// В разделе «Интервью» префикс «Интервью — » в заголовке события избыточен
+// (мы и так в разделе интервью) и съедает место под ФИО — обрезает его.
+// Показываем только ФИО. Тот же регэксп уже применяется в диалогах отмены/переноса.
+function stripInterviewPrefix(title: string): string {
+  return title.replace(/^Интервью\s*—\s*/, "")
+}
+// Желаемая зарплата — формат как на карточке кандидата (candidate-card.tsx).
+// null/0 в обоих полях → ничего не показываем.
+function formatSalaryRange(min: number | null, max: number | null): string | null {
+  if (!min && !max) return null
+  const lo = min ? min.toLocaleString("ru-RU") : "…"
+  const hi = max ? max.toLocaleString("ru-RU") : "…"
+  return min && max ? `${lo} – ${hi} руб.` : `${min ? "от " : "до "}${min ? lo : hi} руб.`
 }
 function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Interview {
   const start = new Date(ev.startAt)
@@ -201,9 +256,10 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
   return {
     id: ev.id,
     date: start,
+    endAt: end,
     time: timeStr(start),
     endTime: timeStr(end),
-    candidate: ev.title || "Интервью",
+    candidate: stripInterviewPrefix(ev.title || "Интервью"),
     vacancy: (ev.vacancyId && vacMap.get(ev.vacancyId)) || "—",
     interviewer: ev.interviewer || "—",
     type, format, status,
@@ -217,6 +273,11 @@ function mapEventToInterview(ev: CalEvent, vacMap: Map<string, string>): Intervi
     tested: ev.candTested ?? false,
     testScore: ev.candTestScore ?? null,
     answersScore: ev.candAnswersScore ?? null,
+    city: ev.candCity ?? null,
+    salaryMin: ev.candSalaryMin ?? null,
+    salaryMax: ev.candSalaryMax ?? null,
+    source: ev.candSource ?? null,
+    demoProgressJson: ev.candDemoProgressJson ?? null,
     interviewDecision,
   }
 }
@@ -346,6 +407,62 @@ function InterviewTagMenu({
   )
 }
 
+// Стадии, к которым HR может двигать кандидата ПОСЛЕ интервью (канон lib/stages.ts,
+// sortOrder > interview). Порядок — как в воронке.
+const NEXT_STAGE_SLUGS: StageSlug[] = ["reference_check", "decision", "offer_sent", "hired"]
+
+// Порядковый номер стадии в каноне (для гарда «не откатывать назад»). Легаси/
+// неизвестные слаги (talent_pool и т.п.) → -1 (в гарде форвард-переходов не участвуют).
+function stageOrder(slug: string | null | undefined): number {
+  return slug && slug in PLATFORM_STAGES ? PLATFORM_STAGES[slug as StageSlug].sortOrder : -1
+}
+
+// B (14.07): ручная отметка исхода прошедшего интервью. Оффер / следующий шаг
+// воронки / не пришёл / перенесён / отказ — прямо с карточки. Пишет
+// interviewDecision|interviewOutcome на событие и двигает стадию кандидата
+// (через колбэки родителя). Показывается только на ПРОШЕДШИХ реальных карточках.
+function InterviewOutcomeMenu({
+  iv, onOffer, onMoveStage, onOutcome, onReject,
+}: {
+  iv: Interview
+  onOffer: (iv: Interview) => void
+  onMoveStage: (iv: Interview, slug: StageSlug) => void
+  onOutcome: (iv: Interview, outcome: "no_show" | "rescheduled") => void
+  onReject: (iv: Interview) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline" size="sm" className="gap-1 text-xs h-7"
+          onClick={e => e.stopPropagation()}
+          title="Отметить исход интервью"
+        >
+          <ClipboardCheck className="h-3.5 w-3.5" /> Отметить исход
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56" onClick={e => e.stopPropagation()}>
+        <DropdownMenuLabel className="text-[10px] text-muted-foreground">Исход интервью</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => onOffer(iv)}>💼 Оффер</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] text-muted-foreground">Двигать к стадии</DropdownMenuLabel>
+        {NEXT_STAGE_SLUGS.map(slug => (
+          <DropdownMenuItem key={slug} onSelect={() => onMoveStage(iv, slug)}>
+            {getStageLabel(slug)}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onOutcome(iv, "no_show")}>🚫 Не пришёл</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onOutcome(iv, "rescheduled")}>🔄 Перенесён</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => onReject(iv)}>
+          ❌ Отказать
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function MiniCard({ iv, compact }: { iv: Interview; compact?: boolean }) {
   return (
     <div className={cn("rounded-lg border p-2 transition-all cursor-pointer", STATUS_STYLES[iv.status], compact && "p-1.5")}>
@@ -424,9 +541,18 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           }
           setMethodDurations(map)
         }
-        // 1c: стадии — сервер, если там уже что-то есть.
+        // 1c + 14.07: стадии — сервер, если там уже что-то есть. migrateInterviewStages
+        // приводит их к набору из 5 табов (убирает «Повторные»/«Прошёл», добирает
+        // «Отменённые»); если что-то изменилось — перезаписываем сохранённый список.
         if (Array.isArray(hd.interviewStages) && hd.interviewStages.length > 0) {
-          setStages(hd.interviewStages)
+          const { stages: migrated, changed } = migrateInterviewStages(hd.interviewStages)
+          setStages(migrated)
+          if (changed) {
+            void fetch("/api/modules/hr/company/hiring-defaults", {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ interviewStages: migrated }),
+            }).catch(() => {})
+          }
         } else {
           // Одноразовая миграция: у этого HR в ЭТОМ браузере могли остаться
           // кастомные стадии из старого localStorage-хранилища (баг 1c) —
@@ -434,10 +560,11 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           // кейс из отчёта координатора).
           const legacy = loadLocalStagesLegacy()
           if (legacy) {
-            setStages(legacy)
+            const { stages: migrated } = migrateInterviewStages(legacy)
+            setStages(migrated)
             void fetch("/api/modules/hr/company/hiring-defaults", {
               method: "PATCH", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ interviewStages: legacy }),
+              body: JSON.stringify({ interviewStages: migrated }),
             }).catch(() => {})
           }
         }
@@ -720,10 +847,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
       // apiSuccess отдаёт data напрямую (без обёртки); при pageSize — { candidates, total, ... }.
       const list = (json?.candidates ?? json ?? []) as {
         id: string; name?: string; stage?: string | null; phone?: string | null; token?: string | null; nextInterviewAt?: string | null
+        completedDemoBlockIndexes?: number[]
       }[]
       const waiting = (Array.isArray(list) ? list : [])
         .filter(c => (c.stage === "interview" || c.stage === "scheduled") && !c.nextInterviewAt)
-        .map(c => ({ id: c.id, name: c.name || "Без имени", stage: c.stage ?? null, phone: c.phone ?? null, token: c.token ?? null }))
+        .map(c => ({
+          id: c.id, name: c.name || "Без имени", stage: c.stage ?? null, phone: c.phone ?? null, token: c.token ?? null,
+          completedDemoBlockIndexes: Array.isArray(c.completedDemoBlockIndexes) ? c.completedDemoBlockIndexes : [],
+        }))
       setWaitingCandidates(waiting)
 
       // п.2: «Передан» (final_decision) и решение/нанят — считаем интервью
@@ -820,18 +951,26 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   // interview_status, статус события — ближайший (для конфликтов/напоминаний C6).
   const updateInterview = (id: string, patch: Partial<Interview>, msg?: string) => {
     const current = interviews.find(iv => iv.id === id)
-    setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
     if (msg) toast(msg)
-    if (!current) return
+    if (!current) {
+      setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...patch } : iv))
+      return
+    }
     const merged = { ...current, ...patch }
     const body: Record<string, unknown> = {}
+    // localPatch — то же, что уходит в state; при переносе синхронизируем
+    // date/endAt (Date) с новыми time/endTime, иначе endAt-таб («Прошедшие»)
+    // читал бы устаревшее время перенесённого события.
+    const localPatch: Partial<Interview> = { ...patch }
     if (patch.time !== undefined || patch.endTime !== undefined || patch.date !== undefined) {
       const [sh, sm] = merged.time.split(":").map(Number)
       const [eh, em] = merged.endTime.split(":").map(Number)
       const start = new Date(merged.date); start.setHours(sh, sm, 0, 0)
       const end = new Date(merged.date); end.setHours(eh, em, 0, 0)
       body.startAt = start.toISOString(); body.endAt = end.toISOString()
+      localPatch.date = start; localPatch.endAt = end
     }
+    setInterviews(prev => prev.map(iv => iv.id === id ? { ...iv, ...localPatch } : iv))
     if (patch.status !== undefined) {
       body.interviewStatus = patch.status
       body.status = patch.status === "Отменено" || patch.status === "Не явился" ? "cancelled"
@@ -842,6 +981,83 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       }).catch(() => {})
     }
+  }
+
+  // ─── B (14.07): ручная отметка исхода прошедшего интервью ───────────────────
+  // Двигает стадию кандидата через PUT /candidates/[id]/stage. Гард: не
+  // откатываем назад по канону (кроме терминальных rejected/talent_pool —
+  // явное решение HR). Возвращает true, если стадия сдвинута ИЛИ уже была ≥ цели.
+  const moveCandidateStage = async (candidateId: string, target: string, currentStage: string | null): Promise<boolean> => {
+    const terminal = target === "rejected" || target === "talent_pool"
+    if (!terminal && stageOrder(currentStage) >= stageOrder(target)) return true // уже на/после цели — не двигаем назад
+    const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      // sendMessage:false — тихий сдвиг стадии из отметки исхода (сообщение
+      // кандидату — отдельным осознанным действием, не побочным эффектом).
+      body: JSON.stringify({ stage: target, sendMessage: false, ...(target === "rejected" ? { rejectionInitiator: "company" } : {}) }),
+    }).catch(() => null)
+    return Boolean(res?.ok)
+  }
+
+  // Пишет исход (decision/outcome) на событие через существующий PATCH /calendar/[id].
+  const patchOutcome = (id: string, body: Record<string, unknown>) =>
+    fetch(`/api/modules/hr/calendar/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }).catch(() => null)
+
+  const outcomeOffer = async (iv: Interview) => {
+    setInterviewDecision(iv.id, "offer")
+    if (iv.candidateId) await moveCandidateStage(iv.candidateId, "offer_sent", iv.stage)
+    toast.success("Исход: оффер — кандидат передвинут к «Оффер»")
+    await loadInterviews()
+  }
+
+  const outcomeMoveStage = async (iv: Interview, target: StageSlug) => {
+    if (!iv.candidateId) { toast.error("Кандидат не привязан к записи"); return }
+    // Решение по интервью: движение к офферу/найму = «оффер», иначе «дальше».
+    setInterviewDecision(iv.id, (target === "offer_sent" || target === "hired") ? "offer" : "advance")
+    const ok = await moveCandidateStage(iv.candidateId, target, iv.stage)
+    toast[ok ? "success" : "error"](ok ? `Кандидат → ${getStageLabel(target)}` : "Не удалось сдвинуть стадию")
+    await loadInterviews()
+  }
+
+  const outcomeMark = async (iv: Interview, outcome: "no_show" | "rescheduled") => {
+    // no_show дополнительно ставит статус «Не явился» на самом событии (для карточки).
+    await patchOutcome(iv.id, outcome === "no_show"
+      ? { interviewOutcome: "no_show", interviewStatus: "Не явился" }
+      : { interviewOutcome: "rescheduled" })
+    if (outcome === "no_show") {
+      setInterviews(prev => prev.map(x => x.id === iv.id ? { ...x, status: "Не явился" } : x))
+    }
+    toast(outcome === "no_show" ? "Отмечено: кандидат не пришёл" : "Отмечено: интервью перенесено")
+    await loadInterviews()
+  }
+
+  // Добавить отклонённого кандидата в резерв (talent_pool) — по подсказке ниже.
+  const reserveCandidate = async (candidateId: string) => {
+    const res = await fetch(`/api/modules/hr/candidates/${candidateId}/stage`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: "talent_pool", sendMessage: false }),
+    }).catch(() => null)
+    toast[res?.ok ? "success" : "error"](res?.ok ? "Кандидат добавлен в резерв" : "Не удалось добавить в резерв")
+  }
+
+  const outcomeReject = async (iv: Interview) => {
+    if (!iv.candidateId) { toast.error("Кандидат не привязан к записи"); return }
+    const candidateId = iv.candidateId
+    setInterviewDecision(iv.id, "reject")
+    const ok = await moveCandidateStage(candidateId, "rejected", iv.stage)
+    if (!ok) { toast.error("Не удалось отклонить кандидата"); return }
+    toast.error("Кандидат отклонён")
+    // Подсказка «в резерв на будущее» — только для сильных кандидатов (балл ≥ 50).
+    const score = iv.aiScore ?? iv.resumeScore ?? 0
+    if (score >= 50) {
+      toast("Балл кандидата высокий", {
+        description: "Добавить в резерв на будущее?",
+        action: { label: "В резерв", onClick: () => void reserveCandidate(candidateId) },
+      })
+    }
+    await loadInterviews()
   }
 
   const ivDragStart = (id: string) => setDragIvId(id)
@@ -912,29 +1128,35 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     ivDragEnd()
   }
 
+  // п.3 (14.07): отменённое интервью кандидата, который позже перезаписался
+  // (есть более позднее активное событие), не должно висеть НИГДЕ — прячем во
+  // всех видах (список/канбан/месяц/неделя/день). Чистая логика — в
+  // lib/interviews/stage-filters.ts (юнит-тест).
+  const visibleInterviews = useMemo(() => hideSupersededCancelled(interviews), [interviews])
+
   // п.2: интервью-список для вида «Список» = реальные события + виртуальные
   // «Интервью проведено (по стадии)» для кандидатов final_decision/decision/hired
   // без ПРОШЕДШЕГО события type=interview. Виртуальная карта датируется «сейчас»,
   // чтобы попадать в «Прошедшие» (date_before) и не путаться с «Предстоящими».
-  // ТОЛЬКО для списка — Месяц/Неделя/День/Канбан продолжают читать `interviews` как есть (п.4).
   const interviewsForList = useMemo(() => {
-    if (passedByStageCandidates.length === 0) return interviews
+    if (passedByStageCandidates.length === 0) return visibleInterviews
     const candidateIdsWithPastEvent = new Set(
-      interviews.filter(iv => iv.candidateId && iv.date < new Date()).map(iv => iv.candidateId as string),
+      visibleInterviews.filter(iv => iv.candidateId && iv.date < new Date()).map(iv => iv.candidateId as string),
     )
     const virtualNow = new Date(Date.now() - 1000) // на секунду в прошлом — гарантированно "до сегодня"
     const virtuals: Interview[] = passedByStageCandidates
       .filter(c => !candidateIdsWithPastEvent.has(c.id))
       .map(c => ({
-        id: `stage-virtual-${c.id}`, date: virtualNow, time: "—", endTime: "—",
+        id: `stage-virtual-${c.id}`, date: virtualNow, endAt: virtualNow, time: "—", endTime: "—",
         candidate: c.name, vacancy: vacOptions.find(v => v.id === vacancyId)?.title ?? "—",
         interviewer: "—", type: "HR" as InterviewType, format: "Онлайн" as InterviewFormat, status: "Пройдено" as InterviewStatus,
         candidateId: c.id, vacancyId: vacancyId ?? null, aiScore: null, resumeScore: null, phone: null, stage: c.stage,
-        anketaFilled: false, tested: false, testScore: null, answersScore: null, byStageOnly: true,
+        anketaFilled: false, tested: false, testScore: null, answersScore: null,
+        city: null, salaryMin: null, salaryMax: null, source: null, demoProgressJson: null, byStageOnly: true,
         interviewDecision: null,
       }))
-    return [...interviews, ...virtuals]
-  }, [interviews, passedByStageCandidates, vacOptions, vacancyId])
+    return [...visibleInterviews, ...virtuals]
+  }, [visibleInterviews, passedByStageCandidates, vacOptions, vacancyId])
 
   const currentStage = stages.find(s => s.id === activeStage) || stages[0]
   // 1a/1b: стадии с условием "Вручную" / "Исход: прошёл" — только они рендерят
@@ -1015,7 +1237,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const calDays = Array.from({ length: calWeeks * 7 }, (_, i) => { const dn = i - firstDay + 1; return (dn < 1 || dn > daysInMonth) ? null : new Date(calYear, calMonth, dn) })
 
   const viewDay = new Date(today2); viewDay.setDate(viewDay.getDate() + dayOffset)
-  const dayInterviews = interviews.filter(iv => isSameDay(iv.date, viewDay)).sort((a, b) => a.time.localeCompare(b.time))
+  const dayInterviews = visibleInterviews.filter(iv => isSameDay(iv.date, viewDay)).sort((a, b) => a.time.localeCompare(b.time))
   const dayHours = Array.from({ length: 12 }, (_, i) => i + 9)
 
   const weekStart = useMemo(() => {
@@ -1082,14 +1304,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                     ))}
                   </TabsList>
                 </Tabs>
-                <Badge variant="outline" className="text-[10px] px-1.5 h-4">{interviews.length}</Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 h-4">{visibleInterviews.length}</Badge>
                 {/* В Канбане фильтр времени — компактным дропдауном прямо в шапке */}
                 {view === "kanban" && (
                   <Select value={activeStage} onValueChange={setActiveStage}>
                     <SelectTrigger className="h-7 w-auto min-w-[160px] text-xs gap-1.5"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" className="text-xs">
-                        <span className="mr-1.5">🗂</span>Все · {interviews.length}
+                        <span className="mr-1.5">🗂</span>Все · {visibleInterviews.length}
                       </SelectItem>
                       {stages.map(s => (
                         <SelectItem key={s.id} value={s.id} className="text-xs">
@@ -1165,6 +1387,15 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                 <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
                               )}
                               {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(iv.stage)}</Badge>}
+                              {/* Бейдж прогресса демо — как на карточке кандидата (candidate-card.tsx). */}
+                              {!iv.byStageOnly && (() => {
+                                const demoGroup = getDemoProgressGroup(getDemoProgressPercent(iv.demoProgressJson))
+                                return (
+                                  <span className={cn("rounded-md px-1.5 h-5 text-[10px] font-semibold inline-flex items-center justify-center border", demoGroup.badgeClass)} title={`Демо: ${demoGroup.label}`}>
+                                    {demoGroup.label}
+                                  </span>
+                                )
+                              })()}
                             </div>
                             {iv.byStageOnly && (
                               <p className="text-xs text-muted-foreground">Интервью проведено (этап «{getStageLabel(iv.stage)}»)</p>
@@ -1172,10 +1403,28 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                               <Badge variant="outline" className={cn("text-[10px]", iv.type === "Техническое" ? "border-blue-200 text-blue-700 dark:text-blue-400" : iv.type === "HR" ? "border-purple-200 text-purple-700 dark:text-purple-400" : "border-green-200 text-green-700 dark:text-green-400")}>{iv.type}</Badge>
                               <span className="inline-flex items-center gap-1">{iv.format === "Онлайн" ? <Video className="w-3 h-3" /> : iv.format === "Звонок" ? <Phone className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}{iv.format}</span>
+                              {iv.city && <span className="inline-flex items-center gap-1"><Building2 className="w-3 h-3" />{iv.city}</span>}
+                              {formatSalaryRange(iv.salaryMin, iv.salaryMax) && <span className="text-foreground/80 font-medium">{formatSalaryRange(iv.salaryMin, iv.salaryMax)}</span>}
                               <span className="truncate">Интервьюер: <span className="text-foreground font-medium">{iv.interviewer}</span></span>
                               {iv.phone && <a href={`tel:${iv.phone}`} onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 hover:text-primary"><Phone className="w-3 h-3" />{iv.phone}</a>}
                               <span className="truncate text-muted-foreground/70">· {iv.vacancy}</span>
                             </div>
+                            {/* Прогресс-бар демо — тот же компонент/пропсы, что и на канбан-карточке кандидата. */}
+                            {!iv.byStageOnly && (() => {
+                              const { percent, completed, total } = calcDemoPercent(iv.demoProgressJson)
+                              return (
+                                <DemoProgressBar
+                                  variant="kanban"
+                                  progressPercent={percent}
+                                  completedBlocks={completed}
+                                  totalBlocks={total}
+                                  hasVideoVizitka={iv.demoProgressJson?.hasVideoVizitka}
+                                  stage={iv.stage}
+                                  demoProgress={iv.demoProgressJson}
+                                  className="max-w-[220px]"
+                                />
+                              )
+                            })()}
                           </div>
                           {/* Метрики кандидата */}
                           <div className="hidden md:flex items-center gap-5 px-5 border-l">
@@ -1208,6 +1457,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                               >
                                 Далее: {nextFormatAfter(iv.format)}
                               </Button>
+                            )}
+                            {/* B (14.07): «Отметить исход» — только на ПРОШЕДШИХ реальных
+                                карточках с кандидатом (интервью уже завершилось по времени). */}
+                            {!iv.byStageOnly && iv.candidateId && iv.endAt < new Date() && iv.status !== "Отменено" && (
+                              <InterviewOutcomeMenu
+                                iv={iv} onOffer={outcomeOffer} onMoveStage={outcomeMoveStage}
+                                onOutcome={outcomeMark} onReject={outcomeReject}
+                              />
                             )}
                             {/* Юрий 10.07: менеджер отменяет интервью или отказывает — диалог
                                 с предпросмотром/редактированием сообщения кандидату перед отправкой.
@@ -1255,6 +1512,11 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                         <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
                           <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
                           {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
+                          {c.stage === "interview" && !c.completedDemoBlockIndexes.includes(HIGHEST_DEMO_BLOCK_INDEX) && (
+                            <Badge variant="outline" className="text-[10px] font-normal border-amber-300 text-amber-700 dark:text-amber-400" title="Кандидат ещё не прошёл Демо-3 — можно записать, но напомнить про Демо-3">
+                              ⚠ не прошёл Демо-3
+                            </Badge>
+                          )}
                           {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
                           <div className="flex items-center gap-1.5 ml-auto">
                             {c.token && (
@@ -1288,6 +1550,11 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                         <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
                           <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
                           {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
+                          {c.stage === "interview" && !c.completedDemoBlockIndexes.includes(HIGHEST_DEMO_BLOCK_INDEX) && (
+                            <Badge variant="outline" className="text-[10px] font-normal border-amber-300 text-amber-700 dark:text-amber-400" title="Кандидат ещё не прошёл Демо-3 — можно записать, но напомнить про Демо-3">
+                              ⚠ не прошёл Демо-3
+                            </Badge>
+                          )}
                           {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
                           <div className="flex items-center gap-1.5 ml-auto">
                             {c.token && (
@@ -1331,7 +1598,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                     ))}
                     {calDays.map((day, i) => {
                       if (!day) return <div key={i} className="bg-card min-h-[150px]" />
-                      const dayIvs = interviews.filter(iv => isSameDay(iv.date, day))
+                      const dayIvs = visibleInterviews.filter(iv => isSameDay(iv.date, day))
                       const isT = isToday(day)
                       const dayKey = day.toISOString().slice(0, 10)
                       const isDropTarget = dropTargetDay === dayKey && dragIvId !== null
@@ -1344,8 +1611,10 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                           onDrop={e => { e.preventDefault(); calDropOnDay(day) }}
                         >
                           <span className={cn("text-xs font-medium", isT ? "text-primary font-bold" : "text-muted-foreground")}>{day.getDate()}</span>
-                          {/* ~4 события помещаются; больше — внутренний скролл, сетка не растёт */}
-                          <div className="space-y-0.5 mt-0.5 max-h-[116px] overflow-y-auto pr-0.5">
+                          {/* Все события дня влезают: без max-h/скролла. Строка недели
+                              в grid тянется по самому загруженному дню (авто-высота),
+                              min-h ячейки задаёт нижнюю границу пустого дня. */}
+                          <div className="space-y-0.5 mt-0.5 pr-0.5">
                             {dayIvs.map(iv => (
                               <div
                                 key={iv.id}
@@ -1443,7 +1712,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                         <div key={h} className="grid grid-cols-[56px_repeat(7,1fr)] border-b min-h-[64px]">
                           <div className="text-right pr-2 py-1 text-[10px] text-muted-foreground font-medium">{String(h).padStart(2, "0")}:00</div>
                           {weekDays.map((wd, di) => {
-                            const cellIvs = interviews.filter(iv => isSameDay(iv.date, wd) && parseInt(iv.time) === h)
+                            const cellIvs = visibleInterviews.filter(iv => isSameDay(iv.date, wd) && parseInt(iv.time) === h)
                             const cellKey = `${wd.toISOString().slice(0, 10)}-${h}`
                             const isDropCell = dropTargetDay === cellKey && dragIvId !== null
                             return (
@@ -1562,6 +1831,15 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                                       {iv.tested ? (iv.testScore != null ? <span className={cn("text-sm font-bold leading-none", scoreColor(iv.testScore))}>{iv.testScore}</span> : <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />) : <Minus className="w-4 h-4 text-muted-foreground/40" />}
                                     </div>
                                   </div>
+                                  {/* B (14.07): «Отметить исход» на прошедших карточках канбана. */}
+                                  {!iv.byStageOnly && iv.candidateId && iv.endAt < new Date() && iv.status !== "Отменено" && (
+                                    <div className="pt-1">
+                                      <InterviewOutcomeMenu
+                                        iv={iv} onOffer={outcomeOffer} onMoveStage={outcomeMoveStage}
+                                        onOutcome={outcomeMark} onReject={outcomeReject}
+                                      />
+                                    </div>
+                                  )}
                                 </CardContent>
                               </Card>
                             ))}
@@ -1785,9 +2063,9 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           Обе — с предпросмотром/редактированием текста + сохранением правки
           как нового шаблона вакансии. */}
       <Dialog open={!!cancelDialogIv} onOpenChange={o => { if (!o) setCancelDialogIv(null) }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Интервью с {(cancelDialogIv?.candidate ?? "").replace(/^Интервью\s*—\s*/, "") || "кандидатом"}</DialogTitle>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-x-hidden overflow-y-auto">
+          <DialogHeader className="min-w-0">
+            <DialogTitle className="truncate">Интервью с {(cancelDialogIv?.candidate ?? "").replace(/^Интервью\s*—\s*/, "") || "кандидатом"}</DialogTitle>
           </DialogHeader>
           <Tabs value={cancelTab} onValueChange={v => setCancelTab(v as "reschedule" | "reject")}>
             <TabsList className="w-full">
@@ -1795,7 +2073,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               <TabsTrigger value="reject" className="flex-1">Отказать</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4 pt-2 min-w-0">
             <p className="text-sm text-muted-foreground">
               {cancelTab === "reschedule"
                 ? "Запись отменяется, кандидат сможет сам выбрать новое время по своей ссылке."
@@ -1830,14 +2108,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               </p>
             )}
           </div>
-          <div className="flex items-center justify-between gap-2 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 min-w-0">
             {cancelSendMessage && cancelMessageText.trim() && (
               <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={saveMessageTemplate} disabled={cancelSavingTemplate}>
                 {cancelSavingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 Сохранить как шаблон вакансии
               </Button>
             )}
-            <div className="flex gap-2 ml-auto">
+            <div className="flex flex-wrap gap-2 ml-auto">
               <Button variant="outline" size="sm" onClick={() => setCancelDialogIv(null)} disabled={cancelSubmitting}>Отмена</Button>
               <Button
                 size="sm"
@@ -1859,11 +2137,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
           редактирование шаблона interview_rescheduled, реальная отправка
           через reschedule-and-notify, тост по факту messageSent. */}
       <Dialog open={!!reschedDialog} onOpenChange={o => { if (!o) setReschedDialog(null) }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Интервью перенесено на {reschedDialog?.label}</DialogTitle>
+        {/* min-w-0 на детях грида DialogContent + flex-wrap на ряду кнопок —
+            иначе (баг вёрстки 14.07) textarea/тумблер/кнопки вылезали за
+            правую и нижнюю границы модалки (grid-item min-width:auto). */}
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-x-hidden overflow-y-auto">
+          <DialogHeader className="min-w-0">
+            <DialogTitle className="truncate">Интервью перенесено на {reschedDialog?.label}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4 pt-2 min-w-0">
             <p className="text-sm text-muted-foreground">
               Можно отправить кандидату
               {(() => { const n = (reschedDialog?.iv.candidate ?? "").replace(/^Интервью\s*—\s*/, "").trim(); return n ? ` (${n})` : "" })()}
@@ -1879,14 +2160,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               onPreviewState={setReschedPreview}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 min-w-0">
             {reschedSendMessage && reschedMessageText.trim() && (
               <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={saveRescheduleTemplate} disabled={reschedSavingTemplate}>
                 {reschedSavingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 Сохранить как шаблон вакансии
               </Button>
             )}
-            <div className="flex gap-2 ml-auto">
+            <div className="flex flex-wrap gap-2 ml-auto">
               <Button variant="outline" size="sm" onClick={() => setReschedDialog(null)} disabled={reschedSubmitting}>
                 Не уведомлять
               </Button>
