@@ -288,8 +288,9 @@ export async function POST(
 
     // Дедупликация: тот же человек мог уже быть импортирован
     // с hh, но открыл публичную демо-ссылку другим путём. Прежде чем
-    // создавать новую карточку — ищем существующую по нормализованным
-    // (vacancy_id, phone) ИЛИ (vacancy_id, email).
+    // создавать новую карточку — ищем существующую ТОЛЬКО по
+    // (vacancy_id, email). Телефон намеренно исключён — см. блок ⚠ IDOR
+    // ниже и memory apply-fallback-idor-p0.
     const emailNorm = normalizeEmail(body.email)
     const dupConds = []
     // ⚠ IDOR (predeploy-guard 14.07, blocker): этот fallback при совпадении
