@@ -13,6 +13,7 @@ import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
 import { createNotification } from "@/lib/notifications"
+import { maybeScheduleDemo3BeforeInterview } from "@/lib/messaging/demo3-before-interview"
 import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
 import { isNonWorkingDay } from "@/lib/schedule/holidays"
 import { getHolidaysForCountry } from "@/lib/holidays"
@@ -796,6 +797,13 @@ export async function POST(
       `📍 Способ: ${methodLabel}` +
       (location ? `\n🏢 Адрес: ${escapeTgHtml(location)}` : ""),
     ).catch(() => {})
+
+    // 8.5 Мягкое напоминание «пройдите Демо-3 до интервью» (14.07): кандидат
+    // записался, но мог НЕ пройти последний демо-блок — ставим одно напоминание
+    // (гейт/дедуп/настраиваемый текст — внутри). Fire-and-forget, ошибка не
+    // влияет на ответ. Срабатывает только на НОВОЙ брони (alreadyBooked вышел раньше).
+    void maybeScheduleDemo3BeforeInterview({ candidateId: candidate.id, vacancyId: candidate.vacancyId })
+      .catch((err) => console.warn(`[schedule POST] demo3 reminder failed for ${candidate.id}:`, err))
 
     // 9. #26.4 Настраиваемые тексты экрана "Вы записаны" (platform-дефолт в коде,
     // переопределяется per-вакансия через descriptionJson.interviewBookedScreen).

@@ -161,6 +161,15 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     resolve: { kind: "vacancy", path: "scheduleInviteText", default: "" },
   },
   {
+    key: "msg.demo3BeforeInterview",
+    title: "Напоминание про Демо-3 перед интервью",
+    description: "Мягкое напоминание пройти последний демо-блок ({{demo3_link}}), если кандидат записался/переведён в интервью, но не прошёл его. Ставится один раз. Только у вакансий с несколькими демо-блоками.",
+    group: "Сообщения кандидатам",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
+    resolve: { kind: "vacancy", path: "demo3BeforeInterviewText", default: "" },
+  },
+  {
     key: "msg.testInvite",
     title: "Приглашение пройти тест",
     description: "Текст со ссылкой /test/[token], отправляется при рассылке теста кандидатам.",

@@ -8,6 +8,7 @@ import { logAudit, ipFromRequest } from "@/lib/audit/log"
 import { ALL_STAGE_SLUGS, LEGACY_STAGE_LABELS, type StageSlug } from "@/lib/stages"
 import { hardDeleteCandidatesByIds } from "@/lib/candidates/hard-delete-ids"
 import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
+import { maybeScheduleDemo3BeforeInterview } from "@/lib/messaging/demo3-before-interview"
 
 const HH_BULK_DELAY_MS = 500
 
@@ -95,6 +96,12 @@ async function scheduleInterviewInvitesForBulk(
       await scheduleInterviewInvite({ candidateId: c.id, vacancyId: c.vacancyId })
     } catch (err) {
       console.warn(`[bulk] schedule invite failed for ${c.id}:`, err)
+    }
+    // Мягкое напоминание «пройдите Демо-3 до интервью» (14.07) — гейт/дедуп внутри.
+    try {
+      await maybeScheduleDemo3BeforeInterview({ candidateId: c.id, vacancyId: c.vacancyId })
+    } catch (err) {
+      console.warn(`[bulk] demo3 reminder failed for ${c.id}:`, err)
     }
   }
 }

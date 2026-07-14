@@ -80,6 +80,7 @@ import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-wo
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-settings"
+import { Demo3BeforeInterviewSettings } from "@/components/vacancies/demo3-before-interview-settings"
 import { InterviewNotificationMessagesSettings } from "@/components/vacancies/interview-notification-messages-settings"
 import { InterviewBookedScreenSettings } from "@/components/vacancies/interview-booked-screen-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
@@ -4790,6 +4791,12 @@ export default function VacancyPage() {
                   <ScheduleInviteSettings
                     vacancyId={id}
                     initialText={(apiVacancy as { scheduleInviteText?: string } | undefined)?.scheduleInviteText ?? ""}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* Мягкое напоминание «пройдите Демо-3 до интервью» (14.07). */}
+                  <Demo3BeforeInterviewSettings
+                    vacancyId={id}
+                    initialText={(apiVacancy as { demo3BeforeInterviewText?: string } | undefined)?.demo3BeforeInterviewText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
                   {/* 14.07 (осиротевшие настройки, Ф.А): шаблоны «ссылка на встречу

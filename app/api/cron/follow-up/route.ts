@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, lte, gte, ne, isNotNull, inArray, sql, desc } from "drizzle-orm"
+import { eq, and, lte, gte, ne, isNotNull, inArray, sql, desc, or, like } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, users, testSubmissions, vacancySpecs } from "@/lib/db/schema"
+import { vacancies, candidates, demos, followUpMessages, followUpCampaigns, hhResponses, companies, users, testSubmissions, vacancySpecs } from "@/lib/db/schema"
+import { decideDemo3BeforeInterview } from "@/lib/messaging/demo3-gate"
 import { changeNegotiationState, sendNegotiationMessage } from "@/lib/hh-api"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
@@ -458,10 +459,17 @@ async function processOneTouch(
   // строки; штатные {{переменные}} ({{имя}} и т.п.) рендерит cron как обычно.
   // Собственная страховка на момент отправки — блок isDemo3Invite ниже.
   const isDemo3Invite = msg.branch === "demo3_invite"
+  // branch='demo3_before_interview' — мягкое напоминание «пройдите Демо-3 до
+  // интервью» (lib/messaging/demo3-before-interview.ts): ставится записавшимся/
+  // переведённым в interview, кто не прошёл последний демо-блок. Одноразовое
+  // транзакционное касание: без стоп-триггеров дожима и дневного rate-limit,
+  // рабочее окно соблюдаем. Ссылка /demo/<token>?block=<id> подставлена при
+  // создании строки; собственная страховка на отправке — блок ниже.
+  const isDemo3BeforeInterview = msg.branch === "demo3_before_interview"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
     || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder || isTestFollowup
-    || isScheduleInvite || isSecondDemoInvite || isDemo3Invite
+    || isScheduleInvite || isSecondDemoInvite || isDemo3Invite || isDemo3BeforeInterview
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -668,6 +676,47 @@ async function processOneTouch(
     return { outcome: "cancelled", reason: "vacancy_missing" }
   }
 
+  // demo3_before_interview: страховка на момент отправки. Между постановкой
+  // напоминания (при брони/переводе в interview) и cron-тиком кандидат мог уйти
+  // в отказ/найм, попросить стоп-автоматику ИЛИ УЖЕ пройти Демо-3 — тогда
+  // напоминание неактуально, отменяем (тот же чистый гейт, что при постановке).
+  if (isDemo3BeforeInterview) {
+    const [c3] = await db
+      .select({
+        stage:            candidates.stage,
+        autoStopped:      candidates.autoProcessingStopped,
+        automationPaused: candidates.automationPaused,
+        demoBlockScores:  candidates.demoBlockScores,
+      })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!c3) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    if (c3.stage === "rejected" || c3.stage === "hired" || c3.autoStopped || c3.automationPaused) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "stage_terminal" }
+    }
+    const demo3Rows = await db
+      .select({ id: demos.id, title: demos.title, lessonsJson: demos.lessonsJson })
+      .from(demos)
+      .where(and(
+        eq(demos.vacancyId, campaign.vacancyId),
+        or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+      ))
+      .orderBy(demos.sortOrder, demos.createdAt)
+    const demo3Decision = decideDemo3BeforeInterview({
+      demoRows: demo3Rows,
+      demoBlockScores: c3.demoBlockScores as Record<string, { score?: number }> | null,
+    })
+    if (!demo3Decision.shouldRemind) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: `demo3_${demo3Decision.reason}` }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: `demo3_${demo3Decision.reason}` }
+    }
+  }
+
   // Гейт «не дожимать кандидатов с Портретом ниже N» (drizzle/0259, инцидент
   // 06.07). Дефолт ВЫКЛ (minPortraitScoreEnabled=false) → поведение байт-в-байт
   // как раньше. Применяется ТОЛЬКО к реальным дожимным касаниям — не трогаем
@@ -762,7 +811,10 @@ async function processOneTouch(
   // Исключение (#3.1): schedule_invite — транзакционное приглашение записаться
   // на интервью (HR перевёл кандидата в стадию interview). Его шлём даже при
   // активном чат-боте, иначе кандидат не получит ссылку на выбор времени.
-  if (vacancy.aiChatbotEnabled === true && !isScheduleInvite) {
+  // Такое же исключение (14.07): demo3_before_interview — транзакционное
+  // напоминание пройти последний демо-блок перед интервью (одна ссылка, которую
+  // чат-бот сам не пришлёт); без исключения оно бы гасло у чат-бот-вакансий.
+  if (vacancy.aiChatbotEnabled === true && !isScheduleInvite && !isDemo3BeforeInterview) {
     await db.update(followUpMessages).set({
       status: "cancelled",
       errorMessage: "ai_chatbot_active",
