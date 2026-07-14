@@ -11,12 +11,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard, Copy, MoreHorizontal, ArrowRightLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { useContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
+import { useContentBlocks, visibleContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
 import { NotionEditor, type NotionEditorHandle } from "./notion-editor"
-import { createBlock, type Demo, type Lesson } from "@/lib/course-types"
+import { createBlock, cloneLessonWithNewIds, type Demo, type Lesson } from "@/lib/course-types"
+import { CopyToVacancyDialog } from "./copy-to-vacancy-dialog"
 
 /** Блок «оценивается ИИ», если внутри есть формы: вопросы (task) или запись медиа от кандидата (media). */
 function blockHasScoredContent(lessons: Lesson[]): boolean {
@@ -89,6 +90,14 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [genDemo, setGenDemo] = useState(false)
+
+  // «Дублировать в вакансию…» (блок целиком) / «Скопировать в другую вакансию…»
+  // (один урок) — общий диалог выбора вакансии+блока назначения.
+  const [copyDialog, setCopyDialog] = useState<
+    | { mode: "block"; block: ContentBlock }
+    | { mode: "lesson"; block: ContentBlock; lesson: Lesson }
+    | null
+  >(null)
 
   // Управление редактором выбранного блока (общий ряд кнопок справа)
   const editorRef = useRef<NotionEditorHandle>(null)
@@ -214,6 +223,45 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
     setRenamingValue(title)
   }, [selectedBlock, apiCreateBlock, updateBlock])
 
+  // Дублировать блок целиком (все уроки + вопросы, id перегенерированы) В ЭТОЙ
+  // ЖЕ вакансии. Копия вставляется СРАЗУ ПОСЛЕ оригинала — apiCreateBlock всегда
+  // добавляет новый блок в конец, поэтому после создания переставляем через reorder.
+  const handleDuplicateBlock = useCallback(async (block: ContentBlock) => {
+    const clonedLessons = block.lessons.map(l => cloneLessonWithNewIds(l, ""))
+    const newBlock = await apiCreateBlock(block.contentType, `${block.title} (копия)`)
+    if (!newBlock) { toast.error("Не удалось дублировать блок"); return }
+    updateBlock(newBlock.id, { lessons: clonedLessons })
+    const rawIds = blocks.map(b => b.id)
+    const origPos = rawIds.indexOf(block.id)
+    const withNewInPlace = rawIds.filter(id => id !== newBlock.id)
+    withNewInPlace.splice(origPos + 1, 0, newBlock.id)
+    await reorder(withNewInPlace)
+    setSelectedId(newBlock.id)
+    toast.success(`Блок «${block.title}» продублирован`)
+  }, [apiCreateBlock, updateBlock, blocks, reorder])
+
+  // Скопировать урок в другой блок ЭТОЙ ЖЕ вакансии — быстрый путь без сетевого
+  // запроса на копирование (лежит на уже загруженном clientside-состоянии).
+  // Добавляется в КОНЕЦ списка уроков целевого блока (id перегенерированы).
+  const handleCopyLessonToBlock = useCallback((lesson: Lesson, targetBlockId: string) => {
+    const target = blocks.find(b => b.id === targetBlockId)
+    if (!target) return
+    const cloned = cloneLessonWithNewIds(lesson, "")
+    updateBlock(targetBlockId, { lessons: [...target.lessons, cloned] })
+    toast.success(`Урок скопирован в блок «${target.title}»`)
+  }, [blocks, updateBlock])
+
+  // Открыть диалог «Дублировать в вакансию…» (блок целиком, серверная копия).
+  const handleOpenCopyBlockDialog = useCallback((block: ContentBlock) => {
+    setCopyDialog({ mode: "block", block })
+  }, [])
+
+  // Открыть диалог «Скопировать в другую вакансию…» для конкретного урока.
+  const handleOpenCopyLessonDialog = useCallback((lesson: Lesson) => {
+    if (!selectedBlock) return
+    setCopyDialog({ mode: "lesson", block: selectedBlock, lesson })
+  }, [selectedBlock])
+
   // Онбординг Фаза 2: AI генерит демо из профиля компании/продукта → новый
   // демо-блок в редакторе (там же правится = ревью).
   const handleGenerateDemo = useCallback(async (length: "short" | "full" = "full") => {
@@ -288,27 +336,10 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
     )
   }
 
-  // Видимость блоков в конструкторе:
-  // - block:* — всегда видны (новый формат).
-  // - Легаси kind='demo'/'test' — боевые записи старого формата. 13 вакансий
-  //   живут ТОЛЬКО на них, поэтому прятать их нельзя (демо «исчезнет»).
-  //   Прячем легаси-строку только когда ею уже управляет dual-write —
-  //   т.е. существует block:* того же типа с включённым «Боевой».
-  const liveTestBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType === "test" && b.isLiveBattle)
-  // Только "presentation" синкается в kind='demo'. "task" синкается в kind='test',
-  // поэтому он НЕ должен скрывать legacy-демо (иначе демо пропадёт из конструктора).
-  const liveDemoBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType === "presentation" && b.isLiveBattle)
-  const uiBlocks = blocks
-    .filter(b =>
-      b.kind.startsWith("block:")
-      || (b.kind === "test" && !liveTestBlockExists)
-      || (b.kind === "demo" && !liveDemoBlockExists)
-    )
-    .map(b =>
-      b.kind === "demo" ? { ...b, contentType: "presentation" as ContentBlock["contentType"], isLiveBattle: true }
-      : b.kind === "test" ? { ...b, contentType: "test" as ContentBlock["contentType"], isLiveBattle: true }
-      : b
-    )
+  // Видимость блоков в конструкторе — вынесено в hooks/use-content-blocks.ts
+  // (visibleContentBlocks), чтобы тот же фильтр использовал пикер целевого
+  // блока в диалоге «Скопировать в вакансию…».
+  const uiBlocks = visibleContentBlocks(blocks)
 
   // Пустое состояние
   if (uiBlocks.length === 0) {
@@ -451,6 +482,23 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
               onClick={(e) => { e.stopPropagation(); startRenaming(block) }}
               className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
             ><Pencil className="w-3 h-3" /></button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  title="Ещё"
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+                ><MoreHorizontal className="w-3 h-3" /></button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleDuplicateBlock(block)}>
+                  <Copy className="w-3.5 h-3.5" />Дублировать блок
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleOpenCopyBlockDialog(block)}>
+                  <ArrowRightLeft className="w-3.5 h-3.5" />Дублировать в вакансию…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button
               title="Удалить"
               onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(block.id) }}
@@ -693,6 +741,9 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
             onNavButtonChange={(color, text) => saveSettings(selectedBlock.id, { navButtonColor: color, navButtonText: text })}
             showSystemNav={typeof selectedBlock.postDemoSettings?.showSystemNav === "boolean" ? selectedBlock.postDemoSettings.showSystemNav : undefined}
             onShowSystemNavChange={(value) => saveSettings(selectedBlock.id, { showSystemNav: value })}
+            otherBlocks={uiBlocks.filter(b => b.id !== selectedBlock.id).map(b => ({ id: b.id, title: b.title }))}
+            onCopyLessonToBlock={handleCopyLessonToBlock}
+            onCopyLessonToOtherVacancy={handleOpenCopyLessonDialog}
           />
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -736,6 +787,27 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Диалог «Дублировать/скопировать в вакансию…» — кросс-вакансийная копия
+          блока целиком или одного урока (сервер: content-blocks/copy). */}
+      {copyDialog && (
+        <CopyToVacancyDialog
+          open={!!copyDialog}
+          onOpenChange={(open) => { if (!open) setCopyDialog(null) }}
+          sourceVacancyId={vacancyId}
+          sourceBlockId={copyDialog.block.id}
+          lessonId={copyDialog.mode === "lesson" ? copyDialog.lesson.id : undefined}
+          entityLabel={copyDialog.mode === "lesson" ? `урок «${copyDialog.lesson.title}»` : `блок «${copyDialog.block.title}»`}
+          onCopied={({ targetVacancyTitle, targetBlockTitle }) => {
+            toast.success(
+              copyDialog.mode === "lesson"
+                ? `Урок скопирован в «${targetVacancyTitle}» → блок «${targetBlockTitle}»`
+                : `Блок скопирован в вакансию «${targetVacancyTitle}»`
+            )
+            setCopyDialog(null)
+          }}
+        />
+      )}
 
     </div>
   )
