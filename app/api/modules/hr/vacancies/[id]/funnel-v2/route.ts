@@ -9,9 +9,9 @@
 // сохранение молча падало 404 и стадии терялись при релоаде.
 
 import { NextRequest, NextResponse } from "next/server"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { vacancies, followUpMessages, followUpCampaigns } from "@/lib/db/schema"
 import { requireCompany } from "@/lib/api-helpers"
 import { canApplyFunnelV2Update } from "@/lib/funnel-v2/authz"
 import { normalizeFunnelV2, type FunnelV2Config } from "@/lib/funnel-v2/types"
@@ -80,6 +80,23 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       .where(and(eq(vacancies.id, id), eq(vacancies.companyId, user.companyId)))
       .returning({ id: vacancies.id })
     if (!r) return NextResponse.json({ error: "not found" }, { status: 404 })
+
+    // Выключение рантайма v2: dozhim-мьютекс откладывал legacy-касания на
+    // +24ч (анти-HOL, инцидент 11-14.07, маркер deferred_legacy_superseded_by_v2)
+    // — возвращаем их на now, чтобы легаси-дожимы ожили ближайшим тиком.
+    if (currentFlag && !effectiveEnabled) {
+      await db.update(followUpMessages)
+        .set({ scheduledAt: new Date(), errorMessage: null })
+        .where(and(
+          eq(followUpMessages.status, "pending"),
+          eq(followUpMessages.errorMessage, "deferred_legacy_superseded_by_v2"),
+          inArray(
+            followUpMessages.campaignId,
+            db.select({ id: followUpCampaigns.id }).from(followUpCampaigns).where(eq(followUpCampaigns.vacancyId, id)),
+          ),
+        ))
+    }
+
     return NextResponse.json({ ok: true, config: outConfig, runtimeEnabled: effectiveEnabled })
   } catch (e) {
     if (e instanceof Response) return e

@@ -688,29 +688,39 @@ async function processOneTouch(
       }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: mutex.reason }
     }
-    // action === "skip" — оставляем pending, следующий cron перепроверит.
+    // action === "skip" — оставляем pending (не отменяем).
     //
     // Инцидент 11-14.07 (head-of-line blocking, см. комментарий у гейта
     // Портрета выше): scheduled_at раньше не двигался → legacy-хвост
     // вакансий, переведённых на v2, вечно торчал в голове очереди (ORDER BY
-    // scheduled_at ASC LIMIT 200) и съедал весь LIMIT каждый тик. Мьютекс
-    // обратим (v2 могут выключить обратно) — переносим на +24ч вместо cancel.
+    // scheduled_at ASC LIMIT 200) и съедал весь LIMIT каждый тик. Переносим
+    // на +24ч с маркером в errorMessage; при ВЫКЛючении рантайма v2 PUT
+    // funnel-v2 сбрасывает такие строки на now — отправка возобновляется
+    // ближайшим тиком, а не через сутки.
     await db.update(followUpMessages)
-      .set({ scheduledAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) })
+      .set({
+        scheduledAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        errorMessage: "deferred_legacy_superseded_by_v2",
+      })
       .where(eq(followUpMessages.id, msg.id))
     return { outcome: "skipped", reason: mutex.reason }
   }
 
   // Пауза исходящей очереди: если HR приостановил отправки на вакансии —
-  // оставляем сообщение pending (не отменяем), следующий cron проверит снова.
+  // оставляем сообщение pending (не отменяем).
   //
   // Инцидент 11-14.07 (head-of-line blocking, см. комментарий у гейта
   // Портрета выше): пауза — ручной тумблер без авто-снятия, её pending-хвост
   // так же вечно торчал бы в голове очереди и съедал LIMIT у всех компаний.
-  // Переносим scheduled_at на +6ч (симметрично low_portrait_score).
+  // Переносим scheduled_at на +6ч с маркером в errorMessage; снятие паузы
+  // (POST message-queue/pause {paused:false}) сбрасывает такие строки на
+  // now — отправка возобновляется ближайшим тиком, как HR и ожидает.
   if (vacancy.outboundPaused) {
     await db.update(followUpMessages)
-      .set({ scheduledAt: new Date(now.getTime() + 6 * 60 * 60 * 1000) })
+      .set({
+        scheduledAt: new Date(now.getTime() + 6 * 60 * 60 * 1000),
+        errorMessage: "deferred_outbound_paused",
+      })
       .where(eq(followUpMessages.id, msg.id))
     return { outcome: "skipped", reason: "outbound_paused" }
   }
@@ -951,7 +961,7 @@ async function processOneTouch(
       }
       // drizzle/0276: sentText — реально ушедший текст (literal ИЛИ AI-адаптированный),
       // aiAdapted — переписан ли comms-agent'ом (см. adapted.safe выше).
-      await db.update(followUpMessages).set({ status: "sent", sentAt: new Date(), sentText: finalText, aiAdapted }).where(eq(followUpMessages.id, msg.id))
+      await db.update(followUpMessages).set({ status: "sent", sentAt: new Date(), sentText: finalText, aiAdapted, errorMessage: null }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "sent", delayMs }
     }
 
@@ -983,6 +993,7 @@ async function processOneTouch(
       sentAt: new Date(),
       sentText: finalText,
       aiAdapted,
+      errorMessage: null, // затираем транзитный deferred_*-маркер, если был
     }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "sent", delayMs }
   } catch (err) {
