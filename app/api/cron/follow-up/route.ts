@@ -571,7 +571,7 @@ async function processOneTouch(
     // Поздние стадии (интервью и дальше) = HR уже принял решение вручную —
     // напоминание про тест неактуально (Юрий 03.07: ручная смена стадии
     // отменяет автосообщения прошлых этапов).
-    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer"].includes(cand.stage ?? "") || cand.autoStopped) {
+    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer", "offer_sent", "reference_check"].includes(cand.stage ?? "") || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "stage_terminal" }
     }
@@ -622,7 +622,7 @@ async function processOneTouch(
       return { outcome: "cancelled", reason: "test_opened" }
     }
     // Поздние стадии — как в isTestReminder: ручное решение HR отменяет дожим.
-    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer"].includes(cand.stage ?? "") || cand.autoStopped) {
+    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer", "offer_sent", "reference_check"].includes(cand.stage ?? "") || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "stage_terminal" }
     }
@@ -944,7 +944,7 @@ async function processOneTouch(
           .from(candidates)
           .where(eq(candidates.id, msg.candidateId))
           .limit(1)
-        const LATE_STAGES = new Set(["interview", "scheduled", "interviewed", "final_decision", "offer", "hired", "rejected"])
+        const LATE_STAGES = new Set(["interview", "scheduled", "interviewed", "final_decision", "offer", "offer_sent", "reference_check", "hired", "rejected"])
         if (!c0 || c0.autoStopped || LATE_STAGES.has(c0.stage ?? "")) {
           await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_advanced" }).where(eq(followUpMessages.id, msg.id))
           return { outcome: "cancelled", reason: "stage_advanced" }

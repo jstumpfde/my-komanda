@@ -83,7 +83,9 @@ const STAGE_ORDER_SQL = sql`CASE ${candidates.stage}
   WHEN 'interview' THEN 3
   WHEN 'interviewed' THEN 3
   WHEN 'decision' THEN 4
+  WHEN 'reference_check' THEN 4
   WHEN 'offer' THEN 5
+  WHEN 'offer_sent' THEN 5
   WHEN 'final_decision' THEN 6
   WHEN 'hired' THEN 7
   WHEN 'talent_pool' THEN 8

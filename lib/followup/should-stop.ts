@@ -79,6 +79,8 @@ export async function shouldStopFollowUp(
     // баг C1, закрыт 01.06.2026 вместе с мини-фичей рассылки теста).
     "test_task_sent", "test_task_done", "test_passed", "test_failed",
     "interview", "final_decision",
+    // B9-фикс 14.07: v2-движок теперь пишет канонические слаги
+    "offer_sent", "reference_check",
     "scheduled", "interviewed", "hired",
   ])
   if (ADVANCED_STAGES.has(candidate.stage ?? "")) {
