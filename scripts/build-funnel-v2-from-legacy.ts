@@ -182,27 +182,17 @@ async function main() {
 
   const idSeed = (suffix: string) => `legacy-${suffix}`
 
-  // ── Стадия 1: «Отклик → приглашение на демо» (message + scoreGate resume) ──
-  const respond = makeStage("message", idSeed("respond"))
-  respond.title = "Отклик → приглашение на демо"
-  respond.color = "slate"
-  respond.contentBlockId = inviteContentBlockId
-  if (inviteHhStage) respond.hhStatus = inviteHhStage
-  respond.rule.rejectDelayMinutes = asInt(pick(resumeT, "rejectionDelayMinutes"), respond.rule.rejectDelayMinutes)
-  // autoReject как в конфиге (autoEnabled самого гейта всё равно false).
-  respond.rule.autoReject = false // авто-отказ через движок v2 не включаем; легаси autoRejectEnabled=${autoRejectEnabled}
-  respond.rule.scoreGate = scoreGate("resume", resumeThreshold, "manual")
-  // Задержка приглашения — держим в дожиме/сообщении легаси; сохраняем в passCriteria-примечании нет,
-  // фиксируем сам факт задержки в rule (движок v2 подтянет из firstMessagesChain).
-  // (inviteDelaySeconds=${inviteDelaySeconds}s — легаси-задержка первого касания.)
-  // Сообщения 1-го касания (п.2+6): текст приглашения из Портрета (spec.inviteLetter)
-  // первым элементом + отдельная строка со ссылкой на демо вторым (если текст задан).
-  // Пусто → messages не проставляем, рантайм использует платформенный дефолт (messagePresetId остаётся null).
-  if (inviteLetterText) {
-    respond.messages = [inviteLetterText, "{{demo_link}}"]
-  }
+  // ── СТАДИЯ 1 = ПОРТРЕТ (read-only, В МАССИВ stages НЕ входит) ──────────────
+  // Скан резюме, пороги, отказ/приглашение по баллу, задержка первого сообщения
+  // и нерабочее время настраиваются в Портрете (spec.resumeThresholds) и
+  // применяются в lib/hh/process-queue.ts ДО входа кандидата в первую стадию
+  // воронки. Поэтому ОТДЕЛЬНОЙ редактируемой стадии «Отклик → приглашение»
+  // здесь БОЛЬШЕ НЕ создаём — это дублировало бы Портрет (FUNNEL-V2.md §2).
+  // Первое сообщение кандидату шлёт первая РЕАЛЬНАЯ стадия — «Демонстрация».
 
-  // ── Стадия 2: «Демонстрация» (1-я часть) — demo, блок «Презентация» ──
+  // ── Стадия 1 массива: «Демонстрация» (1-я часть) — demo, блок «Презентация».
+  // Это точка входа кандидата в воронку: сюда попадают прошедшие Портрет, и
+  // именно она шлёт первое сообщение (приглашение на демо). ──
   const demo = makeStage("demo", idSeed("demo"))
   demo.title = "Демонстрация"
   demo.color = "blue"
@@ -212,6 +202,15 @@ async function main() {
     ?? demoRows[0]?.id
     ?? null
   demo.contentBlockId = presentationBlock
+  // hh-статус первого контакта (был на стадии «Отклик»): при входе в демо hh-папка
+  // переводится в «Первичный контакт» — как раньше делала удалённая стадия respond.
+  if (inviteHhStage) demo.hhStatus = inviteHhStage
+  // Первое сообщение = приглашение из Портрета (spec.inviteLetter) + ссылка на демо
+  // отдельной строкой. Пусто → messages не проставляем, рантайм использует
+  // платформенный дефолт (executeStageEntry case "demo").
+  if (inviteLetterText) {
+    demo.messages = [inviteLetterText, "{{demo_link}}"]
+  }
 
   // ── Стадия 3: 2-я часть демо (напр. «Путь менеджера» у эталонной вакансии) —
   // demo + scoreGate anketa. Название стадии берём из реального контент-блока
@@ -268,7 +267,9 @@ async function main() {
   hired.color = "green"
   hired.terminal = true
 
-  const stages: FunnelV2Stage[] = [respond, demo, managerPath, interview, offer, hired]
+  // Стадия 1 = Портрет (read-only, рендерится отдельной врезкой в конструкторе).
+  // Массив stages — это стадии 2…N (demo → … → hired).
+  const stages: FunnelV2Stage[] = [demo, managerPath, interview, offer, hired]
 
   // Мердж: сохраняем прочие ключи funnelV2 (в т.ч. enabled — движок НЕ включаем).
   const outFunnel: FunnelV2Config = {
@@ -282,13 +283,13 @@ async function main() {
   console.error(`Демо-блоков: ${demoRows.length}`)
   for (const d of demoRows) console.error(`  • ${d.title}  (kind=${d.kind}, contentType=${d.contentType}, id=${d.id})`)
   console.error(`Существующая стадия «Интервью»: ${existingInterview ? "взята из funnelV2 как есть" : "не найдена → создана дефолтная"}`)
-  console.error("Маппинг стадий:")
-  console.error(`  1) Отклик → приглашение на демо  gate=resume/${respond.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${respond.contentBlockId ?? "—"}, hh=${respond.hhStatus ?? "—"}, messages=${respond.messages?.length ?? 0}`)
-  console.error(`  2) Демонстрация          contentBlock=${demo.contentBlockId ?? "—"}`)
-  console.error(`  3) ${managerPath.title.padEnd(24)} gate=anketa/${managerPath.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${managerPath.contentBlockId ?? "—"}, hh=${managerPath.hhStatus ?? "—"}, advance=${managerPath.rule.advanceTo}, messages=${managerPath.messages?.length ?? 0}`)
-  console.error(`  4) Интервью              ${existingInterview ? "(сохранена)" : "(дефолт)"}`)
-  console.error(`  5) Оффер                 ручное`)
-  console.error(`  6) Нанят                 terminal`)
+  console.error("Стадия 1 = Портрет (read-only, в массив stages НЕ входит).")
+  console.error("Маппинг стадий (массив stages, нумерация в конструкторе с 1):")
+  console.error(`  1) Демонстрация          contentBlock=${demo.contentBlockId ?? "—"}, hh=${demo.hhStatus ?? "—"}, messages=${demo.messages?.length ?? 0}`)
+  console.error(`  2) ${managerPath.title.padEnd(24)} gate=anketa/${managerPath.rule.scoreGate?.threshold} (autoEnabled=false), contentBlock=${managerPath.contentBlockId ?? "—"}, hh=${managerPath.hhStatus ?? "—"}, advance=${managerPath.rule.advanceTo}, messages=${managerPath.messages?.length ?? 0}`)
+  console.error(`  3) Интервью              ${existingInterview ? "(сохранена)" : "(дефолт)"}`)
+  console.error(`  4) Оффер                 ручное`)
+  console.error(`  5) Нанят                 terminal`)
   console.error(`Легаси-справка: resume.upperThreshold=${resumeThreshold || "0→50"}, autoRejectEnabled=${autoRejectEnabled}, inviteDelaySeconds=${inviteDelaySeconds}, anketa.passThreshold=${anketaPassThreshold}, anketa.delaySeconds=${anketaDelaySeconds}\n`)
 
   if (!apply) {

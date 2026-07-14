@@ -1335,6 +1335,27 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 scheduleWorkingDays:        localVac.scheduleWorkingDays,
                 scheduleExcludedHolidayIds: localVac.scheduleExcludedHolidayIds,
               }
+
+              // ── Портрет-паритет: нерабочая пауза перед ПЕРВЫМ сообщением v2 ──
+              // Стадия 1 воронки = Портрет. Его spec.resumeThresholds.
+              // offHoursDelaySeconds (зеркало vacancy.first_message_off_hours_
+              // delay_seconds) даёт «человеческую» паузу перед первым сообщением
+              // в нерабочее время — ровно как legacy-ветка offHoursSoftMode ниже.
+              // Рабочая задержка inviteDelaySeconds уже выдержана deferral'ом
+              // (shouldDeferFirstMessage) ДО этой точки — здесь её НЕ спим,
+              // иначе задержка удвоится. См. lib/funnel-v2/first-message-timing.ts.
+              if (offHoursSoftMode) {
+                const { resolveV2FirstMessageDelayMs, DEFAULT_OFF_HOURS_DELAY_SECONDS } =
+                  await import("@/lib/funnel-v2/first-message-timing")
+                const offDelayMs = resolveV2FirstMessageDelayMs(localVac, {
+                  enabled:      localVac.firstMessageOffHoursEnabled === true,
+                  delaySeconds: typeof localVac.firstMessageOffHoursDelaySeconds === "number"
+                    ? localVac.firstMessageOffHoursDelaySeconds
+                    : DEFAULT_OFF_HOURS_DELAY_SECONDS,
+                })
+                if (offDelayMs > 0) await sleep(offDelayMs)
+              }
+
               await executeStageEntry(candidateForV2, vacancyForV2, firstStage)
 
               // Помечаем отклик как обработанный
