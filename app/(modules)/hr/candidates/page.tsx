@@ -78,8 +78,8 @@ interface GlobalCandidate {
   pendingRejectionAt?: string | null
   // Разведка 14.07: см. Candidate.autoProcessingStoppedReason (candidate-card.tsx).
   autoProcessingStoppedReason?: string | null
-  // Задача 4 (14.07): см. Candidate.highestCompletedDemoBlockIndex (candidate-card.tsx).
-  highestCompletedDemoBlockIndex?: number | null
+  // Задача 4 (14.07, корректировка v2): см. Candidate.completedDemoBlockIndexes (candidate-card.tsx).
+  completedDemoBlockIndexes?: number[]
   demoBlockTooltip?: string | null
 }
 
@@ -151,7 +151,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     pendingRejectionReason: (c as { pendingRejectionReason?: string | null }).pendingRejectionReason ?? null,
     pendingRejectionAt: (c as { pendingRejectionAt?: string | null }).pendingRejectionAt ?? null,
     autoProcessingStoppedReason: (c as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason ?? null,
-    highestCompletedDemoBlockIndex: c.highestCompletedDemoBlockIndex ?? null,
+    completedDemoBlockIndexes: c.completedDemoBlockIndexes ?? [],
     demoBlockTooltip: c.demoBlockTooltip ?? null,
     stage: c.stage,
     photoUrl: c.photoUrl ?? null,

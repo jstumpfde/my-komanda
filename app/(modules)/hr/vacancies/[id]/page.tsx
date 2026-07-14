@@ -219,7 +219,7 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     demoAnswersScore: c.demoAnswersScore ?? null,
     anketaPartsAnswered: c.anketaPartsAnswered,
     anketaPartsTotal: c.anketaPartsTotal,
-    highestCompletedDemoBlockIndex: (c as { highestCompletedDemoBlockIndex?: number | null }).highestCompletedDemoBlockIndex ?? null,
+    completedDemoBlockIndexes: (c as { completedDemoBlockIndexes?: number[] }).completedDemoBlockIndexes ?? [],
     demoBlockTooltip: (c as { demoBlockTooltip?: string | null }).demoBlockTooltip ?? null,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,

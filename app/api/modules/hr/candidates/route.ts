@@ -14,8 +14,10 @@ import { splitFunnelStatusSlugs } from "@/lib/candidates/stage-filter"
 import {
   buildDemoBlockDefs,
   computeDemoBlockCompletion,
-  getHighestCompletedDemoBlockIndex,
-  buildDemoBlockFilterSpec,
+  getCompletedDemoBlockIndexes,
+  parseDemoBlockFilterValues,
+  buildDemoBlockContainmentSpec,
+  matchesDemoBlockSelection,
   formatDemoBlockTooltip,
 } from "@/lib/demo/block-completion"
 
@@ -775,16 +777,17 @@ export async function GET(req: NextRequest) {
         // редкое имя) → HR стоит проверить и при желании вписать вручную.
         const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name, learned: learnedNames }).confident
 
-        // Задача 4 (14.07): бейдж «ДN» — тот же расчёт, что и в
-        // пер-вакансионной ветке ниже (demoBlockDefsByVacancy строится один
-        // раз выше для всех вакансий страницы).
+        // Задача 4 (14.07, корректировка v2): бейдж-комбинация пройденных
+        // демо-блоков — тот же расчёт, что и в пер-вакансионной ветке ниже
+        // (demoBlockDefsByVacancy строится один раз выше для всех вакансий
+        // страницы).
         const demoBlockDefsG = demoBlockDefsByVacancy.get(r.vacancyId) ?? []
         const demoBlockCompletionG = computeDemoBlockCompletion(
           demoBlockDefsG,
           r.demoBlockScores as Record<string, { score?: number }> | null,
           progress,
         )
-        const highestCompletedDemoBlockIndex = getHighestCompletedDemoBlockIndex(demoBlockCompletionG)
+        const completedDemoBlockIndexes = getCompletedDemoBlockIndexes(demoBlockCompletionG)
         const demoBlockTooltip = demoBlockDefsG.length > 1 ? formatDemoBlockTooltip(demoBlockCompletionG) : null
 
         // Strip служебные поля — не нужны клиенту
@@ -798,7 +801,7 @@ export async function GET(req: NextRequest) {
           demoCompletedBlocks,
           progressPercent,
           demoCompletedByAnswers,
-          highestCompletedDemoBlockIndex,
+          completedDemoBlockIndexes,
           demoBlockTooltip,
           isActive,
           testScore,
@@ -807,20 +810,23 @@ export async function GET(req: NextRequest) {
         }
       })
 
-      // Задача 4 (14.07): фильтр «Демо: ДN / не проходил» — post-fetch (эта
-      // multi-vacancy ветка не может дать один SQL WHERE — у каждой вакансии
-      // свои demo-id, в отличие от пер-вакансионной ветки ниже, где фильтр
-      // применяется в SQL). В paginated режиме total/count НЕ учитывает этот
-      // фильтр — тот же принятый компромисс, что и у demoProgress выше
-      // («Шаг 1» комментарий, фильтр по прогрессу тоже игнорируется в SQL
-      // пагинации этой ветки).
+      // Задача 4 (14.07, корректировка v2): containment-фильтр «прошёл ДN»
+      // (несколько = И, «none» = ни одного) — post-fetch (эта multi-vacancy
+      // ветка не может дать один SQL WHERE — у каждой вакансии свои demo-id,
+      // в отличие от пер-вакансионной ветки ниже, где фильтр применяется в
+      // SQL). В paginated режиме total/count НЕ учитывает этот фильтр — тот
+      // же принятый компромисс, что и у demoProgress выше («Шаг 1»
+      // комментарий, фильтр по прогрессу тоже игнорируется в SQL пагинации
+      // этой ветки).
       const demoBlockParamG = url.searchParams.get("demoBlock")
-      const demoBlockFiltersG = demoBlockParamG ? demoBlockParamG.split(",").map(s => s.trim()).filter(Boolean) : []
-      const enrichedFiltered = demoBlockFiltersG.length > 0
-        ? enriched.filter((c) => {
-            const idx = (c as { highestCompletedDemoBlockIndex?: number | null }).highestCompletedDemoBlockIndex ?? null
-            return demoBlockFiltersG.some((w) => (w === "none" ? idx === null : idx === Number.parseInt(w, 10)))
-          })
+      const demoBlockSelectionG = demoBlockParamG
+        ? parseDemoBlockFilterValues(demoBlockParamG.split(",").map(s => s.trim()).filter(Boolean))
+        : null
+      const enrichedFiltered = demoBlockSelectionG && (demoBlockSelectionG.indexes.length > 0 || demoBlockSelectionG.none)
+        ? enriched.filter((c) => matchesDemoBlockSelection(
+            (c as { completedDemoBlockIndexes?: number[] }).completedDemoBlockIndexes ?? [],
+            demoBlockSelectionG,
+          ))
         : enriched
 
       if (paginated) {
@@ -1212,14 +1218,16 @@ export async function GET(req: NextRequest) {
       if (orSql) filterConds.push(orSql)
     }
 
-    // Задача 4 (14.07): фильтр «Демо: ДN / не проходил» — тот же источник
-    // правды, что и бейдж «ДN» (demo_block_scores, см. lib/demo/block-
-    // completion.ts и прод-разведку задачи 1). Лёгкий pre-fetch (только id,
-    // без lessons_json) — нужен ДО WHERE. Полный demoBlockDefs (с
-    // lessons_json, для бейджа/тултипа каждого кандидата) считается отдельно
-    // ниже, ПОСЛЕ основного select — двойной запрос к demos приемлем (строк
-    // на вакансию — единицы), зато не пришлось поднимать наверх весь
-    // существующий post-fetch enrichment-блок (риск регрессии).
+    // Задача 4 (14.07, корректировка владельца v2): фильтр «прошёл ДN» —
+    // containment-семантика: каждый выбранный чекбокс требует НАЛИЧИЯ ключа
+    // своего демо-блока в demo_block_scores (несколько = И), «не проходил
+    // ни одного» — отсутствия всех. Тот же источник правды, что и бейдж
+    // (см. lib/demo/block-completion.ts и прод-разведку задачи 1). Лёгкий
+    // pre-fetch (только id, без lessons_json) — нужен ДО WHERE. Полный
+    // demoBlockDefs (с lessons_json, для бейджа/тултипа каждого кандидата)
+    // считается отдельно ниже, ПОСЛЕ основного select — двойной запрос к
+    // demos приемлем (строк на вакансию — единицы), зато не пришлось
+    // поднимать наверх весь существующий enrichment-блок (риск регрессии).
     const demoBlockParam = url.searchParams.get("demoBlock")
     if (demoBlockParam) {
       const earlyBlockRows = await db
@@ -1231,26 +1239,24 @@ export async function GET(req: NextRequest) {
         ))
         .orderBy(demos.sortOrder, demos.createdAt)
       const earlyDefs = earlyBlockRows.map((d, i) => ({ demoId: d.id, index: i + 1 }))
-      const wantedBlocks = demoBlockParam.split(",").map(s => s.trim()).filter(Boolean)
-      const demoBlockOrParts: SQL[] = []
-      for (const w of wantedBlocks) {
-        const targetIndex = w === "none" ? null : Number.parseInt(w, 10)
-        if (w !== "none" && (!Number.isInteger(targetIndex) || (targetIndex as number) < 1)) continue
-        const spec = buildDemoBlockFilterSpec(earlyDefs, targetIndex)
-        // targetIndex вне диапазона демо-блоков этой вакансии → не матчит ничего.
-        if (targetIndex !== null && spec.requirePresentDemoIds.length === 0) continue
-        const parts: SQL[] = []
-        for (const id of spec.requirePresentDemoIds) {
-          parts.push(sql`(COALESCE(${candidates.demoBlockScores}, '{}'::jsonb) ? ${id})`)
-        }
-        for (const id of spec.requireAbsentDemoIds) {
-          parts.push(sql`NOT (COALESCE(${candidates.demoBlockScores}, '{}'::jsonb) ? ${id})`)
-        }
-        if (parts.length > 0) demoBlockOrParts.push(and(...parts) as SQL)
+      const selection = parseDemoBlockFilterValues(demoBlockParam.split(",").map(s => s.trim()).filter(Boolean))
+      const spec = buildDemoBlockContainmentSpec(earlyDefs, selection)
+      const parts: SQL[] = []
+      for (const id of spec.requirePresentDemoIds) {
+        parts.push(sql`(COALESCE(${candidates.demoBlockScores}, '{}'::jsonb) ? ${id})`)
       }
-      // Все выбранные значения оказались невалидными/вне диапазона → честный
-      // пустой результат (а не «фильтр молча не применился»).
-      filterConds.push(demoBlockOrParts.length > 0 ? (or(...demoBlockOrParts) as SQL) : (sql`false` as SQL))
+      for (const id of spec.requireAbsentDemoIds) {
+        parts.push(sql`NOT (COALESCE(${candidates.demoBlockScores}, '{}'::jsonb) ? ${id})`)
+      }
+      if (spec.impossible) {
+        // Выбран номер, которого нет у вакансии → честный пустой результат
+        // (а не «фильтр молча не применился»).
+        filterConds.push(sql`false` as SQL)
+      } else if (parts.length > 0) {
+        filterConds.push(and(...parts) as SQL)
+      }
+      // parts пуст и не impossible = в параметре был только мусор → фильтр
+      // не применяется (эквивалент пустого выбора).
     }
 
     const baseConds: SQL[] = [
@@ -1526,15 +1532,15 @@ export async function GET(req: NextRequest) {
 
       const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name, learned: learnedNames }).confident
 
-      // Задача 4 (14.07): бейдж «ДN» — номер наивысшего пройденного демо-блока
-      // (demo_block_scores, источник правды из задачи 1). Заменяет нотацию
-      // «частей: N/M» в UI (components/dashboard/list-view.tsx).
+      // Задача 4 (14.07, корректировка v2): бейдж-комбинация пройденных
+      // демо-блоков («Д1+2», demo_block_scores — источник правды из задачи 1).
+      // Заменяет нотацию «частей: N/M» в UI (components/dashboard/list-view.tsx).
       const demoBlockCompletion = computeDemoBlockCompletion(
         demoBlockDefs,
         r.demoBlockScores as Record<string, { score?: number }> | null,
         progress,
       )
-      const highestCompletedDemoBlockIndex = getHighestCompletedDemoBlockIndex(demoBlockCompletion)
+      const completedDemoBlockIndexes = getCompletedDemoBlockIndexes(demoBlockCompletion)
       const demoBlockTooltip = demoBlockDefs.length > 1 ? formatDemoBlockTooltip(demoBlockCompletion) : null
 
       return {
@@ -1553,12 +1559,12 @@ export async function GET(req: NextRequest) {
         nextInterviewAt: nextInterviewByCandidateId.get(r.id) ?? null,
         // Индикатор прогресса частей анкеты "N/M" — ОСТАВЛЕН для карточки/
         // дровера (Оценки), но список кандидатов больше его не рисует
-        // (задача 4, 14.07) — используйте highestCompletedDemoBlockIndex.
+        // (задача 4, 14.07) — используйте completedDemoBlockIndexes.
         anketaPartsAnswered: r.demoBlockScores && typeof r.demoBlockScores === "object"
           ? Object.keys(r.demoBlockScores as Record<string, unknown>).length
           : 0,
         anketaPartsTotal,
-        highestCompletedDemoBlockIndex,
+        completedDemoBlockIndexes,
         demoBlockTooltip,
       }
     })

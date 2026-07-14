@@ -140,12 +140,13 @@ export interface ApiCandidate {
   // бейдж «На ручной проверке» (components/dashboard/list-view.tsx), не
   // путать с pendingRejectionReason (ведёт к отдельному бейджу «Предвар. отказ»).
   autoProcessingStoppedReason?: string | null
-  // Задача 4 (14.07): бейдж «ДN» — номер наивысшего пройденного демо-блока
-  // (заменяет нотацию «частей: N/M»). null = ни один демо-блок не пройден.
+  // Задача 4 (14.07, корректировка v2): номера ВСЕХ полностью пройденных
+  // демо-блоков (1-based, по возрастанию) — бейдж-комбинация «Д1+2»
+  // (formatDemoBlockBadge). [] = ничего не пройдено, бейдж не рисуется.
   // См. lib/demo/block-completion.ts. demoBlockTooltip — готовый текст
-  // тултипа («Д1 ✓ · Д2 начат · Д3 — не проходил»), null если у вакансии
-  // ≤1 демо-блока (бейдж вообще не рисуется).
-  highestCompletedDemoBlockIndex?: number | null
+  // построчной детализации («Д1 «Презентация» — пройден, балл 72\n…»),
+  // null если у вакансии ≤1 демо-блока.
+  completedDemoBlockIndexes?: number[]
   demoBlockTooltip?: string | null
   // F7: Telegram-бот для кандидатов
   telegramChatId?: string | null

@@ -32,6 +32,7 @@ import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { yearsRu } from "@/lib/plural-ru"
 import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, RotateCcw } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
+import { formatDemoBlockBadge } from "@/lib/demo/block-completion"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
 import { PORTRAIT_BELOW_THRESHOLD_REASON } from "@/lib/hh/entry-gate"
 
@@ -689,13 +690,16 @@ export function ListView({
           />
         ),
         renderCell: (candidate, ctx) => {
-          // Задача 4 (14.07, решение владельца на источнике правды из задачи 1
-          // «12/12 · 1/2»): бейдж «ДN» — номер наивысшего пройденного демо-блока
-          // (demo_block_scores), заменяет снятую нотацию «частей: N/M» в
-          // колонке «Анкета» ниже. null → бейдж не рисуется вовсе (ничего не
-          // пройдено). Тултип — только когда у вакансии >1 демо-блока
+          // Задача 4 (14.07, корректировка владельца v2): бейдж-КОМБИНАЦИЯ
+          // всех пройденных демо-блоков («Д1», «Д3», «Д1+2», «Д1+2+3» —
+          // demo_block_scores, источник правды из задачи 1). Семантика
+          // «наивысший ДN» снята — с третьим блоком читалась как обязательная
+          // последовательность 1→2→3, а пути кандидатов разные. Ничего не
+          // пройдено → бейдж не рисуется. Тултип — построчная детализация по
+          // каждому блоку, только когда у вакансии >1 демо-блока
           // (demoBlockTooltip придёт null для одночастевых — нет смысла).
-          const highestBlock = (candidate as { highestCompletedDemoBlockIndex?: number | null }).highestCompletedDemoBlockIndex ?? null
+          const completedBlockIdx = (candidate as { completedDemoBlockIndexes?: number[] }).completedDemoBlockIndexes ?? []
+          const badgeLabel = formatDemoBlockBadge(completedBlockIdx)
           const blockTooltip = (candidate as { demoBlockTooltip?: string | null }).demoBlockTooltip ?? null
           const cell = (
             <div className="flex flex-col items-center justify-center gap-0.5">
@@ -711,12 +715,12 @@ export function ListView({
                 completedByAnswers={candidate.demoCompletedByAnswers}
                 demoProgress={candidate.demoProgressJson}
               />
-              {highestBlock != null && (
+              {badgeLabel != null && (
                 <Badge
                   variant="outline"
                   className="text-[10px] font-semibold px-1 py-0 h-4 leading-none border-indigo-200 text-indigo-700 bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:bg-indigo-950/30"
                 >
-                  Д{highestBlock}
+                  {badgeLabel}
                 </Badge>
               )}
             </div>
@@ -729,7 +733,8 @@ export function ListView({
               <TooltipTrigger asChild>
                 <div className="flex items-center justify-center">{cell}</div>
               </TooltipTrigger>
-              <TooltipContent side="top">{blockTooltip}</TooltipContent>
+              {/* whitespace-pre-line — тултип построчный (\n-разделители). */}
+              <TooltipContent side="top" className="whitespace-pre-line text-left">{blockTooltip}</TooltipContent>
             </Tooltip>
           )
         },

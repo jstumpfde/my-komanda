@@ -3,8 +3,13 @@
  *
  * Задача 4 (решение владельца, 14.07, на источнике правды из разведки
  * задачи 1 — Revoluterra «12/12 · 1/2»): вместо нотации «прогресс/прогресс ·
- * N/M частей» — бейдж «ДN» (номер НАИВЫСШЕГО пройденного демо-блока
- * вакансии), одинаково работающий для 1/2/3+ демо-блоков.
+ * N/M частей» — бейдж-КОМБИНАЦИЯ пройденных демо-блоков («Д1», «Д3»,
+ * «Д1+2», «Д1+2+3»), одинаково работающий для 1/2/3+ демо-блоков.
+ * Корректировка владельца 14.07 (v2): первоначальная семантика «номер
+ * наивысшего пройденного ДN» снята — с третьим демо-блоком она читалась
+ * как обязательная последовательность 1→2→3, а пути кандидатов разные
+ * (новые идут сразу на Демо-3). Фильтр — containment «прошёл ДN»
+ * (несколько чекбоксов = И), плюс «не проходил ни одного».
  *
  * Источник правды = ТОТ ЖЕ сигнал, который задача 1 прод-разведкой 14.07
  * подтвердила как ЧЕСТНЫЙ: candidates.demo_block_scores (пишет
@@ -154,60 +159,115 @@ export function computeDemoBlockCompletion(
 }
 
 /**
- * Номер (1-based) НАИВЫСШЕГО пройденного демо-блока — значение бейджа «ДN».
- * null, если кандидат не прошёл ни один демо-блок (бейдж не рисуется /
- * нейтральное «—»).
+ * Номера (1-based, по возрастанию) ВСЕХ полностью пройденных демо-блоков.
+ * Пустой массив = ничего не пройдено (бейдж не рисуется).
+ *
+ * Корректировка владельца 14.07 (v2): семантика «наивысший ДN» снята —
+ * с появлением третьего демо-блока она выглядела как обязательная
+ * последовательность 1→2→3, что неверно: пути кандидатов разные (новые
+ * идут сразу на Демо-3). Бейдж теперь — КОМБИНАЦИЯ пройденных блоков.
  */
-export function getHighestCompletedDemoBlockIndex(
+export function getCompletedDemoBlockIndexes(
   entries: ReadonlyArray<DemoBlockCompletionEntry>,
-): number | null {
-  let highest: number | null = null
-  for (const e of entries) {
-    if (e.completed && (highest === null || e.index > highest)) highest = e.index
-  }
-  return highest
-}
-
-/** SQL-нейтральная спецификация фильтра «Демо: ДN / не проходил». */
-export interface DemoBlockFilterSpec {
-  /** demoId, чьи ключи ДОЛЖНЫ быть в demo_block_scores (обычно 0 или 1 штука — сам ДN). */
-  requirePresentDemoIds: string[]
-  /** demoId, чьи ключи НЕ должны быть в demo_block_scores (более высокие ДN — иначе highest был бы больше). */
-  requireAbsentDemoIds: string[]
+): number[] {
+  return entries
+    .filter((e) => e.completed)
+    .map((e) => e.index)
+    .sort((a, b) => a - b)
 }
 
 /**
- * Строит спецификацию фильтра «Демо: ДN» (targetIndex — 1-based номер) или
- * «не проходил» (targetIndex=null, требует отсутствия ЛЮБОГО ключа). Пустая
- * спецификация ({requirePresentDemoIds:[], requireAbsentDemoIds:[]}) при
- * targetIndex вне диапазона defs — вызывающая сторона должна трактовать её
- * как заведомо пустой результат (индекса не существует у этой вакансии).
+ * Текст бейджа-комбинации: «Д1» / «Д3» / «Д1+2» / «Д1+2+3».
+ * null = ничего не пройдено, бейдж не рисуется.
  */
-export function buildDemoBlockFilterSpec(
-  defs: ReadonlyArray<Pick<DemoBlockDef, "demoId" | "index">>,
-  targetIndex: number | null,
-): DemoBlockFilterSpec {
-  if (targetIndex === null) {
-    return { requirePresentDemoIds: [], requireAbsentDemoIds: defs.map((d) => d.demoId) }
+export function formatDemoBlockBadge(indexes: readonly number[]): string | null {
+  if (indexes.length === 0) return null
+  return "Д" + [...indexes].sort((a, b) => a - b).join("+")
+}
+
+/** Разобранный выбор фильтра «Демо: пройденные блоки». */
+export interface DemoBlockFilterSelection {
+  /** Выбранные номера блоков (1-based). Несколько = И (containment). */
+  indexes: number[]
+  /** Чекбокс «Не проходил ни одного». */
+  none: boolean
+}
+
+/** Разбирает значения query-параметра demoBlock ("1","2","3","none"; мусор игнорируется). */
+export function parseDemoBlockFilterValues(values: readonly string[]): DemoBlockFilterSelection {
+  const indexes: number[] = []
+  let none = false
+  for (const v of values) {
+    if (v === "none") { none = true; continue }
+    const n = Number.parseInt(v, 10)
+    if (Number.isInteger(n) && n >= 1 && !indexes.includes(n)) indexes.push(n)
   }
-  const target = defs.find((d) => d.index === targetIndex)
-  if (!target) return { requirePresentDemoIds: [], requireAbsentDemoIds: [] }
+  return { indexes: indexes.sort((a, b) => a - b), none }
+}
+
+/** SQL-нейтральная спецификация containment-фильтра «прошёл ДN» (И-семантика). */
+export interface DemoBlockContainmentSpec {
+  /** demoId, чьи ключи ДОЛЖНЫ быть в demo_block_scores (каждый выбранный ДN). */
+  requirePresentDemoIds: string[]
+  /** demoId, чьи ключи НЕ должны быть там («не проходил ни одного» → все блоки вакансии). */
+  requireAbsentDemoIds: string[]
+  /** true = выбран номер, которого нет у вакансии → заведомо пустой результат. */
+  impossible: boolean
+}
+
+/**
+ * Containment-семантика (корректировка владельца 14.07 v2): «прошёл ДN» —
+ * каждый выбранный номер требует НАЛИЧИЯ своего ключа в demo_block_scores;
+ * про остальные блоки ничего не утверждается (в отличие от снятой
+ * «наивысший»-семантики, которая запрещала более высокие номера).
+ * «Не проходил ни одного» требует ОТСУТСТВИЯ всех ключей. Комбинация
+ * «none» + номера противоречива — тот же demoId попадёт и в present, и в
+ * absent → SQL честно вернёт пусто (отдельно не отлавливаем).
+ */
+export function buildDemoBlockContainmentSpec(
+  defs: ReadonlyArray<Pick<DemoBlockDef, "demoId" | "index">>,
+  selection: DemoBlockFilterSelection,
+): DemoBlockContainmentSpec {
+  const requirePresentDemoIds: string[] = []
+  let impossible = false
+  for (const idx of selection.indexes) {
+    const def = defs.find((d) => d.index === idx)
+    if (!def) { impossible = true; continue }
+    requirePresentDemoIds.push(def.demoId)
+  }
   return {
-    requirePresentDemoIds: [target.demoId],
-    requireAbsentDemoIds: defs.filter((d) => d.index > targetIndex).map((d) => d.demoId),
+    requirePresentDemoIds,
+    requireAbsentDemoIds: selection.none ? defs.map((d) => d.demoId) : [],
+    impossible,
   }
 }
 
 /**
- * Текст тултипа бейджа «ДN»: «Д1 ✓ · Д2 начат · Д3 — не проходил».
+ * JS-проверка того же containment-фильтра по уже посчитанным индексам
+ * кандидата — для multi-vacancy ветки (post-fetch), где один SQL WHERE
+ * невозможен (у каждой вакансии свои demo-id).
+ */
+export function matchesDemoBlockSelection(
+  completedIndexes: readonly number[],
+  selection: DemoBlockFilterSelection,
+): boolean {
+  if (selection.none && completedIndexes.length > 0) return false
+  return selection.indexes.every((idx) => completedIndexes.includes(idx))
+}
+
+/**
+ * Тултип бейджа: ПОСТРОЧНАЯ детализация по каждому блоку — название,
+ * пройден/нет, балл ответов (корректировка владельца 14.07 v2; прежние
+ * форматы «Сдана часть N из M» и «Д1 ✓ · Д2 …» сняты — читались как
+ * обязательная последовательность). Рендерить с whitespace-pre-line.
  */
 export function formatDemoBlockTooltip(entries: ReadonlyArray<DemoBlockCompletionEntry>): string {
   return entries
     .map((e) => {
-      const label = `Д${e.index}`
-      if (e.completed) return `${label} ✓`
-      if (e.touched) return `${label} начат`
-      return `${label} — не проходил`
+      const head = `Д${e.index} «${e.title}»`
+      if (e.completed) return `${head} — пройден${e.score != null ? `, балл ${e.score}` : ""}`
+      if (e.touched) return `${head} — начат, не завершён`
+      return `${head} — не проходил`
     })
-    .join(" · ")
+    .join("\n")
 }
