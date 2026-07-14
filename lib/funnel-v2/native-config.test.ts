@@ -56,3 +56,39 @@ test("prefillNativeFromSpec: не перетирает уже сохранённ
   assert.equal(config.stage1?.inviteDelaySeconds, 15)
   assert.equal(changed, false)
 })
+
+import { resolveEffectiveAnketaPassInvite, resolveTgAlerts, resolveHotCandidate } from "./native-config"
+
+const SPEC_AP = { enabled: true, passThreshold: 40, aiEvalThreshold: 55, transferMode: "message", contentBlockId: "sb", messageText: "spec-msg", delaySeconds: 300, passScreenTitle: "s-pass", passScreenText: "s-passtext", failScreenTitle: "s-fail", failScreenText: "s-failtext", failAction: "pending_rejection", failRejectDelayMinutes: 30, inlineContinue: false, passScreenButtonLabel: "→", advanceToStage: null, hhAction: null }
+
+test("resolveEffectiveAnketaPassInvite: движок выключен → берём Портрет как есть", () => {
+  const cfg = normalizeFunnelV2({ enabled: true, stages: [], stage2: { enabled: true, passThreshold: 10 } })
+  const eff = resolveEffectiveAnketaPassInvite(SPEC_AP, cfg, false)
+  assert.equal(eff?.passThreshold, 40) // из spec, не из native
+})
+
+test("resolveEffectiveAnketaPassInvite: движок включён + есть stage2 → native", () => {
+  const cfg = normalizeFunnelV2({ enabled: true, stages: [], stage2: { enabled: true, passThreshold: 10, aiEvalThreshold: 20, transferMode: "seamless", contentBlockId: "nb", messageText: "n-msg", delaySeconds: 60, failAction: "none", failRejectDelayMinutes: 15 } })
+  const eff = resolveEffectiveAnketaPassInvite(SPEC_AP, cfg, true)
+  assert.equal(eff?.passThreshold, 10)
+  assert.equal(eff?.transferMode, "seamless")
+  assert.equal(eff?.contentBlockId, "nb")
+  assert.equal(eff?.messageText, "n-msg")
+  assert.equal(eff?.failAction, "none")
+})
+
+test("resolveEffectiveAnketaPassInvite: движок включён, но stage2 нет → Портрет (обратная совместимость)", () => {
+  const cfg = normalizeFunnelV2({ enabled: true, stages: [] })
+  const eff = resolveEffectiveAnketaPassInvite(SPEC_AP, cfg, true)
+  assert.equal(eff?.passThreshold, 40)
+})
+
+test("resolveTgAlerts / resolveHotCandidate: native при v2, spec иначе", () => {
+  const cfg = normalizeFunnelV2({ enabled: true, stages: [], communications: { tgAlerts: { enabled: true, minResumeScore: 88, minAnswersScore: null, onGatePassed: false }, hotCandidate: { enabled: true, threshold: 90, staleAfterHours: 5 } } })
+  const specTg = { enabled: false, minResumeScore: 10, minAnswersScore: 20, onGatePassed: true }
+  const specHot = { enabled: false, threshold: 60, staleAfterHours: 2 }
+  assert.equal(resolveTgAlerts(specTg, cfg, true)?.minResumeScore, 88)
+  assert.equal(resolveTgAlerts(specTg, cfg, false)?.minResumeScore, 10)
+  assert.equal(resolveHotCandidate(specHot, cfg, true)?.threshold, 90)
+  assert.equal(resolveHotCandidate(specHot, cfg, false)?.threshold, 60)
+})
