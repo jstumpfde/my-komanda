@@ -248,6 +248,18 @@ export interface CompanyHiringDefaults {
     }>
     // Slug способа интервью, выбранного по умолчанию (additive).
     defaultInterviewMethod?: string
+    // Задача editable-interview-reminder-texts (14.07): редактируемые тексты
+    // напоминаний об интервью — 4 порога (24ч/утро/1ч/15мин) × 3 канала
+    // (кандидат/HR-канал/менеджер). Раньше были захардкожены в
+    // app/api/cron/interview-reminders/route.ts. Пусто/undefined на любом
+    // уровне → дефолт DEFAULT_REMINDER_TEXTS (байт-в-байт как старый хардкод,
+    // см. lib/hr/interview-reminder-texts.ts). Плейсхолдеры и их семантика —
+    // REMINDER_TEXT_VARS там же; рендер — общий lib/template-renderer.ts.
+    reminderTexts?: {
+      candidate?: Partial<Record<"24h" | "morning" | "1h" | "15m", string>>
+      hr?:        Partial<Record<"24h" | "morning" | "1h" | "15m", string>>
+      manager?:   Partial<Record<"24h" | "morning" | "1h" | "15m", string>>
+    }
   }
   stopFactorsDefaults?:      VacancyStopFactors
   // Мастер-тумблер: применять stopFactorsDefaults живьём ко ВСЕМ вакансиям
