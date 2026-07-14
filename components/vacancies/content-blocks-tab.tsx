@@ -88,6 +88,10 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renamingValue, setRenamingValue] = useState("")
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  // Пока меню «Ещё» открыто, кнопки чипа держим видимыми: они в
+  // group-hover:inline-flex, а при открытии меню курсор уходит на меню, чип
+  // теряет hover → триггер получал display:none и Radix швырял меню в угол (0,0).
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [genDemo, setGenDemo] = useState(false)
 
@@ -499,13 +503,16 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
         )}
 
         {!measuring && !isRenaming && (
-          <span className="hidden group-hover:inline-flex items-center gap-0.5 shrink-0 ml-0.5">
+          <span className={cn(
+            "items-center gap-0.5 shrink-0 ml-0.5",
+            menuOpenId === block.id ? "inline-flex" : "hidden group-hover:inline-flex",
+          )}>
             <button
               title="Переименовать"
               onClick={(e) => { e.stopPropagation(); startRenaming(block) }}
               className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
             ><Pencil className="w-3 h-3" /></button>
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(o) => setMenuOpenId(o ? block.id : null)}>
               <DropdownMenuTrigger asChild>
                 <button
                   title="Ещё"
