@@ -666,7 +666,7 @@ function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary 
 }
 
 // ── Главный конструктор ──────────────────────────────────────────────────────
-export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { vacancyId: string; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
+export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, onOpenChatbot }: { vacancyId: string; isOwner?: boolean; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
   const [config, setConfig] = useState<FunnelV2Config | null>(null)
   const [summary, setSummary] = useState<SpecSummary | null>(null)
   const [content, setContent] = useState<ContentBlock[]>([])
@@ -888,7 +888,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
       {/* Тумблер движка v2: включает рантайм для ЭТОЙ вакансии. По умолчанию
           выключен — кандидаты идут по легаси-пути. Включение = живая автоматика. */}
       <div className={cn("rounded-xl border p-3 flex items-start gap-3", runtimeEnabled ? "border-emerald-300/60 bg-emerald-500/5" : "border-border bg-muted/30")}>
-        <Switch checked={runtimeEnabled} onCheckedChange={toggleRuntime} disabled={runtimeBusy || stages.length === 0} className="mt-0.5" />
+        <Switch checked={runtimeEnabled} onCheckedChange={toggleRuntime} disabled={runtimeBusy || stages.length === 0 || !isOwner} className="mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Движок воронки v2</span>
@@ -898,11 +898,13 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
               : <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">выключен</span>}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {stages.length === 0
-              ? "Добавьте хотя бы одну стадию, чтобы включить движок."
-              : runtimeEnabled
-                ? "Новые кандидаты этой вакансии идут по воронке v2 — авто-сообщения, движение по стадиям и дожим выполняются автоматически. Существующие кандидаты остаются на легаси-пути."
-                : "Кандидаты идут по легаси-пути. Включите, чтобы НОВЫЕ кандидаты этой вакансии пошли по воронке v2. Это живая автоматика — сообщения уходят кандидатам."}
+            {!isOwner
+              ? "Включение движка доступно только владельцу платформы. Стадии воронки вы можете настраивать и сохранять — они применятся, когда движок включат."
+              : stages.length === 0
+                ? "Добавьте хотя бы одну стадию, чтобы включить движок."
+                : runtimeEnabled
+                  ? "Новые кандидаты этой вакансии идут по воронке v2 — авто-сообщения, движение по стадиям и дожим выполняются автоматически. Существующие кандидаты остаются на легаси-пути."
+                  : "Кандидаты идут по легаси-пути. Включите, чтобы НОВЫЕ кандидаты этой вакансии пошли по воронке v2. Это живая автоматика — сообщения уходят кандидатам."}
           </p>
         </div>
       </div>

@@ -4885,7 +4885,7 @@ export default function VacancyPage() {
                 {/* ───────── Воронка v2 (beta, видна всем) ───────── */}
                 {settingsSection === "funnel-v2" && (
                 <SettingsTabShell width="full" className="space-y-6">
-                  <FunnelV2Builder vacancyId={id} onOpenPortrait={() => {
+                  <FunnelV2Builder vacancyId={id} isOwner={isOwnerEmail(user?.email)} onOpenPortrait={() => {
                     setSettingsSection("spec")
                     const sp = new URLSearchParams(window.location.search)
                     sp.set("tab", "settings"); sp.set("section", "spec")
