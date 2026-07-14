@@ -18,7 +18,10 @@ import { and, eq, inArray, count, sql } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { processHhQueue } from "@/lib/hh/process-queue"
+
+const CRON_NAME = "hh-import-burst"
 
 const PROCESS_LIMIT_PER_RUN = 50
 const HH_IMPORT_LOCK_KEY = 7470001
@@ -146,53 +149,60 @@ async function runOneIteration(): Promise<IterationResult> {
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
+  const run = await startCronRun(CRON_NAME).catch(() => null)
 
-  const body = await req.json().catch(() => ({})) as { iterations?: number; delayMs?: number }
-  const iterations = Math.min(Math.max(Number(body.iterations) || 10, 1), 50)
-  const delayMs    = Math.min(Math.max(Number(body.delayMs) || 1000, 0), 30_000)
+  try {
+    const body = await req.json().catch(() => ({})) as { iterations?: number; delayMs?: number }
+    const iterations = Math.min(Math.max(Number(body.iterations) || 10, 1), 50)
+    const delayMs    = Math.min(Math.max(Number(body.delayMs) || 1000, 0), 30_000)
 
-  let totalImported = 0
-  let totalProcessed = 0
-  let totalDeferred = 0
-  let totalSkipped = 0
-  let busyHits = 0
-  const allErrors: string[] = []
-  const perIteration: Array<Pick<IterationResult, "imported" | "processed" | "deferredOffHours">> = []
+    let totalImported = 0
+    let totalProcessed = 0
+    let totalDeferred = 0
+    let totalSkipped = 0
+    let busyHits = 0
+    const allErrors: string[] = []
+    const perIteration: Array<Pick<IterationResult, "imported" | "processed" | "deferredOffHours">> = []
 
-  for (let i = 0; i < iterations; i++) {
-    const r = await runOneIteration()
-    if (r.busy) {
-      busyHits++
-      // если основной cron сейчас работает — пропускаем итерацию и ждём
+    for (let i = 0; i < iterations; i++) {
+      const r = await runOneIteration()
+      if (r.busy) {
+        busyHits++
+        // если основной cron сейчас работает — пропускаем итерацию и ждём
+        if (i < iterations - 1) await sleep(delayMs)
+        continue
+      }
+      totalImported  += r.imported
+      totalProcessed += r.processed
+      totalDeferred  += r.deferredOffHours
+      totalSkipped   += r.skipped
+      if (r.errors.length > 0) allErrors.push(...r.errors)
+      perIteration.push({
+        imported:         r.imported,
+        processed:        r.processed,
+        deferredOffHours: r.deferredOffHours,
+      })
+      // Если в итерации ничего не разобрали и не импортировали — очередь пуста, выходим
+      if (r.imported === 0 && r.processed === 0 && r.deferredOffHours === 0) break
       if (i < iterations - 1) await sleep(delayMs)
-      continue
     }
-    totalImported  += r.imported
-    totalProcessed += r.processed
-    totalDeferred  += r.deferredOffHours
-    totalSkipped   += r.skipped
-    if (r.errors.length > 0) allErrors.push(...r.errors)
-    perIteration.push({
-      imported:         r.imported,
-      processed:        r.processed,
-      deferredOffHours: r.deferredOffHours,
-    })
-    // Если в итерации ничего не разобрали и не импортировали — очередь пуста, выходим
-    if (r.imported === 0 && r.processed === 0 && r.deferredOffHours === 0) break
-    if (i < iterations - 1) await sleep(delayMs)
-  }
 
-  return NextResponse.json({
-    ok: true,
-    iterationsRequested: iterations,
-    iterationsRun:       perIteration.length,
-    busyHits,
-    totalImported,
-    totalProcessed,
-    totalDeferred,
-    totalSkipped,
-    perIteration,
-    errors: allErrors.slice(0, 20),
-    errorsCount: allErrors.length,
-  })
+    if (run) await finishCronRun(run.id, "ok", { iterationsRun: perIteration.length, totalImported, totalProcessed })
+    return NextResponse.json({
+      ok: true,
+      iterationsRequested: iterations,
+      iterationsRun:       perIteration.length,
+      busyHits,
+      totalImported,
+      totalProcessed,
+      totalDeferred,
+      totalSkipped,
+      perIteration,
+      errors: allErrors.slice(0, 20),
+      errorsCount: allErrors.length,
+    })
+  } catch (err) {
+    if (run) await finishCronRun(run.id, "error", null, err instanceof Error ? err.message : String(err))
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }
