@@ -1284,6 +1284,11 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
           const descJson = localVac.descriptionJson as Record<string, unknown> | null
           const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
           const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
+          // Стадия 1 воронки v2 — нативные поля funnelV2.stage1 (перенос из
+          // Портрета 14.07). При включённом движке v2 нерабочее время/задержку
+          // первого сообщения берём отсюда, а не из vacancy-колонок-зеркал.
+          const { resolveStage1 } = await import("@/lib/funnel-v2/native-config")
+          const nativeStage1 = resolveStage1(funnelV2)
           // Вход кандидата — ПЕРВАЯ ВКЛЮЧЁННАЯ стадия (enabled===false пропускаем;
           // отсутствие поля = включена, прежнее поведение).
           const firstStageEnabled = funnelV2.stages.find(s => s.enabled !== false)
@@ -1347,18 +1352,22 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // КРОМЕ паузы — в off-hours слаём НЕ обычное приглашение, а мягкое
               // подтверждение спец-текстом (firstMessageOffHoursText / дефолт
               // компании), БЕЗ демо-ссылки/дожима: паритет с legacy-веткой ниже.
+              // Раньше здесь читались vacancy-колонки-зеркала Портрета; теперь при
+              // включённом движке v2 источник — native (funnelV2.stage1).
               let offHoursSoftText: string | null = null
               if (offHoursSoftMode) {
-                const { resolveV2FirstMessageDelayMs, DEFAULT_OFF_HOURS_DELAY_SECONDS, resolveOffHoursSoftText } =
+                const { resolveV2FirstMessageDelayMs } =
                   await import("@/lib/funnel-v2/first-message-timing")
                 const offDelayMs = resolveV2FirstMessageDelayMs(localVac, {
-                  enabled:      localVac.firstMessageOffHoursEnabled === true,
-                  delaySeconds: typeof localVac.firstMessageOffHoursDelaySeconds === "number"
-                    ? localVac.firstMessageOffHoursDelaySeconds
-                    : DEFAULT_OFF_HOURS_DELAY_SECONDS,
+                  enabled:      nativeStage1.offHoursEnabled,
+                  delaySeconds: nativeStage1.offHoursDelaySeconds,
                 })
                 if (offDelayMs > 0) await sleep(offDelayMs)
-                offHoursSoftText = resolveOffHoursSoftText(localVac, md.offHoursMessage)
+                // Текст мягкого подтверждения: нативный (stage1.offHoursText) либо,
+                // если пуст, эффективный дефолт компании (md.offHoursMessage).
+                offHoursSoftText = nativeStage1.offHoursText.trim().length > 0
+                  ? nativeStage1.offHoursText
+                  : md.offHoursMessage
               }
 
               await executeStageEntry(candidateForV2, vacancyForV2, firstStage, { offHoursSoftText })
