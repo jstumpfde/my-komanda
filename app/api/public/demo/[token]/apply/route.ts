@@ -294,7 +294,10 @@ export async function POST(
     const emailNorm = normalizeEmail(body.email)
     const dupConds = []
     if (phoneNorm) {
-      dupConds.push(sql`regexp_replace(coalesce(${candidates.phone}, ''), '\D', '', 'g') = ${phoneNorm}`)
+      // Готча drizzle (найдена 14.07 живым прогоном universal-link): одиночный '\D'
+      // внутри sql`...`-тега схлопывается в 'D' (cooked-строки) — дедуп по телефону
+      // МОЛЧА не работал. '[^0-9]' не страдает от escape-неоднозначности.
+      dupConds.push(sql`regexp_replace(coalesce(${candidates.phone}, ''), '[^0-9]', '', 'g') = ${phoneNorm}`)
     }
     if (emailNorm) {
       dupConds.push(sql`lower(trim(coalesce(${candidates.email}, ''))) = ${emailNorm}`)
