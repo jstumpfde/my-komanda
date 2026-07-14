@@ -338,6 +338,13 @@ export async function GET(
       .where(and(
         eq(calendarEvents.companyId, row.companyId),
         eq(calendarEvents.type, "interview"),
+        // Только ПОДТВЕРЖДЁННЫЕ занимают слот. Раньше фильтра по статусу не было
+        // и отменённое будущее интервью (status='cancelled' — самозапись
+        // перезаписалась, менеджер отменил, кандидат отменил) держало слот
+        // занятым, и никто не мог записаться на это время. Бронирование в
+        // POST-транзакции ниже уже считает занятость только по confirmed —
+        // приводим генерацию сетки к той же семантике.
+        eq(calendarEvents.status, "confirmed"),
         gte(calendarEvents.startAt, now),
         lte(calendarEvents.startAt, limit),
       ))
