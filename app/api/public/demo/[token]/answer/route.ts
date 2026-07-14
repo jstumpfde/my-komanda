@@ -13,6 +13,8 @@ import { isPortraitConfigured } from "@/lib/core/spec/resume-input"
 import { getSpec } from "@/lib/core/spec/store"
 import { maybeSendCandidateAlert } from "@/lib/telegram/candidate-alert"
 import { resolveTransferMode, shouldAdvanceInline } from "@/lib/demo/anketa-pass-gate"
+import { resolveEffectiveAnketaPassInvite } from "@/lib/funnel-v2/native-config"
+import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 
 // Бесшовный переход на блок 2 ждёт AI-оценку ответов анкеты максимум это
 // время (мс), затем едет дальше без неё (объективный балл уже посчитан
@@ -380,7 +382,20 @@ export async function POST(
       // момент чтения. Для вакансий без 2-й части (подавляющее большинство)
       // поведение не меняется — оценка остаётся fire-and-forget, задержки нет.
       const specForGateAwait = await getSpec(txResult.vacancyId).catch(() => null)
-      const secondPartEnabled = specForGateAwait?.anketaPassInvite?.enabled === true
+      // Стадия 2: эффективный конфиг (native при движке v2, Портрет иначе). Тот же
+      // резолвер, что и в maybeScheduleSecondDemoInvite (Task 12) — экраны/переход/
+      // pending-отказ этого роута читают ровно тот конфиг, по которому решает гейт.
+      const [vacRowAp] = await db
+        .select({ runtimeEnabled: vacancies.funnelV2RuntimeEnabled, descriptionJson: vacancies.descriptionJson })
+        .from(vacancies)
+        .where(eq(vacancies.id, txResult.vacancyId))
+        .limit(1)
+      const effectiveAp = resolveEffectiveAnketaPassInvite(
+        (specForGateAwait?.anketaPassInvite ?? null) as Record<string, unknown> | null,
+        normalizeFunnelV2((vacRowAp?.descriptionJson as Record<string, unknown> | null)?.funnelV2),
+        vacRowAp?.runtimeEnabled === true,
+      )
+      const secondPartEnabled = effectiveAp?.enabled === true
 
       const scorePromise = scoreDemoAnswers({
         candidateId: txResult.candidateId,
@@ -398,7 +413,7 @@ export async function POST(
         // успевал сработать). computeObjectiveGateScore — чистый DB-read +
         // код, без AI, дешёвый. AI-скоринг всё равно продолжается в фоне
         // (для отчётности/HR-карточки), просто не блокирует ответ кандидату.
-        const passThreshold = specForGateAwait?.anketaPassInvite?.passThreshold
+        const passThreshold = effectiveAp?.passThreshold
         let objectiveAlreadyPasses = false
         if (typeof passThreshold === "number") {
           const objResult = await computeObjectiveGateScore(txResult.candidateId, txResult.vacancyId).catch(() => null)
@@ -450,13 +465,12 @@ export async function POST(
               console.warn("[candidate-alert] gate_passed failed:", err)
             })
           }
-          const spec = await getSpec(txResult.vacancyId)
-          const ap = spec?.anketaPassInvite
           // Инлайн-переход только в seamless/both (lib/demo/anketa-pass-gate.ts —
           // единственный источник истины). Обратная совместимость: старые спеки
-          // без transferMode → inlineContinue (false ⇒ message).
-          const transferMode = resolveTransferMode(ap)
-          if (ap?.enabled === true && shouldAdvanceInline(transferMode)) {
+          // без transferMode → inlineContinue (false ⇒ message). effectiveAp:
+          // native при движке v2, Портрет иначе (тот же конфиг, что и у гейта).
+          const transferMode = resolveTransferMode(effectiveAp)
+          if (effectiveAp?.enabled === true && shouldAdvanceInline(transferMode)) {
             const [cand] = await db
               .select({ overrideContentBlockId: candidates.overrideContentBlockId })
               .from(candidates)
@@ -476,8 +490,8 @@ export async function POST(
           // pendingRejectionMessage=null, и executeRejection→trySyncRejectToHh
           // сам подставит generic-текст вакансии при исполнении.
           try {
-            const spec = await getSpec(txResult.vacancyId)
-            const ap = spec?.anketaPassInvite
+            // effectiveAp: native при движке v2, Портрет иначе (тот же конфиг, что у гейта).
+            const ap = effectiveAp
             if (ap?.enabled === true && (ap.failAction === "pending_rejection" || ap.failAction === "pending_manual")) {
               const [cand] = await db
                 .select({

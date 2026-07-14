@@ -11,6 +11,7 @@ import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 import { getSpec } from "@/lib/core/spec/store"
 import { resolveTransferMode } from "@/lib/demo/anketa-pass-gate"
+import { resolveEffectiveAnketaPassInvite } from "@/lib/funnel-v2/native-config"
 
 // Достаём first/last/city из hh resume. У части записей raw_data — это сам
 // resume, у других обёрнут в { resume: ... }. Альтернативные ключи
@@ -313,7 +314,12 @@ export async function GET(
     } | null = null
     try {
       const spec = await getSpec(vacancy.id)
-      const ap = spec?.anketaPassInvite
+      // Стадия 2: эффективный конфиг (native при движке v2, Портрет иначе).
+      const ap = resolveEffectiveAnketaPassInvite(
+        (spec?.anketaPassInvite ?? null) as Record<string, unknown> | null,
+        normalizeFunnelV2(vacancyDescJson.funnelV2),
+        vacancy.funnelV2RuntimeEnabled === true,
+      )
       if (ap?.enabled === true) {
         // Обратная совместимость: старые спеки без transferMode → inlineContinue
         // (lib/demo/anketa-pass-gate.ts — единственный источник истины).
