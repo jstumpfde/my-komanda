@@ -16,7 +16,7 @@
 
 import { eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates } from "@/lib/db/schema"
+import { candidates, vacancies } from "@/lib/db/schema"
 import { getSpec } from "@/lib/core/spec/store"
 import { createNotification } from "@/lib/notifications"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
@@ -157,7 +157,20 @@ export async function scanHotCandidates(): Promise<HotCandidateScanResult> {
     let cfg = specCache.get(raw.vacancy_id)
     if (!cfg) {
       const spec = await getSpec(raw.vacancy_id)
-      const hot = spec?.hotCandidateAlert
+      // При включённом движке v2 берём «горячего кандидата» из
+      // funnelV2.communications.hotCandidate (перенос из Портрета 14.07).
+      const { resolveHotCandidate } = await import("@/lib/funnel-v2/native-config")
+      const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
+      const [vacRow] = await db
+        .select({ runtimeEnabled: vacancies.funnelV2RuntimeEnabled, descriptionJson: vacancies.descriptionJson })
+        .from(vacancies)
+        .where(eq(vacancies.id, raw.vacancy_id))
+        .limit(1)
+      const hot = resolveHotCandidate(
+        (spec?.hotCandidateAlert ?? null) as Record<string, unknown> | null,
+        normalizeFunnelV2((vacRow?.descriptionJson as Record<string, unknown> | null)?.funnelV2),
+        vacRow?.runtimeEnabled === true,
+      )
       cfg = {
         enabled: hot?.enabled === true,
         threshold: hot?.threshold ?? PLATFORM_DEFAULT_HOT_CANDIDATE_THRESHOLD,
