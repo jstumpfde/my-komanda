@@ -7,6 +7,7 @@ import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { logAudit, ipFromRequest } from "@/lib/audit/log"
 import { ALL_STAGE_SLUGS, LEGACY_STAGE_LABELS, type StageSlug } from "@/lib/stages"
 import { hardDeleteCandidatesByIds } from "@/lib/candidates/hard-delete-ids"
+import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
 
 const HH_BULK_DELAY_MS = 500
 
@@ -76,6 +77,28 @@ const DELETE_ACTIONS = new Set<BulkAction>(["trash", "untrash", "hard_delete"])
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+// Приглашение записаться на интервью (ссылка /schedule/[token]) — bulk-параллель
+// одиночного пути (app/api/modules/hr/candidates/[id]/stage/route.ts:198-203).
+// Раньше bulk-actions "invite"/"set_stage" двигали candidates.stage напрямую,
+// минуя scheduleInterviewInvite — кандидат молча попадал в interview без
+// ссылки на выбор времени. scheduleInterviewInvite идемпотентен (дедуп
+// pending|sent schedule_invite), поэтому безопасно вызывать даже повторно;
+// previousStage-фильтр — чтобы не дёргать его для тех, кто и так уже был в
+// interview. Ошибка одного кандидата не должна ронять всю пачку — try/catch
+// per candidate, шлём последовательно (не параллелим hh-нагрузку).
+async function scheduleInterviewInvitesForBulk(
+  candidatesBefore: { id: string; stage: string | null; vacancyId: string }[],
+): Promise<void> {
+  for (const c of candidatesBefore) {
+    if (c.stage === "interview") continue
+    try {
+      await scheduleInterviewInvite({ candidateId: c.id, vacancyId: c.vacancyId })
+    } catch (err) {
+      console.warn(`[bulk] schedule invite failed for ${c.id}:`, err)
+    }
+  }
+}
+
 // Последовательно синхронизирует отказы с hh.ru.  Делается ПОСЛЕ
 // успешного db-апдейта; ошибки логируются, локальный стейдж не откатывается.
 // Задержка между запросами — anti-429 (hh ограничивает скорость negotiations).
@@ -114,6 +137,7 @@ export async function POST(req: NextRequest) {
         stage: candidates.stage,
         isFavorite: candidates.isFavorite,
         stageHistory: candidates.stageHistory,
+        vacancyId: candidates.vacancyId,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -160,6 +184,9 @@ export async function POST(req: NextRequest) {
           return upd.length
         })
         affected = result
+        // Не блокируем ответ HR'у — приглашения шлются в фоне (см. try/catch
+        // per candidate внутри хелпера).
+        void scheduleInterviewInvitesForBulk(owned)
         break
       }
 
@@ -203,6 +230,9 @@ export async function POST(req: NextRequest) {
         affected = result
         if (stage === "rejected") {
           void syncBulkRejectToHh(ownedIds)
+        }
+        if (stage === "interview") {
+          void scheduleInterviewInvitesForBulk(owned)
         }
         break
       }

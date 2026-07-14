@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
-import { eq, and } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { vacancies, followUpMessages, followUpCampaigns } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 
 // POST /api/modules/hr/vacancies/[id]/message-queue/pause
@@ -30,6 +30,22 @@ export async function POST(
 
     if (result.length === 0) {
       return apiError("Вакансия не найдена", 404)
+    }
+
+    // Снятие паузы: cron откладывал pending-строки на +6ч (анти-HOL,
+    // инцидент 11-14.07, маркер deferred_outbound_paused) — возвращаем их
+    // на now, чтобы отправка возобновилась ближайшим тиком, а не через часы.
+    if (body.paused === false) {
+      await db.update(followUpMessages)
+        .set({ scheduledAt: new Date(), errorMessage: null })
+        .where(and(
+          eq(followUpMessages.status, "pending"),
+          eq(followUpMessages.errorMessage, "deferred_outbound_paused"),
+          inArray(
+            followUpMessages.campaignId,
+            db.select({ id: followUpCampaigns.id }).from(followUpCampaigns).where(eq(followUpCampaigns.vacancyId, id)),
+          ),
+        ))
     }
 
     return apiSuccess({ paused: body.paused })
