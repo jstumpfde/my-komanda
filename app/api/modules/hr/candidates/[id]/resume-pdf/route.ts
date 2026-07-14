@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, hhResponses, hhCandidates } from "@/lib/db/schema"
+import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { getValidToken } from "@/lib/hh-helpers"
+import { resolveResumeId } from "@/lib/hh/resolve-resume-id"
 
 // GET /api/modules/hr/candidates/[id]/resume-pdf
 //
@@ -23,54 +24,11 @@ import { getValidToken } from "@/lib/hh-helpers"
 // каждый раз заново, а не сохраняем ссылку). Если станет узким местом —
 // дисковый кэш с TTL по аналогии с lib/hh/save-candidate-photo.ts.
 //
-// Резолв resume_id — тем же двухпутевым способом, что и GET
-// /api/modules/hr/candidates/[id] (см. getOwnedCandidate там же):
-//   1. hh_candidates.hh_resume_id — легаси-импорт (lib/hh/client.ts),
-//      прямая и самая надёжная связка candidate → resume_id.
-//   2. hh_responses.raw_data.resume.id — основной путь (import-responses.ts
-//      / cron), привязан к кандидату через local_candidate_id.
-//   3. hh_candidates.hh_application_id → hh_responses.hh_response_id →
-//      raw_data.resume.id — fallback, когда local_candidate_id не проставлен.
+// Резолв resume_id — общий хелпер lib/hh/resolve-resume-id.ts (единый
+// источник правды с флагом hasResumePdf в GET /api/modules/hr/candidates/[id],
+// который гейтит кнопку «Скачать PDF» в UI).
 
 const HH_UA = "Company24/1.0 (company24.pro)"
-
-interface HhRawResumeRef {
-  resume?: { id?: string }
-}
-
-async function resolveResumeId(candidateId: string, companyId: string): Promise<string | null> {
-  const [link] = await db
-    .select({ hhResumeId: hhCandidates.hhResumeId })
-    .from(hhCandidates)
-    .where(eq(hhCandidates.candidateId, candidateId))
-    .limit(1)
-  if (link?.hhResumeId) return link.hhResumeId
-
-  const [resp] = await db
-    .select({ raw: hhResponses.rawData })
-    .from(hhResponses)
-    .where(and(eq(hhResponses.localCandidateId, candidateId), eq(hhResponses.companyId, companyId)))
-    .limit(1)
-  const raw1 = resp?.raw as HhRawResumeRef | null | undefined
-  if (raw1?.resume?.id) return raw1.resume.id
-
-  const [link2] = await db
-    .select({ hhApplicationId: hhCandidates.hhApplicationId })
-    .from(hhCandidates)
-    .where(eq(hhCandidates.candidateId, candidateId))
-    .limit(1)
-  if (link2?.hhApplicationId) {
-    const [resp2] = await db
-      .select({ raw: hhResponses.rawData })
-      .from(hhResponses)
-      .where(and(eq(hhResponses.companyId, companyId), eq(hhResponses.hhResponseId, link2.hhApplicationId)))
-      .limit(1)
-    const raw2 = resp2?.raw as HhRawResumeRef | null | undefined
-    if (raw2?.resume?.id) return raw2.resume.id
-  }
-
-  return null
-}
 
 export async function GET(
   _req: NextRequest,

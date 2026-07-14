@@ -182,6 +182,11 @@ interface HhResumeInfoProps {
   // (/api/modules/hr/candidates/[id]/resume-pdf). Опционален для обратной
   // совместимости со старыми вызовами компонента без этого пропа.
   candidateId?: string
+  // Флаг доступности PDF из GET /api/modules/hr/candidates/[id]
+  // (hasResumePdf) — ЕДИНЫЙ источник правды с роутом resume-pdf (тот же
+  // резолвер lib/hh/resolve-resume-id.ts). НЕ выводить из alternate_url:
+  // у легаси-кандидатов PDF бывает доступен и без него, и наоборот.
+  hasResumePdf?: boolean
   // Fallback на наши собственные поля кандидата
   fallback: {
     phone: string | null
@@ -551,7 +556,7 @@ function ExperienceCard({ exp }: { exp: HhExperience }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export function HhResumeInfo({ rawData, candidateId, fallback }: HhResumeInfoProps) {
+export function HhResumeInfo({ rawData, candidateId, hasResumePdf, fallback }: HhResumeInfoProps) {
   const raw = (rawData && typeof rawData === "object" ? rawData : {}) as HhRawData
   // Иногда raw_data — это сам resume (без вложенного ключа resume).
   const resume: HhResume | undefined = raw.resume
@@ -692,7 +697,7 @@ export function HhResumeInfo({ rawData, candidateId, fallback }: HhResumeInfoPro
     : []
 
   // ── Booleans для управления секциями ───────────────────────────────────────
-  const hasPersonal = !!(fullName || age || gender || desiredPosition || salary || citizenship.length > 0 || workTicket.length > 0 || resume?.alternate_url)
+  const hasPersonal = !!(fullName || age || gender || desiredPosition || salary || citizenship.length > 0 || workTicket.length > 0 || resume?.alternate_url || hasResumePdf)
   const hasContacts = !!(
     allContacts.length > 0 || fallbackPhone || fallbackEmail ||
     phoneHidden || emailHidden || city
@@ -749,7 +754,7 @@ export function HhResumeInfo({ rawData, candidateId, fallback }: HhResumeInfoPro
               <span className="text-foreground">{workTicket.join(", ")}</span>
             </Row>
           )}
-          {(resume?.alternate_url || candidateId) && (
+          {(resume?.alternate_url || (hasResumePdf && candidateId)) && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               {resume?.alternate_url && (
                 <a
@@ -763,10 +768,11 @@ export function HhResumeInfo({ rawData, candidateId, fallback }: HhResumeInfoPro
                 </a>
               )}
               {/* PDF резюме напрямую с hh.ru — для HR без доступа к личному
-                  кабинету hh. Роут сам резолвит resume_id и токен компании;
-                  показываем ссылку, только если у карточки вообще есть
-                  hh-резюме (alternate_url) — единый сигнал наличия связки. */}
-              {resume?.alternate_url && candidateId && (
+                  кабинету hh. Роут сам резолвит resume_id и токен компании.
+                  Гейт — hasResumePdf из API карточки (тот же резолвер, что
+                  у роута), НЕ alternate_url: у легаси-кандидатов PDF бывает
+                  доступен и без него. */}
+              {hasResumePdf && candidateId ? (
                 <a
                   href={`/api/modules/hr/candidates/${candidateId}/resume-pdf`}
                   target="_blank"
@@ -776,7 +782,15 @@ export function HhResumeInfo({ rawData, candidateId, fallback }: HhResumeInfoPro
                   <Download className="w-3 h-3" />
                   Скачать PDF
                 </a>
-              )}
+              ) : candidateId ? (
+                <span
+                  title="У кандидата нет привязки к резюме hh.ru — PDF недоступен"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground opacity-60 cursor-not-allowed select-none"
+                >
+                  <Download className="w-3 h-3" />
+                  Скачать PDF
+                </span>
+              ) : null}
             </div>
           )}
         </section>

@@ -2226,6 +2226,7 @@ export function CandidateDrawer({
                   <HhResumeInfo
                     rawData={candidate.hhRawData}
                     candidateId={candidate.id}
+                    hasResumePdf={candidate.hasResumePdf ?? false}
                     fallback={{
                       phone: candidate.phone,
                       email: candidate.email,
@@ -2317,20 +2318,37 @@ export function CandidateDrawer({
                   ) : null
                 )}
 
-                {/* Нет hh-связки вообще — «Скачать PDF» недоступна, показываем
-                    disabled-кнопку с тултипом вместо того, чтобы просто скрыть. */}
+                {/* Ветка без hhRawData (нет hh_responses): у легаси-кандидатов
+                    (hh_candidates.hh_resume_id без hh_responses — старый
+                    HHClient.importApplications) PDF всё равно доступен —
+                    hasResumePdf из API карточки считает ТЕМ ЖЕ резолвером,
+                    что и роут resume-pdf (predeploy-guard 14.07). Активная
+                    ссылка при hasResumePdf, disabled-кнопка с тултипом —
+                    только когда PDF реально недоступен. */}
                 {!candidate.hhRawData && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled
-                    title="У кандидата нет привязки к резюме hh.ru — PDF недоступен"
-                    className="h-6 px-2 text-xs text-muted-foreground gap-1 cursor-not-allowed opacity-60 hover:bg-transparent"
-                  >
-                    <Download className="w-3 h-3" />
-                    Скачать PDF
-                  </Button>
+                  candidate.hasResumePdf ? (
+                    <a
+                      href={`/api/modules/hr/candidates/${candidate.id}/resume-pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <Download className="w-3 h-3" />
+                      Скачать PDF
+                    </a>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled
+                      title="У кандидата нет привязки к резюме hh.ru — PDF недоступен"
+                      className="h-6 px-2 text-xs text-muted-foreground gap-1 cursor-not-allowed opacity-60 hover:bg-transparent"
+                    >
+                      <Download className="w-3 h-3" />
+                      Скачать PDF
+                    </Button>
+                  )
                 )}
 
                 {(candidate.source || candidate.referredByShortId) && (

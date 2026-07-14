@@ -6,6 +6,7 @@ import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { describeSecondDemoInvite } from "@/lib/messaging/second-demo-invite"
 import { extractTaskQuestions } from "@/lib/demo/score-answers"
+import { resolveResumeId } from "@/lib/hh/resolve-resume-id"
 
 // Helper: verify candidate belongs to user's company.
 // За один SQL-запрос подтягиваем кандидата + вакансию + связку hh_responses
@@ -90,6 +91,13 @@ export async function GET(
     // приглашён/нет (read-only, не пишет в БД). null = фича в Портрете выключена.
     const secondDemoInvite = await describeSecondDemoInvite(id, row.candidate.vacancyId)
 
+    // Доступность «Скачать PDF» — ТОТ ЖЕ резолвер, что и в resume-pdf/route.ts
+    // (единый источник правды, predeploy-guard 14.07): hhRawData наполняется
+    // только из hh_responses, а легаси-кандидаты (hh_candidates.hh_resume_id без
+    // hh_responses — старый HHClient.importApplications) без этого флага видели
+    // бы disabled-кнопку при живом PDF. 1-3 дешёвых SELECT на открытие карточки.
+    const hasResumePdf = (await resolveResumeId(id, user.companyId)) !== null
+
     // Индикатор прогресса частей анкеты "N/M" (Вариант Б, единый балл 05.07):
     // сколько демо-блоков вакансии вообще СКОРИРУЕМЫ (есть вопросы с
     // aiCriteria) — demoLessons уже содержит lessons_json ВСЕХ демо вакансии
@@ -109,6 +117,7 @@ export async function GET(
       vacancyTitle: row.vacancyTitle,
       hhResponseId: row.hhResponseId ?? null,
       hhRawData: row.hhRawData ?? null,
+      hasResumePdf,
       demoLessons: row.demoLessons ?? null,
       secondDemoInvite,
       anketaPartsTotal,
