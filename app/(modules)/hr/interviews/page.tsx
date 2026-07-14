@@ -151,15 +151,25 @@ interface Interview {
 interface WaitingCandidate {
   id: string; name: string; stage: string | null; phone: string | null; token: string | null
   // Номера пройденных демо-блоков (API отдаёт completedDemoBlockIndexes) — для
-  // индикатора «⚠ не прошёл Демо-3» у кандидатов stage='interview'. Стадию НЕ
-  // трогаем (владелец 14.07): кандидат остаётся в списке и может быть записан.
+  // индикатора «⚠ не прошёл последнее демо» у кандидатов stage='interview'.
+  // Стадию НЕ трогаем (владелец 14.07): кандидат остаётся в списке и может
+  // быть записан.
   completedDemoBlockIndexes: number[]
+  // Число демо-блоков ЭТОЙ вакансии (API отдаёт demoBlockDefs.length). Нужно,
+  // чтобы бейдж считал последний блок ДИНАМИЧЕСКИ и не светился ложно на
+  // вакансиях без нескольких демо (находка predeploy-guard 14.07).
+  demoBlockCount: number
 }
 
-// Наивысший демо-блок воронки (Демо-3). Кандидат на стадии interview, у
-// которого этого индекса нет в completedDemoBlockIndexes, Демо-3 ещё не прошёл —
-// показываем лёгкий бейдж (напоминание кандидату шлёт отдельный агент).
-const HIGHEST_DEMO_BLOCK_INDEX = 3
+// Прошёл ли кандидат ПОСЛЕДНЕЕ демо-блок вакансии. Бейдж показываем только для
+// вакансий с >1 демо-блоком (у одно-демо/легаси «последнего демо» как отдельного
+// шага нет — иначе бейдж ложно светился бы на всех interview-кандидатах, находка
+// predeploy-guard 14.07). Последний индекс = demoBlockCount (1-based).
+function needsLastDemoBadge(c: { stage: string | null; completedDemoBlockIndexes: number[]; demoBlockCount: number }): boolean {
+  return c.stage === "interview"
+    && c.demoBlockCount > 1
+    && !c.completedDemoBlockIndexes.includes(c.demoBlockCount)
+}
 
 // ВРЕМЕННАЯ РАЗОВАЯ ПОМЕТКА (не системная фича!) — 14.07.2026.
 // Координатор вручную сверил nginx-логи (IP ручных кликов HR) с БД и
@@ -847,13 +857,14 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
       // apiSuccess отдаёт data напрямую (без обёртки); при pageSize — { candidates, total, ... }.
       const list = (json?.candidates ?? json ?? []) as {
         id: string; name?: string; stage?: string | null; phone?: string | null; token?: string | null; nextInterviewAt?: string | null
-        completedDemoBlockIndexes?: number[]
+        completedDemoBlockIndexes?: number[]; demoBlockCount?: number
       }[]
       const waiting = (Array.isArray(list) ? list : [])
         .filter(c => (c.stage === "interview" || c.stage === "scheduled") && !c.nextInterviewAt)
         .map(c => ({
           id: c.id, name: c.name || "Без имени", stage: c.stage ?? null, phone: c.phone ?? null, token: c.token ?? null,
           completedDemoBlockIndexes: Array.isArray(c.completedDemoBlockIndexes) ? c.completedDemoBlockIndexes : [],
+          demoBlockCount: typeof c.demoBlockCount === "number" ? c.demoBlockCount : 0,
         }))
       setWaitingCandidates(waiting)
 
@@ -1512,9 +1523,9 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                         <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
                           <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
                           {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
-                          {c.stage === "interview" && !c.completedDemoBlockIndexes.includes(HIGHEST_DEMO_BLOCK_INDEX) && (
-                            <Badge variant="outline" className="text-[10px] font-normal border-amber-300 text-amber-700 dark:text-amber-400" title="Кандидат ещё не прошёл Демо-3 — можно записать, но напомнить про Демо-3">
-                              ⚠ не прошёл Демо-3
+                          {needsLastDemoBadge(c) && (
+                            <Badge variant="outline" className="text-[10px] font-normal border-amber-300 text-amber-700 dark:text-amber-400" title="Кандидат ещё не прошёл последнее демо — можно записать, но стоит напомнить пройти его">
+                              ⚠ не прошёл демо
                             </Badge>
                           )}
                           {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
@@ -1550,9 +1561,9 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                         <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
                           <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
                           {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
-                          {c.stage === "interview" && !c.completedDemoBlockIndexes.includes(HIGHEST_DEMO_BLOCK_INDEX) && (
-                            <Badge variant="outline" className="text-[10px] font-normal border-amber-300 text-amber-700 dark:text-amber-400" title="Кандидат ещё не прошёл Демо-3 — можно записать, но напомнить про Демо-3">
-                              ⚠ не прошёл Демо-3
+                          {needsLastDemoBadge(c) && (
+                            <Badge variant="outline" className="text-[10px] font-normal border-amber-300 text-amber-700 dark:text-amber-400" title="Кандидат ещё не прошёл последнее демо — можно записать, но стоит напомнить пройти его">
+                              ⚠ не прошёл демо
                             </Badge>
                           )}
                           {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}

@@ -194,9 +194,8 @@ export function DemoProgressBar({
           ? "bg-orange-500"
           : effPct < 100
             ? "bg-emerald-500"
-            : (at100 && !stagePassedDecision
-                ? "bg-blue-500"
-                : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]")
+            // Юрий 14.07: 100% → всегда зелёный (без гейта по стадии).
+            : "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
     const effTotK = completedByAnswers === true ? (completedBlocks ?? 0) : (totalBlocks ?? 0)
     const label = !hasData
       ? "Не начато"
@@ -232,12 +231,11 @@ export function DemoProgressBar({
   // «Пройдено по ответам» приравниваем к завершённому, даже если cur < tot
   // (хвост декоративных блоков не пролистан).
   const completedFraction = (hasFraction && cur >= tot) || completedByAnswers === true
-  // «Пройдено по ответам» = кандидат ответил на все вопросы → воронку прошёл,
-  // зелёный сразу (стадия могла не сдвинуться в decision, т.к. прощательные
-  // экраны после отправки ответов он не долистал — и не должен ради завершения).
-  const isComplete = completedFraction && (stagePassedDecision || completedByAnswers === true)
-  // Кандидат досмотрел демо, но воронка ещё не двинулась — рендерим синим.
-  const isCompletedButNotPassed = completedFraction && !stagePassedDecision && completedByAnswers !== true
+  // Юрий 14.07: прошёл демо (100%) → ЗЕЛЁНЫЙ бар БЕЗ гейтинга по стадии
+  // (переопределяет прежнее P0-31 «зелёный только после decision»). Владелец
+  // хочет видеть прохождение демо цветом сразу, независимо от стадии воронки.
+  const isComplete = completedFraction
+  const isCompletedButNotPassed = false
   const isStarted = hasFraction && cur > 0 && cur < tot && !completedFraction
   const fillColor = isComplete
     ? "bg-emerald-500"

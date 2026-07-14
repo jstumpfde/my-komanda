@@ -811,6 +811,7 @@ export async function GET(req: NextRequest) {
           progressPercent: uniformOverrideG ? uniformOverrideG.percent : progressPercent,
           demoCompletedByAnswers,
           completedDemoBlockIndexes,
+          demoBlockCount: demoBlockDefsG.length,
           demoBlockTooltip,
           isActive,
           testScore,
@@ -1579,6 +1580,7 @@ export async function GET(req: NextRequest) {
           : 0,
         anketaPartsTotal,
         completedDemoBlockIndexes,
+        demoBlockCount: demoBlockDefs.length,
         demoBlockTooltip,
       }
     })
