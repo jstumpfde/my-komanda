@@ -126,8 +126,14 @@ export function hhStateToPlatformStage(hhState: string | null | undefined): Stag
       return "primary_contact"
     case "assessment":
       return "test_task_sent"
+    // hh-папка «Собеседование» (interview) БОЛЬШЕ НЕ двигает нашу стадию
+    // автоматически (Юрий 15.07): входящий hh-синк заливал в interview
+    // приглашённых-но-непрошедших демо кандидатов (баг state.id до 13.07 залил
+    // ~116 Revoluterra). На interview кандидат попадает ТОЛЬКО ручным переводом
+    // HR (роут stage/bulk пишут стадию напрямую, минуя эту карту). null =
+    // «не трогать нашу стадию».
     case "interview":
-      return "interview"
+      return null
     case "discard_by_employer":
     case "discard_by_applicant":
       return "rejected"
