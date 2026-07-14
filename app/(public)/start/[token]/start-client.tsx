@@ -19,7 +19,7 @@ interface StartData {
 }
 
 export function StartClient({ token }: { token: string }) {
-  const [status, setStatus] = useState<"loading" | "ready" | "error" | "submitting" | "done">("loading")
+  const [status, setStatus] = useState<"loading" | "ready" | "error" | "submitting" | "done" | "already">("loading")
   const [data, setData] = useState<StartData | null>(null)
   const [errorMsg, setErrorMsg] = useState("")
 
@@ -56,6 +56,12 @@ export function StartClient({ token }: { token: string }) {
         body: JSON.stringify({ name: name.trim(), phone: phone.trim(), consent }),
       })
       const json = await res.json().catch(() => null)
+      if (res.ok && json?.alreadyCandidate) {
+        // Совпадение по телефону с существующим кандидатом: в его сессию не
+        // входим (защита персональных данных) — показываем нейтральный экран.
+        setStatus("already")
+        return
+      }
       if (!res.ok || !json?.redirectUrl) {
         setFormError(json?.error || "Не удалось отправить форму")
         setStatus("ready")
@@ -73,6 +79,22 @@ export function StartClient({ token }: { token: string }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (status === "already") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="max-w-md w-full rounded-xl border bg-card p-6 text-center space-y-3">
+          <h1 className="text-lg font-semibold">Вы уже участвуете в отборе</h1>
+          <p className="text-sm text-muted-foreground">
+            По этому номеру телефона уже есть заявка по данной вакансии.
+            Продолжите, пожалуйста, по персональной ссылке из переписки с
+            работодателем (например, в чате hh.ru). Если ссылки нет — напишите
+            нам в том же чате, и мы отправим её повторно.
+          </p>
+        </div>
       </div>
     )
   }

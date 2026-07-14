@@ -33,6 +33,8 @@ type Stage = StageSlug | keyof typeof LEGACY_STAGE_LABELS
 const POST_INVITE_STAGES: ReadonlySet<Stage> = new Set([
   "primary_contact", "demo_opened", "demo", "anketa_filled",
   "decision", "ai_screening", "interview", "final_decision", "hired",
+  // B9-фикс 14.07: канонические слаги v2-движка
+  "offer_sent", "reference_check",
 ])
 
 export { PUT as PATCH }

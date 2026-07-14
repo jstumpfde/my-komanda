@@ -767,7 +767,7 @@ export async function POST(
       .set({ stage: "scheduled", updatedAt: new Date() })
       .where(and(
         eq(candidates.id, candidate.id),
-        sql`${candidates.stage} NOT IN ('scheduled','interview','interviewed','final_decision','offer','hired','rejected')`,
+        sql`${candidates.stage} NOT IN ('scheduled','interview','interviewed','final_decision','offer','offer_sent','reference_check','hired','rejected')`,
       ))
 
     // 8. #3.2 Уведомление HR: надёжное in-app (аудит 10.07 — раньше был только

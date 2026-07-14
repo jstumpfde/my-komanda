@@ -159,10 +159,13 @@ export async function POST(
     const block = await resolveBlockByPublicToken(token)
     if (!block) return apiError("Ссылка недействительна", 404)
 
-    // Матчинг ВНУТРИ вакансии по нормализованному телефону. Совпадение — тот
-    // же человек в подавляющем большинстве случаев (риск угона чужого
-    // прогресса низкий и задокументирован в drizzle/0278); НЕ показываем
-    // данные найденного кандидата, просто продолжаем его сессию.
+    // Матчинг ВНУТРИ вакансии по нормализованному телефону. Находка
+    // predeploy-guard 14.07 (blocker): продолжать сессию найденного кандидата
+    // НЕЛЬЗЯ — телефон не секрет, редирект на личную страницу раскрывал бы
+    // третьему лицу имя/ответы и персональный токен чужого кандидата (152-ФЗ,
+    // IDOR). Поэтому при совпадении возвращаем НЕЙТРАЛЬНЫЙ ответ без каких-либо
+    // данных и без redirectUrl — кандидат продолжает по своей персональной
+    // ссылке из переписки; новый телефон идёт полным потоком ниже.
     //
     // ⚠ '[^0-9]', НЕ '\D': drizzle-orm `sql` template использует «cooked»
     // строки (не .raw) — одиночный '\D' внутри sql`...` молча схлопывается в
@@ -183,16 +186,9 @@ export async function POST(
       .limit(1)
 
     if (existing) {
-      const updates: Record<string, unknown> = { lastActivityAt: new Date() }
-      if (consentGiven && !existing.consentAt) {
-        updates.consentAt = new Date()
-        updates.consentDocVersion = await resolveHrPolicyVersion(block.vacancyId)
-      }
-      await db.update(candidates).set(updates).where(eq(candidates.id, existing.id))
-
-      return apiSuccess({
-        redirectUrl: buildRedirectUrl(block.contentType, { id: existing.id, shortId: existing.shortId, token: existing.token }, block.demoId),
-      })
+      // Ничего не раскрываем и не редиректим (см. комментарий выше). Даже
+      // consent не обновляем — личность отправителя формы не подтверждена.
+      return apiSuccess({ alreadyCandidate: true })
     }
 
     // Новый кандидат — источник 'universal_link' (отличим от 'demo'/'hh'/etc в отчётах).
