@@ -3,15 +3,19 @@
 // Открытые алерты «Сторожа найма» (admin_alerts) для баннера
 // components/dashboard/admin-alerts-banner.tsx — тонкий поллинг раз в 60с.
 //
-// Видимость: директор компании (requireDirector) видит company-level алерты
-// своей компании (companyId = user.companyId). Платформенные (companyId=NULL)
-// видит ТОЛЬКО platform_admin — обычный HR/директор клиента их не должен
-// видеть (это внутренняя эксплуатационная информация платформы, не про
-// его компанию). Директор без platform_admin получает только свои.
+// Видимость (Юрий 14.07): эти алерты — внутренняя эксплуатационная
+// информация о технических сбоях платформы (hh-синк, AI-скоринг, рассинхрон
+// стадий), а НЕ то, что требует действия обычного HR/директора компании —
+// даже если алерт формально company-scoped (companyId = их компания), он
+// путает и пугает клиента больше, чем помогает. Поэтому видимость СТРОГО
+// platform admin (PLATFORM_ADMIN_EMAILS) — и для платформенных (companyId
+// =NULL), и для company-scoped алертов. Директор без platform_admin получает
+// пустой список (тихое скрытие, баннер просто не рендерится — не 403/404,
+// чтобы не обнаруживать наличие фичи).
 //
 // Легковесный ответ: count + первые 3 (баннер большего не показывает).
 import { NextRequest } from "next/server"
-import { and, eq, or, isNull, desc, sql } from "drizzle-orm"
+import { eq, desc, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { adminAlerts } from "@/lib/db/schema"
 import { requireDirector, apiError, apiSuccess } from "@/lib/api-helpers"
@@ -24,11 +28,9 @@ const PREVIEW_LIMIT = 3
 export async function GET(_req: NextRequest) {
   try {
     const user = await requireDirector()
-    const isPlatformAdmin = isPlatformAdminEmail(user.email)
-
-    const visibilityFilter = isPlatformAdmin
-      ? or(eq(adminAlerts.companyId, user.companyId), isNull(adminAlerts.companyId))
-      : eq(adminAlerts.companyId, user.companyId)
+    if (!isPlatformAdminEmail(user.email)) {
+      return apiSuccess({ count: 0, alerts: [] })
+    }
 
     const rows = await db
       .select({
@@ -41,7 +43,7 @@ export async function GET(_req: NextRequest) {
         createdAt:  adminAlerts.createdAt,
       })
       .from(adminAlerts)
-      .where(and(eq(adminAlerts.status, "open"), visibilityFilter))
+      .where(eq(adminAlerts.status, "open"))
       .orderBy(
         // critical → warning → info, затем свежие сверху. text-сортировка
         // 'severity' ASC/DESC не даёт нужный порядок (алфавит), поэтому явный CASE.
