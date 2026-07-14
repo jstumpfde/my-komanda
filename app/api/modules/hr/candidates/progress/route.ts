@@ -1,8 +1,14 @@
 import { NextRequest } from "next/server"
-import { eq, and, isNotNull, inArray, desc } from "drizzle-orm"
+import { eq, and, or, like, isNotNull, inArray, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { candidates, vacancies, demos } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
+import {
+  buildDemoBlockDefs,
+  computeDemoBlockCompletion,
+  getCompletedDemoBlockIndexes,
+  computeUniformDemoOverride,
+} from "@/lib/demo/block-completion"
 
 interface DemoBlockProgress {
   blockId: string
@@ -42,6 +48,7 @@ export async function GET(req: NextRequest) {
         stage: candidates.stage,
         source: candidates.source,
         demoProgressJson: candidates.demoProgressJson,
+        demoBlockScores: candidates.demoBlockScores,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -51,21 +58,37 @@ export async function GET(req: NextRequest) {
 
     const vacancyIds = [...new Set(rows.map((r) => r.vacancyId))]
 
+    // Грузим ВСЕ демо вакансии (kind='demo' и block:%): основное (kind='demo')
+    // даёт базовый totalBlocks; все вместе — демо-блоки (Д1/Д2/Д3) для правила
+    // «наивысший пройденный демо замещает» (см. lib/demo/block-completion.ts).
     const demoRows = await db
       .select({
+        id: demos.id,
+        title: demos.title,
         vacancyId: demos.vacancyId,
         lessonsJson: demos.lessonsJson,
+        kind: demos.kind,
+        sortOrder: demos.sortOrder,
+        createdAt: demos.createdAt,
         updatedAt: demos.updatedAt,
       })
       .from(demos)
-      .where(and(inArray(demos.vacancyId, vacancyIds), eq(demos.kind, "demo")))
+      .where(and(
+        inArray(demos.vacancyId, vacancyIds),
+        or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+      ))
       .orderBy(desc(demos.updatedAt))
 
     const latestByVacancy = new Map<string, unknown>()
+    const rowsByVacancyForBlockDefs = new Map<string, typeof demoRows>()
     for (const d of demoRows) {
-      if (!latestByVacancy.has(d.vacancyId)) {
+      // Базовый totalBlocks — по первому (свежайшему) kind='demo'.
+      if (d.kind === "demo" && !latestByVacancy.has(d.vacancyId)) {
         latestByVacancy.set(d.vacancyId, d.lessonsJson)
       }
+      const arr = rowsByVacancyForBlockDefs.get(d.vacancyId) ?? []
+      arr.push(d)
+      rowsByVacancyForBlockDefs.set(d.vacancyId, arr)
     }
 
     const totalsByVacancy = new Map<string, number>()
@@ -78,15 +101,41 @@ export async function GET(req: NextRequest) {
       totalsByVacancy.set(vid, total)
     }
 
+    // Демо-блоки каждой вакансии в каноническом порядке (sortOrder, createdAt) —
+    // для правила «наивысший пройденный демо замещает».
+    const demoBlockDefsByVacancy = new Map<string, ReturnType<typeof buildDemoBlockDefs>>()
+    for (const [vid, vRows] of rowsByVacancyForBlockDefs.entries()) {
+      const sorted = [...vRows].sort((a, b) =>
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+        || (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0)
+      )
+      demoBlockDefsByVacancy.set(vid, buildDemoBlockDefs(sorted))
+    }
+
     const now = Date.now()
 
     const result = rows.map((r) => {
-      const demoTotalBlocks = totalsByVacancy.get(r.vacancyId) ?? 0
+      const baseTotalBlocks = totalsByVacancy.get(r.vacancyId) ?? 0
 
       const progress = r.demoProgressJson as { blocks?: DemoBlockProgress[]; completedAt?: string | null } | null
       const blocks = Array.isArray(progress?.blocks) ? progress.blocks : []
       const completed = blocks.filter((b) => b.status === "completed")
-      const demoCompletedBlocks = completed.length
+
+      // Правило владельца (14.07, уточнение): «прошёл демо-часть → полное демо,
+      // единый знаменатель = макс блоков среди демо вакансии» (компромисс для
+      // текущих вакансий, см. computeUniformDemoOverride). null → базовый расчёт.
+      const demoBlockDefs = demoBlockDefsByVacancy.get(r.vacancyId) ?? []
+      const completedDemoBlockIndexes = getCompletedDemoBlockIndexes(
+        computeDemoBlockCompletion(
+          demoBlockDefs,
+          r.demoBlockScores as Record<string, { score?: number }> | null,
+          progress,
+        ),
+      )
+      const uniformOverride = computeUniformDemoOverride(demoBlockDefs, completedDemoBlockIndexes)
+
+      const demoTotalBlocks = uniformOverride ? uniformOverride.total : baseTotalBlocks
+      const demoCompletedBlocks = uniformOverride ? uniformOverride.completed : completed.length
       // Демо считается завершённым если есть completedAt в progress
       // или специальный блок __complete__ в completed (см. demo/[token]/answer).
       // В обоих случаях фиксируем 100% независимо от формулы — статичные блоки

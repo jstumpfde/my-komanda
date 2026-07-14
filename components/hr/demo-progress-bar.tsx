@@ -94,8 +94,15 @@ export interface DemoFractionInfo {
  */
 export function calcDemoFraction(dp: DemoProgressData | null | undefined): DemoFractionInfo {
   if (!dp || !Array.isArray(dp.blocks)) return { current: 0, total: 0, hasData: false }
-  const current = dp.blocks.filter((b) => b?.status === "completed" && b?.blockId !== "__complete__").length
+  const rawCompleted = dp.blocks.filter((b) => b?.status === "completed" && b?.blockId !== "__complete__").length
   const total = dp.totalBlocks ?? dp.blocks.length
+  // Страховка-инвариант: числитель НИКОГДА не превышает знаменатель. При
+  // блок-демо (несколько демо в одном demo_progress_json) completed-блоки
+  // суммируются по всем демо, а total — скаляр одного демо, что раньше давало
+  // «32/20». Кламп гарантирует N ≤ M даже в этом клиентском фолбэке (основной
+  // фикс — override «наивысший демо» в API). При total=0 (неизвестный знаменатель)
+  // не клампим — бар в этом случае рисует процент, а не дробь.
+  const current = total > 0 ? Math.min(rawCompleted, total) : rawCompleted
   return { current, total, hasData: dp.blocks.length > 0 }
 }
 
