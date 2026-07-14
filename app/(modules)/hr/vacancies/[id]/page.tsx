@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, FilterX, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, FilterX, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { ApplyRoleTemplateDialog } from "@/components/vacancies/apply-role-template-dialog"
@@ -2599,28 +2599,10 @@ export default function VacancyPage() {
     }
   }
 
-  // ── Talent Pool Radar ──
-  const [talentMatches, setTalentMatches] = useState<{ id: string; name: string; matchPercent: number; aiScore: number | null; city: string | null }[]>([])
-  const [talentRadarHidden, setTalentRadarHidden] = useState(false)
-  const [talentRadarLoaded, setTalentRadarLoaded] = useState(false)
-
-  useEffect(() => {
-    if (!id || apiCandidates.length > 0 || talentRadarLoaded) return
-    setTalentRadarLoaded(true)
-    fetch(`/api/modules/hr/talent-pool/match?vacancy_id=${id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { id: string; name: string; matchPercent: number; aiScore: number | null; city: string | null }[] | null) => {
-        if (data && data.length > 0) setTalentMatches(data)
-      })
-      .catch(() => {})
-  }, [id, apiCandidates.length, talentRadarLoaded])
-
-  const inviteFromPool = async (candidateId: string) => {
-    await updateStage(candidateId, "new")
-    setTalentMatches(prev => prev.filter(c => c.id !== candidateId))
-    toast.success("Кандидат приглашён из резерва")
-    refetchCandidates()
-  }
+  // ── Talent Pool Radar убран (14.07): плашка «В резерве найдено N» была
+  //    мёртвой — клик по строке не открывал карточку, «Пригласить» толком не
+  //    привязывал, а /talent-pool/match игнорировал реальный пул
+  //    talent_pool_entries. Полноценный резерв живёт на /hr/talent-pool. ──
 
   // ── Health check ──
   const [healthScore, setHealthScore] = useState<number | null>(null)
@@ -3819,27 +3801,6 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="candidates">
-                {/* Talent Pool radar */}
-                {talentMatches.length > 0 && !talentRadarHidden && (
-                  <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />В резерве найдено {talentMatches.length} подходящих кандидатов</p>
-                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setTalentRadarHidden(true)}><X className="w-3 h-3" /></Button>
-                    </div>
-                    <div className="space-y-1.5">
-                      {talentMatches.map(c => (
-                        <div key={c.id} className="flex items-center gap-3 bg-white dark:bg-gray-950 rounded-md px-3 py-2 border">
-                          <span className="text-sm font-medium flex-1">{c.name}</span>
-                          {c.city && <span className="text-xs text-muted-foreground">{c.city}</span>}
-                          <Badge variant="secondary" className="text-xs">{c.matchPercent}% совпадение</Badge>
-                          {c.aiScore != null && <Badge variant="outline" className="text-xs">AI {c.aiScore}</Badge>}
-                          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => inviteFromPool(c.id)}>Пригласить</Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {bulkScreening && <div className="mb-3 text-xs text-muted-foreground">AI анализирует кандидатов...</div>}
                 <KanbanBoard
                   settings={cardSettings}
@@ -5459,6 +5420,14 @@ export default function VacancyPage() {
               </span>
             </span>
           </label>
+          {closeRejectRemaining && (
+            <div className="mx-1 -mt-1 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+              В резерв на будущее? Отказ необратим — ценных кандидатов имеет смысл
+              сначала сохранить в резерв (кнопка «В резерв» в карточке или
+              массовое действие на вкладке «Кандидаты»), чтобы вернуться к ним на
+              следующих вакансиях. Полный список — на странице «Резерв».
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={closeBusy}>Отмена</AlertDialogCancel>
             <AlertDialogAction onClick={(e) => { e.preventDefault(); handleCloseVacancyConfirm() }} disabled={closeBusy}>

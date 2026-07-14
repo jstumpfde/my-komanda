@@ -538,32 +538,37 @@ export default function CandidatesPage() {
     setStageDialogOpen(true)
   }
 
-  const confirmStageChange = async () => {
-    if (!pendingStage) return
-    const override = stageMessageText.trim() || null
+  // stageOverride — «В резерв вместо отказа» из напоминания перед отказом:
+  // тот же путь смены стадии, но в talent_pool и без reject-текста.
+  const confirmStageChange = async (stageOverride?: string) => {
+    const targetStage = stageOverride ?? pendingStage
+    if (!targetStage) return
+    // Кастомный текст относится к исходной стадии (отказ) — при переводе в
+    // резерв его не отправляем.
+    const override = (targetStage === pendingStage ? stageMessageText.trim() : "") || null
     setStageDialogLoading(true)
     try {
       if (pendingCandidateId) {
         const res = await fetch(`/api/modules/hr/candidates/${pendingCandidateId}/stage`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage: pendingStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
+          body: JSON.stringify({ stage: targetStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
         })
         if (!res.ok) throw new Error()
-        setCandidates(prev => prev.map(c => c.id === pendingCandidateId ? { ...c, stage: pendingStage } : c))
-        toast.success(`${pendingCandidateName ?? "Кандидат"}: ${getStageLabel(pendingStage)}`)
+        setCandidates(prev => prev.map(c => c.id === pendingCandidateId ? { ...c, stage: targetStage } : c))
+        toast.success(`${pendingCandidateName ?? "Кандидат"}: ${getStageLabel(targetStage)}`)
       } else {
         const ids = [...selected]
         await Promise.all(ids.map(id =>
           fetch(`/api/modules/hr/candidates/${id}/stage`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stage: pendingStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
+            body: JSON.stringify({ stage: targetStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
           })
         ))
-        setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage: pendingStage } : c))
+        setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage: targetStage } : c))
         setSelected(new Set())
-        toast.success(`${ids.length} кандидатов: ${getStageLabel(pendingStage)}`)
+        toast.success(`${ids.length} кандидатов: ${getStageLabel(targetStage)}`)
       }
       setStageDialogOpen(false)
       setPendingStage(null)
@@ -1013,18 +1018,37 @@ export default function CandidatesPage() {
               onMessageTextChange={setStageMessageText}
             />
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => { setStageDialogOpen(false); setPendingStage(null); setPendingCandidateId(null) }}
-              disabled={stageDialogLoading}
-            >
-              Отмена
-            </Button>
-            <Button onClick={confirmStageChange} disabled={stageDialogLoading}>
-              {stageDialogLoading ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
-              Подтвердить
-            </Button>
+          {/* Напоминание «в резерв на будущее?» перед отказом (14.07). */}
+          {pendingStage === "rejected" && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+              Кого-то в резерв на будущее? Отказ необратим — ценных кандидатов
+              можно сохранить в резерв и вернуться к ним на следующих вакансиях.
+            </div>
+          )}
+          <DialogFooter className={pendingStage === "rejected" ? "sm:justify-between" : undefined}>
+            {pendingStage === "rejected" && (
+              <Button
+                variant="outline"
+                onClick={() => confirmStageChange("talent_pool")}
+                disabled={stageDialogLoading}
+                className="border-primary/40 text-primary hover:text-primary"
+              >
+                В резерв вместо отказа
+              </Button>
+            )}
+            <div className="flex gap-2 sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => { setStageDialogOpen(false); setPendingStage(null); setPendingCandidateId(null) }}
+                disabled={stageDialogLoading}
+              >
+                Отмена
+              </Button>
+              <Button onClick={() => confirmStageChange()} disabled={stageDialogLoading}>
+                {stageDialogLoading ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
+                Подтвердить
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
