@@ -13,6 +13,9 @@ import { getSpec } from "@/lib/core/spec/store"
 import { resolveTransferMode } from "@/lib/demo/anketa-pass-gate"
 import { resolveEffectiveAnketaPassInvite } from "@/lib/funnel-v2/native-config"
 
+// Формат id строки demos для явного ?block= (рассылка «Демо-3»).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Достаём first/last/city из hh resume. У части записей raw_data — это сам
 // resume, у других обёрнут в { resume: ... }. Альтернативные ключи
 // (firstName/lastName/имя) тоже встречаются — повторяем подход
@@ -232,10 +235,33 @@ export async function GET(
     // #2: какой блок показать. Если в Портрете (vacancy_specs) выбран конкретный
     // демо-блок (resumeThresholds.inviteContentBlockId) → грузим его по id строки
     // demos; иначе «боевой» kind='demo' (легаси-поведение).
+    const demoCols = {
+      id: demos.id,
+      title: demos.title,
+      lessonsJson: demos.lessonsJson,
+      postDemoSettings: demos.postDemoSettings,
+    }
+
+    // Явный ?block=<id строки demos> (рассылка «Демо-3», 14.07): отдать кандидату
+    // КОНКРЕТНЫЙ блок его вакансии по прямой ссылке. Валидация принадлежности —
+    // сам запрос (фильтр vacancyId = вакансия кандидата): чужой/несуществующий id
+    // просто не найдётся, и ниже отработает штатный резолв (override → Портрет →
+    // kind='demo'). Без параметра — легаси-путь байт-в-байт. Side-эффекты
+    // override-ветки (гашение second_demo_invite, переключение дожима) при явном
+    // блоке НЕ выполняются — кандидат открыл не «2-ю часть», а адресную ссылку.
+    const blockParam = req.nextUrl.searchParams.get("block")
+    const explicitDemoRow = blockParam && UUID_RE.test(blockParam)
+      ? (await db.select(demoCols).from(demos)
+          .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.id, blockParam)))
+          .limit(1))[0] ?? null
+      : null
+
     let inviteBlockId: string | null = null
     // «2-я часть демо»: per-candidate override (миграция 0236) перекрывает резолв
     // на уровне вакансии. Прошедший анкету кандидат видит «Путь менеджера».
-    if (candidate.overrideContentBlockId) {
+    if (explicitDemoRow) {
+      // Блок уже найден — резолв inviteBlockId не нужен.
+    } else if (candidate.overrideContentBlockId) {
       inviteBlockId = candidate.overrideContentBlockId
       // Кандидат РЕАЛЬНО открыл 2-ю часть — страховочное письмо-приглашение
       // (branch='second_demo_invite', режим both) больше не нужно: гасим pending,
@@ -271,13 +297,9 @@ export async function GET(
     // выбранный блок ПО id (в kind='block:<uuid>' uuid — внутренний, ≠ id строки).
     // kind='demo' fallback: кандидату отдаём только демонстрацию (без фильтра
     // запись с kind='test' могла бы подменить демо — критический баг Этапа 2.5).
-    const demoCols = {
-      id: demos.id,
-      title: demos.title,
-      lessonsJson: demos.lessonsJson,
-      postDemoSettings: demos.postDemoSettings,
-    }
-    let demoRows = inviteBlockId
+    let demoRows = explicitDemoRow
+      ? [explicitDemoRow]
+      : inviteBlockId
       ? await db.select(demoCols).from(demos)
           .where(and(eq(demos.vacancyId, vacancy.id), eq(demos.id, inviteBlockId)))
           .limit(1)
