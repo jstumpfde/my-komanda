@@ -11,6 +11,10 @@ import { resolveCurrentStageContent } from "@/lib/funnel-v2/resolve-content"
 import type { FunnelV2State } from "@/lib/db/schema"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
+// Формат id строки demos для явного ?block= (универсальная ссылка на блок,
+// см. /demo/[token]/route.ts — тот же паттерн, drizzle/0278).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Публичный API теста. Безопасность как у /demo/[token]: token (short_id или
 // token кандидата) — единственный ключ; вакансия берётся по candidate.vacancyId,
 // доступа к чужим вакансиям нет. Тест — запись demos с kind='test'.
@@ -170,13 +174,27 @@ export async function GET(
     }
     // ── /ГЕЙТ ВОРОНКИ V2 ────────────────────────────────────────────────────
 
+    // Явный ?block=<id строки demos> (универсальная ссылка на блок, drizzle/0278):
+    // отдать кандидату КОНКРЕТНЫЙ блок-тест его вакансии по прямой ссылке —
+    // тот же паттерн, что explicitDemoRow в /demo/[token]/route.ts. Валидация
+    // принадлежности — сам запрос (фильтр vacancyId = вакансия кандидата).
+    const demoCols = { id: demos.id, title: demos.title, lessonsJson: demos.lessonsJson, postDemoSettings: demos.postDemoSettings }
+    const blockParam = req.nextUrl.searchParams.get("block")
+    const explicitDemoRow = blockParam && UUID_RE.test(blockParam)
+      ? (await db.select(demoCols).from(demos)
+          .where(and(eq(demos.vacancyId, candidate.vacancyId), eq(demos.id, blockParam)))
+          .limit(1))[0] ?? null
+      : null
+
     // Тест вакансии — demos kind='test' (фильтр kind обязателен, см. критич. фикс).
-    const [demo] = await db
-      .select({ id: demos.id, title: demos.title, lessonsJson: demos.lessonsJson, postDemoSettings: demos.postDemoSettings })
-      .from(demos)
-      .where(and(eq(demos.vacancyId, candidate.vacancyId), eq(demos.kind, "test")))
-      .orderBy(desc(demos.updatedAt))
-      .limit(1)
+    const [demo] = explicitDemoRow
+      ? [explicitDemoRow]
+      : await db
+          .select(demoCols)
+          .from(demos)
+          .where(and(eq(demos.vacancyId, candidate.vacancyId), eq(demos.kind, "test")))
+          .orderBy(desc(demos.updatedAt))
+          .limit(1)
     if (!demo) return apiError("Тест не найден", 404)
 
     // Уже отправлял? — клиент покажет экран «Спасибо» (только при submitted_at;

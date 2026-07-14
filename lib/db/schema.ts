@@ -1454,6 +1454,13 @@ export const demos = pgTable("demos", {
   contentType: text("content_type").notNull().default("presentation"), // 'presentation' | 'test' | 'task'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  // Универсальная (обезличенная) ссылка на блок (миграция 0278): секрет для
+  // /start/[token] — публичной формы «Имя+Телефон», которая матчит/создаёт
+  // кандидата ВНУТРИ вакансии по телефону и редиректит на его персональный
+  // /demo или /test с ?block=<id этой же строки>. NULL пока HR не запросил
+  // ссылку («Скопировать общую ссылку» в конструкторе контент-блоков) —
+  // генерируется лениво. unique() допускает много NULL (как short_id).
+  publicToken: text("public_token").unique(),
 })
 
 // Ответы кандидатов на тестовое задание (публичная /test/[token]). Миграция 0144.
