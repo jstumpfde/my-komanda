@@ -10,6 +10,16 @@ import { resolveGivenNameMeta } from "@/lib/messaging/candidate-name"
 import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
 import { hasAnsweredAllRequired } from "@/lib/demo/resolve-questions"
 import { extractTaskQuestions } from "@/lib/demo/score-answers"
+import { splitFunnelStatusSlugs } from "@/lib/candidates/stage-filter"
+import {
+  buildDemoBlockDefs,
+  computeDemoBlockCompletion,
+  getCompletedDemoBlockIndexes,
+  parseDemoBlockFilterValues,
+  buildDemoBlockContainmentSpec,
+  matchesDemoBlockSelection,
+  formatDemoBlockTooltip,
+} from "@/lib/demo/block-completion"
 
 type SortKey =
   | "favorite"
@@ -368,14 +378,12 @@ export async function GET(req: NextRequest) {
       // Стадии воронки (множественный выбор, через запятую) — если задан, stage-param игнорируется
       const funnelStatusesParam = url.searchParams.get("funnelStatuses")
       if (funnelStatusesParam && !stageParam) {
-        const stages = funnelStatusesParam.split(",").map(s => s.trim()).filter(Boolean)
-        // «Предварительный отказ» — не только стадия: это ФЛАГИ на кандидате
-        // при прежней стадии — pending_rejection_at (запланирован отказ) ИЛИ
-        // pending_rejection_reason (помечен на ручной разбор — так бейдж
-        // «Предвар. отказ» и рисуется в списке). Фильтр обязан находить все
-        // варианты (баг Юрия 06.07: чекбокс давал пусто).
-        const wantsPrelim = stages.includes("preliminary_reject")
-        const plain = stages.filter(s => s !== "preliminary_reject")
+        const rawStages = funnelStatusesParam.split(",").map(s => s.trim()).filter(Boolean)
+        // «Предварительный отказ» / «На ручной проверке» — не стадии, а ФЛАГИ
+        // поверх текущего candidates.stage (см. lib/candidates/stage-filter.ts
+        // для полного разбора обоих полей-источников каждого флага).
+        const { plainStages: plain, wantsPreliminaryReject: wantsPrelim, wantsManualReview } =
+          splitFunnelStatusSlugs(rawStages)
         const conds = []
         if (plain.length === 1) conds.push(eq(candidates.stage, plain[0]))
         else if (plain.length > 1) conds.push(inArray(candidates.stage, plain))
@@ -385,6 +393,13 @@ export async function GET(req: NextRequest) {
             OR ((${candidates.pendingRejectionAt} IS NOT NULL
                  OR ${candidates.pendingRejectionReason} IS NOT NULL)
                 AND ${candidates.stage} IS DISTINCT FROM 'rejected')
+          )`)
+        }
+        if (wantsManualReview) {
+          conds.push(sql`(
+            (${candidates.autoProcessingStoppedReason} = 'below_threshold_manual_review'
+             OR (${candidates.pendingRejectionReason} = 'portrait_below_threshold' AND ${candidates.pendingRejectionAt} IS NULL))
+            AND ${candidates.stage} IS DISTINCT FROM 'rejected'
           )`)
         }
         if (conds.length === 1) listConds.push(conds[0])
@@ -519,6 +534,10 @@ export async function GET(req: NextRequest) {
           createdAt: candidates.createdAt,
           lastRespondedAt: candidates.lastRespondedAt,
           pendingRejectionReason: candidates.pendingRejectionReason,
+          pendingRejectionAt: candidates.pendingRejectionAt,
+          autoProcessingStoppedReason: candidates.autoProcessingStoppedReason,
+          // Задача 4 (14.07): источник правды бейджа «ДN» (см. lib/demo/block-completion.ts).
+          demoBlockScores: candidates.demoBlockScores,
           updatedAt: candidates.updatedAt,
           demoProgressJson: candidates.demoProgressJson,
           anketaAnswers: candidates.anketaAnswers,
@@ -556,12 +575,19 @@ export async function GET(req: NextRequest) {
       // Map: vacancyId → массив lessons_json ВСЕХ демо вакансии (kind='demo' и
       // block:%) — для расчёта «демо пройдено по ответам» (hasAnsweredAllRequired).
       const allLessonsByVacancy = new Map<string, unknown[]>()
+      // Задача 4 (14.07): демо-блоки каждой вакансии в каноническом порядке
+      // (sortOrder) — для бейджа «ДN» (см. lib/demo/block-completion.ts).
+      const demoBlockDefsByVacancy = new Map<string, ReturnType<typeof buildDemoBlockDefs>>()
       if (vacancyIds.length > 0) {
         const demoRows = await db
           .select({
+            id: demos.id,
+            title: demos.title,
             vacancyId: demos.vacancyId,
             lessonsJson: demos.lessonsJson,
             kind: demos.kind,
+            sortOrder: demos.sortOrder,
+            createdAt: demos.createdAt,
             updatedAt: demos.updatedAt,
           })
           .from(demos)
@@ -572,6 +598,7 @@ export async function GET(req: NextRequest) {
           .orderBy(desc(demos.updatedAt))
 
         const latestByVacancy = new Map<string, unknown>()
+        const rowsByVacancyForBlockDefs = new Map<string, typeof demoRows>()
         for (const d of demoRows) {
           // Для totalBlocks/страничного прогресса — только основное демо (kind='demo').
           if (d.kind === "demo" && !latestByVacancy.has(d.vacancyId)) {
@@ -581,6 +608,16 @@ export async function GET(req: NextRequest) {
           const arr = allLessonsByVacancy.get(d.vacancyId) ?? []
           arr.push(d.lessonsJson)
           allLessonsByVacancy.set(d.vacancyId, arr)
+          const vArr = rowsByVacancyForBlockDefs.get(d.vacancyId) ?? []
+          vArr.push(d)
+          rowsByVacancyForBlockDefs.set(d.vacancyId, vArr)
+        }
+        for (const [vid, vRows] of rowsByVacancyForBlockDefs.entries()) {
+          const sorted = [...vRows].sort((a, b) =>
+            (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+            || (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0)
+          )
+          demoBlockDefsByVacancy.set(vid, buildDemoBlockDefs(sorted))
         }
         for (const [vid, lessonsJson] of latestByVacancy.entries()) {
           const lessons = Array.isArray(lessonsJson) ? (lessonsJson as LessonShape[]) : []
@@ -740,6 +777,19 @@ export async function GET(req: NextRequest) {
         // редкое имя) → HR стоит проверить и при желании вписать вручную.
         const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name, learned: learnedNames }).confident
 
+        // Задача 4 (14.07, корректировка v2): бейдж-комбинация пройденных
+        // демо-блоков — тот же расчёт, что и в пер-вакансионной ветке ниже
+        // (demoBlockDefsByVacancy строится один раз выше для всех вакансий
+        // страницы).
+        const demoBlockDefsG = demoBlockDefsByVacancy.get(r.vacancyId) ?? []
+        const demoBlockCompletionG = computeDemoBlockCompletion(
+          demoBlockDefsG,
+          r.demoBlockScores as Record<string, { score?: number }> | null,
+          progress,
+        )
+        const completedDemoBlockIndexes = getCompletedDemoBlockIndexes(demoBlockCompletionG)
+        const demoBlockTooltip = demoBlockDefsG.length > 1 ? formatDemoBlockTooltip(demoBlockCompletionG) : null
+
         // Strip служебные поля — не нужны клиенту
         const { demoProgressJson: _drop1, anketaAnswers: _drop2, hhCandidateName: _drop3, firstNameOverride: _drop4, ...rest } = r
         void _drop1; void _drop2; void _drop3; void _drop4
@@ -751,6 +801,8 @@ export async function GET(req: NextRequest) {
           demoCompletedBlocks,
           progressPercent,
           demoCompletedByAnswers,
+          completedDemoBlockIndexes,
+          demoBlockTooltip,
           isActive,
           testScore,
           testStatus,
@@ -758,12 +810,31 @@ export async function GET(req: NextRequest) {
         }
       })
 
+      // Задача 4 (14.07, корректировка v2): containment-фильтр «прошёл ДN»
+      // (несколько = И, «none» = ни одного) — post-fetch (эта multi-vacancy
+      // ветка не может дать один SQL WHERE — у каждой вакансии свои demo-id,
+      // в отличие от пер-вакансионной ветки ниже, где фильтр применяется в
+      // SQL). В paginated режиме total/count НЕ учитывает этот фильтр — тот
+      // же принятый компромисс, что и у demoProgress выше («Шаг 1»
+      // комментарий, фильтр по прогрессу тоже игнорируется в SQL пагинации
+      // этой ветки).
+      const demoBlockParamG = url.searchParams.get("demoBlock")
+      const demoBlockSelectionG = demoBlockParamG
+        ? parseDemoBlockFilterValues(demoBlockParamG.split(",").map(s => s.trim()).filter(Boolean))
+        : null
+      const enrichedFiltered = demoBlockSelectionG && (demoBlockSelectionG.indexes.length > 0 || demoBlockSelectionG.none)
+        ? enriched.filter((c) => matchesDemoBlockSelection(
+            (c as { completedDemoBlockIndexes?: number[] }).completedDemoBlockIndexes ?? [],
+            demoBlockSelectionG,
+          ))
+        : enriched
+
       if (paginated) {
-        const hasMore = offset + enriched.length < total
-        return apiSuccess({ items: enriched, total, page, pageSize, hasMore })
+        const hasMore = offset + enrichedFiltered.length < total
+        return apiSuccess({ items: enrichedFiltered, total, page, pageSize, hasMore })
       }
 
-      return apiSuccess(enriched)
+      return apiSuccess(enrichedFiltered)
     }
 
     // Verify ownership
@@ -1147,12 +1218,81 @@ export async function GET(req: NextRequest) {
       if (orSql) filterConds.push(orSql)
     }
 
+    // Задача 4 (14.07, корректировка владельца v2): фильтр «прошёл ДN» —
+    // containment-семантика: каждый выбранный чекбокс требует НАЛИЧИЯ ключа
+    // своего демо-блока в demo_block_scores (несколько = И), «не проходил
+    // ни одного» — отсутствия всех. Тот же источник правды, что и бейдж
+    // (см. lib/demo/block-completion.ts и прод-разведку задачи 1). Лёгкий
+    // pre-fetch (только id, без lessons_json) — нужен ДО WHERE. Полный
+    // demoBlockDefs (с lessons_json, для бейджа/тултипа каждого кандидата)
+    // считается отдельно ниже, ПОСЛЕ основного select — двойной запрос к
+    // demos приемлем (строк на вакансию — единицы), зато не пришлось
+    // поднимать наверх весь существующий enrichment-блок (риск регрессии).
+    const demoBlockParam = url.searchParams.get("demoBlock")
+    if (demoBlockParam) {
+      const earlyBlockRows = await db
+        .select({ id: demos.id, sortOrder: demos.sortOrder, createdAt: demos.createdAt })
+        .from(demos)
+        .where(and(
+          eq(demos.vacancyId, vacancyId),
+          or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+        ))
+        .orderBy(demos.sortOrder, demos.createdAt)
+      const earlyDefs = earlyBlockRows.map((d, i) => ({ demoId: d.id, index: i + 1 }))
+      const selection = parseDemoBlockFilterValues(demoBlockParam.split(",").map(s => s.trim()).filter(Boolean))
+      const spec = buildDemoBlockContainmentSpec(earlyDefs, selection)
+      const parts: SQL[] = []
+      for (const id of spec.requirePresentDemoIds) {
+        parts.push(sql`(COALESCE(${candidates.demoBlockScores}, '{}'::jsonb) ? ${id})`)
+      }
+      for (const id of spec.requireAbsentDemoIds) {
+        parts.push(sql`NOT (COALESCE(${candidates.demoBlockScores}, '{}'::jsonb) ? ${id})`)
+      }
+      if (spec.impossible) {
+        // Выбран номер, которого нет у вакансии → честный пустой результат
+        // (а не «фильтр молча не применился»).
+        filterConds.push(sql`false` as SQL)
+      } else if (parts.length > 0) {
+        filterConds.push(and(...parts) as SQL)
+      }
+      // parts пуст и не impossible = в параметре был только мусор → фильтр
+      // не применяется (эквивалент пустого выбора).
+    }
+
     const baseConds: SQL[] = [
       eq(candidates.vacancyId, vacancyId) as SQL,
       notPreview as SQL,
       deletedFilter as SQL,
     ]
-    if (stages.length > 0) baseConds.push(inArray(candidates.stage, stages) as SQL)
+    // Разведка 14.07: «Предварительный отказ» и «На ручной проверке» — не
+    // стадии в БД, а ФЛАГИ поверх текущей стадии (см. тот же паттерн выше в
+    // global-ветке !vacancyId, ~369). Голый inArray по stage их не находил —
+    // чекбоксы фильтра на странице вакансии молча возвращали пусто/неполно
+    // (preliminary_reject) или не существовали вовсе (manual_review).
+    if (stages.length > 0) {
+      const { plainStages: plainVac, wantsPreliminaryReject: wantsPrelimVac, wantsManualReview: wantsManualReviewVac } =
+        splitFunnelStatusSlugs(stages)
+      const stageConds: SQL[] = []
+      if (plainVac.length === 1) stageConds.push(eq(candidates.stage, plainVac[0]) as SQL)
+      else if (plainVac.length > 1) stageConds.push(inArray(candidates.stage, plainVac) as SQL)
+      if (wantsPrelimVac) {
+        stageConds.push(sql`(
+          ${candidates.stage} = 'preliminary_reject'
+          OR ((${candidates.pendingRejectionAt} IS NOT NULL
+               OR ${candidates.pendingRejectionReason} IS NOT NULL)
+              AND ${candidates.stage} IS DISTINCT FROM 'rejected')
+        )` as SQL)
+      }
+      if (wantsManualReviewVac) {
+        stageConds.push(sql`(
+          (${candidates.autoProcessingStoppedReason} = 'below_threshold_manual_review'
+           OR (${candidates.pendingRejectionReason} = 'portrait_below_threshold' AND ${candidates.pendingRejectionAt} IS NULL))
+          AND ${candidates.stage} IS DISTINCT FROM 'rejected'
+        )` as SQL)
+      }
+      if (stageConds.length === 1) baseConds.push(stageConds[0])
+      else if (stageConds.length > 1) baseConds.push(or(...stageConds) as SQL)
+    }
     const where = and(...baseConds, ...filterConds)
 
     // total нужен только в пагинированном режиме. Тот же WHERE, что и select —
@@ -1273,7 +1413,15 @@ export async function GET(req: NextRequest) {
     const blockToLesson = new Map<string, number>()
     const allLessonsForVacancy: unknown[] = []
     const demoRowsV2 = await db
-      .select({ lessonsJson: demos.lessonsJson, kind: demos.kind, updatedAt: demos.updatedAt })
+      .select({
+        id: demos.id,
+        title: demos.title,
+        lessonsJson: demos.lessonsJson,
+        kind: demos.kind,
+        sortOrder: demos.sortOrder,
+        createdAt: demos.createdAt,
+        updatedAt: demos.updatedAt,
+      })
       .from(demos)
       .where(and(
         eq(demos.vacancyId, vacancyId),
@@ -1303,6 +1451,19 @@ export async function GET(req: NextRequest) {
         })
       }
     }
+
+    // Задача 4 (14.07): демо-блоки вакансии в КАНОНИЧЕСКОМ порядке (sortOrder,
+    // createdAt тай-брейк) — совпадает с порядком вставки ключей в demo_block_
+    // scores (score-answers.ts orderBy) — для бейджа «ДN» = номер наивысшего
+    // пройденного демо-блока (источник правды из задачи 1, см. lib/demo/
+    // block-completion.ts). demoRowsV2 выше отсортирован по updatedAt (для
+    // выбора «свежего» kind='demo') — здесь пересортировываем копию.
+    const demoBlockDefs = buildDemoBlockDefs(
+      [...demoRowsV2].sort((a, b) =>
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+        || (a.createdAt ? a.createdAt.getTime() : 0) - (b.createdAt ? b.createdAt.getTime() : 0)
+      ),
+    )
 
     // Имя + page-based прогресс
     const withDisplayName = rows.map((r) => {
@@ -1371,6 +1532,17 @@ export async function GET(req: NextRequest) {
 
       const nameUncertain = !resolveGivenNameMeta({ override: r.firstNameOverride, fullName: r.name, learned: learnedNames }).confident
 
+      // Задача 4 (14.07, корректировка v2): бейдж-комбинация пройденных
+      // демо-блоков («Д1+2», demo_block_scores — источник правды из задачи 1).
+      // Заменяет нотацию «частей: N/M» в UI (components/dashboard/list-view.tsx).
+      const demoBlockCompletion = computeDemoBlockCompletion(
+        demoBlockDefs,
+        r.demoBlockScores as Record<string, { score?: number }> | null,
+        progress,
+      )
+      const completedDemoBlockIndexes = getCompletedDemoBlockIndexes(demoBlockCompletion)
+      const demoBlockTooltip = demoBlockDefs.length > 1 ? formatDemoBlockTooltip(demoBlockCompletion) : null
+
       return {
         ...r,
         birthDate: effectiveBirthDate,
@@ -1385,14 +1557,15 @@ export async function GET(req: NextRequest) {
         testScoringStatus: test?.scoringStatus ?? null,
         isActive,
         nextInterviewAt: nextInterviewByCandidateId.get(r.id) ?? null,
-        // Индикатор прогресса частей анкеты "N/M" (единый балл, Вариант Б):
-        // anketaPartsAnswered — сколько частей СДАЛ этот кандидат (= число
-        // ключей в demo_block_scores); anketaPartsTotal — сколько частей
-        // вообще сконфигурировано у вакансии (0/1 → индикатор скрыт в UI).
+        // Индикатор прогресса частей анкеты "N/M" — ОСТАВЛЕН для карточки/
+        // дровера (Оценки), но список кандидатов больше его не рисует
+        // (задача 4, 14.07) — используйте completedDemoBlockIndexes.
         anketaPartsAnswered: r.demoBlockScores && typeof r.demoBlockScores === "object"
           ? Object.keys(r.demoBlockScores as Record<string, unknown>).length
           : 0,
         anketaPartsTotal,
+        completedDemoBlockIndexes,
+        demoBlockTooltip,
       }
     })
 

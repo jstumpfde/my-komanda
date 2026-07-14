@@ -74,6 +74,13 @@ interface GlobalCandidate {
   demoProgressJson?: unknown
   // Скоркарта интервью (миграция 0258) — см. lib/candidates/interview-scorecard.ts.
   interviewScore?: number | null
+  pendingRejectionReason?: string | null
+  pendingRejectionAt?: string | null
+  // Разведка 14.07: см. Candidate.autoProcessingStoppedReason (candidate-card.tsx).
+  autoProcessingStoppedReason?: string | null
+  // Задача 4 (14.07, корректировка v2): см. Candidate.completedDemoBlockIndexes (candidate-card.tsx).
+  completedDemoBlockIndexes?: number[]
+  demoBlockTooltip?: string | null
 }
 
 // ─── Константы ────────────────────────────────────────────────────────────────
@@ -142,6 +149,10 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     createdAt: c.createdAt,
     lastRespondedAt: c.lastRespondedAt ?? null,
     pendingRejectionReason: (c as { pendingRejectionReason?: string | null }).pendingRejectionReason ?? null,
+    pendingRejectionAt: (c as { pendingRejectionAt?: string | null }).pendingRejectionAt ?? null,
+    autoProcessingStoppedReason: (c as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason ?? null,
+    completedDemoBlockIndexes: c.completedDemoBlockIndexes ?? [],
+    demoBlockTooltip: c.demoBlockTooltip ?? null,
     stage: c.stage,
     photoUrl: c.photoUrl ?? null,
     vacancyTitle: c.vacancyTitle,
@@ -246,7 +257,7 @@ export default function CandidatesPage() {
     funnelStatuses: [],
     // По умолчанию отказы скрыты — аналогично странице вакансии
     hideRejected: true,
-    hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [],
+    hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [], demoBlock: [],
     dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65,
     education: [], languages: [], otherLanguages: [], skills: [], industries: [],
   })
@@ -371,6 +382,9 @@ export default function CandidatesPage() {
     if (filters.dateTo) ps.set("dateTo", filters.dateTo)
     // Анкета (контактная форма после демо)
     if (filters.anketaFilled) ps.set("anketaFilled", filters.anketaFilled)
+    // Задача 4 (14.07): «Демо: ДN / не проходил» — post-fetch на сервере
+    // (multi-vacancy список, см. route.ts).
+    if (filters.demoBlock.length > 0) ps.set("demoBlock", filters.demoBlock.join(","))
     return ps
   }, [debouncedSearch, vacancyFilter, filters])
 

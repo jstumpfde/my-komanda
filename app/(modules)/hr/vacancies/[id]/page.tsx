@@ -219,6 +219,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     demoAnswersScore: c.demoAnswersScore ?? null,
     anketaPartsAnswered: c.anketaPartsAnswered,
     anketaPartsTotal: c.anketaPartsTotal,
+    completedDemoBlockIndexes: (c as { completedDemoBlockIndexes?: number[] }).completedDemoBlockIndexes ?? [],
+    demoBlockTooltip: (c as { demoBlockTooltip?: string | null }).demoBlockTooltip ?? null,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
@@ -234,6 +236,9 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     createdAt: c.createdAt,
     lastRespondedAt: c.lastRespondedAt ?? null,
     pendingRejectionReason: (c as { pendingRejectionReason?: string | null }).pendingRejectionReason ?? null,
+    pendingRejectionAt: (c as { pendingRejectionAt?: string | null }).pendingRejectionAt ?? null,
+    // Разведка 14.07: см. Candidate.autoProcessingStoppedReason (candidate-card.tsx).
+    autoProcessingStoppedReason: (c as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason ?? null,
     stage: c.stage ?? null,
     // HR-020: фильтр-поля
     birthDate: c.birthDate ?? undefined,
@@ -609,7 +614,7 @@ export default function VacancyPage() {
   // Стадия из URL (?stage=slug,slug) — для перехода из отчёта по клику на число.
   const stageFromUrl = searchParams?.get("stage")
   const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, scoreMinTest: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoAnswered: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, scoreMinTest: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoAnswered: false, demoProgress: [], demoBlock: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   // #18: фасеты фильтра (города/источники) по ВСЕЙ вакансии — серверная агрегация.
   const [candidateFacets, setCandidateFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
   useEffect(() => {
@@ -670,6 +675,7 @@ export default function VacancyPage() {
     ctaClicked: filters.ctaClicked,
     hhPublication: filters.hhPublication,
     reviewQueue: filters.reviewQueue,
+    demoBlock: filters.demoBlock,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Legacy pipeline текущей вакансии — для кастомных лейблов стадий в ListView. */
