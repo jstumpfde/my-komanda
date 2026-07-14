@@ -80,6 +80,8 @@ import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-wo
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-settings"
+import { InterviewNotificationMessagesSettings } from "@/components/vacancies/interview-notification-messages-settings"
+import { InterviewBookedScreenSettings } from "@/components/vacancies/interview-booked-screen-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FirstContactSettings } from "@/components/vacancies/first-contact-settings"
 import { RejectionTextsSummary } from "@/components/vacancies/rejection-texts-summary"
@@ -697,6 +699,24 @@ export default function VacancyPage() {
     return (stages as Array<{ id?: string; title?: string | null }>)
       .filter((s) => typeof s.id === "string")
       .map((s) => ({ id: s.id as string, title: s.title ?? null }))
+  }, [apiVacancy?.descriptionJson])
+
+  /** 14.07 (витрина «Отказы»): сколько стадий Воронки v2 имеют свой текст
+   *  отказа — либо rule.rejectText (обычный редактор, funnel-v2-builder.tsx),
+   *  либо top-level rejectText (Воронка 3, funnel-v3-editor.tsx). 0 → строку
+   *  в RejectionTextsSummary не показываем (см. компонент). */
+  const funnelV2RejectStagesCount = useMemo(() => {
+    const raw = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.funnelV2
+    if (!raw || typeof raw !== "object") return 0
+    const stages = (raw as { stages?: unknown }).stages
+    if (!Array.isArray(stages)) return 0
+    return (stages as Array<{ rejectText?: unknown; rule?: { rejectText?: unknown } }>)
+      .filter((s) => {
+        const top = typeof s.rejectText === "string" ? s.rejectText.trim() : ""
+        const rule = typeof s.rule?.rejectText === "string" ? s.rule.rejectText.trim() : ""
+        return top.length > 0 || rule.length > 0
+      })
+      .length
   }, [apiVacancy?.descriptionJson])
 
   /** Вид встречи по умолчанию для диалога «Пригласить на интервью» — из первой
@@ -4811,6 +4831,22 @@ export default function VacancyPage() {
                     initialText={(apiVacancy as { scheduleInviteText?: string } | undefined)?.scheduleInviteText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
+                  {/* 14.07 (осиротевшие настройки, Ф.А): шаблоны «ссылка на встречу
+                      добавлена» и «интервью отменено менеджером» — API уже принимал
+                      оба поля (aiProcessSettings), редактора не было. */}
+                  <InterviewNotificationMessagesSettings
+                    vacancyId={id}
+                    initial={apiVacancy?.aiProcessSettings ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* 14.07: экран «Вы записаны» на публичной странице записи
+                      (descriptionJson.interviewBookedScreen) — API читал поле с
+                      #26.4, редактора не было. */}
+                  <InterviewBookedScreenSettings
+                    vacancyId={id}
+                    initial={(apiVacancy?.descriptionJson as { interviewBookedScreen?: { title?: string; text?: string } } | undefined)?.interviewBookedScreen ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
 
                   {/* 5 · Отказы */}
                   <div className="pt-2">
@@ -4823,6 +4859,22 @@ export default function VacancyPage() {
                       setSettingsSection("spec")
                       const sp = new URLSearchParams(window.location.search)
                       sp.set("tab", "settings"); sp.set("section", "spec")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      window.scrollTo({ top: 0, behavior: "smooth" })
+                    }}
+                    chatbotRejectionMessages={(apiVacancy as { aiChatbotSettings?: { rejectionMessages?: { injection?: string; severeAbuse?: string; repeatedAbuse?: string; unstable?: string } } } | undefined)?.aiChatbotSettings?.rejectionMessages}
+                    onNavigateToChatbot={() => {
+                      setSettingsSection("aichatbot")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "aichatbot")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      window.scrollTo({ top: 0, behavior: "smooth" })
+                    }}
+                    funnelV2RejectStagesCount={funnelV2RejectStagesCount}
+                    onNavigateToFunnelV2={() => {
+                      setSettingsSection("funnel-v2")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "funnel-v2")
                       router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
                       window.scrollTo({ top: 0, behavior: "smooth" })
                     }}

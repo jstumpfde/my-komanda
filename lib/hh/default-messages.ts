@@ -42,6 +42,18 @@ export const DEFAULT_MEETING_LINK_MESSAGE =
   `Здравствуйте, {{name}}! Ссылка на встречу по вакансии «{{vacancy}}»: {{meeting_link}}\n\n` +
   `Пожалуйста, подтвердите получение ответным сообщением.{{contacts}}`
 
+// #26.4: платформенный дефолт текстов экрана "Вы записаны" на публичной
+// странице /schedule/[token] — переопределяется per-вакансия через
+// descriptionJson.interviewBookedScreen {title, text}. {{дата, время}}
+// подставляется сервером из подтверждённого слота (см.
+// app/api/public/schedule/[token]/route.ts:buildBookedScreenTexts). Вынесено
+// сюда 14.07 (орфан-сеттинг: редактор UI появился в «Коммуникациях», нужен
+// единый источник дефолта для backend + UI-placeholder).
+export const DEFAULT_INTERVIEW_BOOKED_TITLE = "Вы записаны на интервью!"
+export const DEFAULT_INTERVIEW_BOOKED_TEXT =
+  "Ждём вас {{дата, время}}. Мы напомним вам накануне и за 2 часа до встречи. " +
+  "Если планы изменятся — просто выберите другое время по этой же ссылке."
+
 // «Человеческая» пауза перед ПЕРВЫМ сообщением (сек). Платформенный дефолт 5 мин;
 // переопределяется на вакансии через firstMessagesChain[0].delaySeconds.
 export const DEFAULT_FIRST_MESSAGE_DELAY_SECONDS = 300
