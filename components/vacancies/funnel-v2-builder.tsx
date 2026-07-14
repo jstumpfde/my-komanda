@@ -918,6 +918,8 @@ function CommunicationsCard({ vacancyId, comms, onChange }: {
 export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, onOpenChatbot }: { vacancyId: string; isOwner?: boolean; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
   const [config, setConfig] = useState<FunnelV2Config | null>(null)
   const [summary, setSummary] = useState<SpecSummary | null>(null)
+  const [rawSpec, setRawSpec] = useState<Record<string, unknown> | null>(null)
+  const prefilledRef = useRef(false)
   const [content, setContent] = useState<ContentBlock[]>([])
   const [specLoading, setSpecLoading] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -1051,6 +1053,7 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
       .then((d: { spec?: Record<string, unknown> } | null) => {
         if (cancelled) return
         const spec = d?.spec; if (!spec) { setSummary(null); return }
+        setRawSpec(spec)
         const rt = (spec.resumeThresholds ?? {}) as Record<string, unknown>
         const sf = (spec.stopFactors ?? {}) as Record<string, unknown>
         const STOP_LABELS: Record<string, string> = { city: "город", format: "формат", age: "возраст", experience: "опыт", documents: "документы", citizenship: "гражданство", salaryExpectation: "зарплата" }
@@ -1077,6 +1080,19 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
     }, 600)
   }, [vacancyId])
   const update = useCallback((next: FunnelV2Config) => { setConfig(next); persist(next) }, [persist])
+
+  // Однократное предзаполнение нативных полей копией Портрета при первом открытии
+  // конструктора. Срабатывает, когда загружены и config, и spec, и хотя бы один
+  // из блоков stage1/stage2/communications ещё не сохранён. Persist снапшота
+  // фиксирует независимость: дальше изменения в Портрете на воронку не влияют.
+  useEffect(() => {
+    if (prefilledRef.current) return
+    if (!config || !rawSpec) return
+    if (config.stage1 && config.stage2 && config.communications) { prefilledRef.current = true; return }
+    const { changed, config: filled } = prefillNativeFromSpec(config, rawSpec)
+    prefilledRef.current = true
+    if (changed) { setConfig(filled); persist(filled) }
+  }, [config, rawSpec, persist])
 
   const stages = config?.stages ?? []
   const stageIds = useMemo(() => stages.map(s => s.id), [stages])
