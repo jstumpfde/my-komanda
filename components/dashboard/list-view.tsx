@@ -1077,12 +1077,19 @@ export function ListView({
               не проставляется вовсе, стадия остаётся как была). Раньше эти
               кандидаты были не видны никак (23 шт. у «Маркетолога» на 14.07) —
               тот же бейдж-стиль, отдельная подпись, не плодим второй рендер. */}
+          {/* Находка predeploy-guard 14.07: portrait_below_threshold БЕЗ таймера
+              (pendingRejectionAt IS NULL — pending_manual входного гейта) — это
+              «На ручной проверке», не «Предвар. отказ»: бейдж обязан совпадать
+              с предикатом серверного фильтра manual_review (route.ts). */}
           {(candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === "anketa_gate_failed" ||
-           (candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === PORTRAIT_BELOW_THRESHOLD_REASON ? (
+           ((candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === PORTRAIT_BELOW_THRESHOLD_REASON &&
+            (candidate as { pendingRejectionAt?: string | null }).pendingRejectionAt != null) ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
               Предвар. отказ
             </span>
-          ) : (candidate as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason === "below_threshold_manual_review" ? (
+          ) : (candidate as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason === "below_threshold_manual_review" ||
+             ((candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === PORTRAIT_BELOW_THRESHOLD_REASON &&
+              (candidate as { pendingRejectionAt?: string | null }).pendingRejectionAt == null) ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
               На ручной проверке
             </span>
