@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard, Copy, MoreHorizontal, ArrowRightLeft } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard, Copy, MoreHorizontal, ArrowRightLeft, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useContentBlocks, visibleContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
@@ -256,6 +256,29 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
     setCopyDialog({ mode: "block", block })
   }, [])
 
+  // «Скопировать общую ссылку» — универсальная (обезличенная) ссылка на блок
+  // (/start/<publicToken>): можно рассылать МНОГИМ кандидатам, в отличие от
+  // персональных /demo|/test/<token кандидата>. Токен генерируется лениво на
+  // сервере при первом запросе (drizzle/0278).
+  const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null)
+  const handleCopyPublicLink = useCallback(async (block: ContentBlock) => {
+    setCopyingLinkId(block.id)
+    try {
+      const res = await fetch(`/api/modules/hr/demos/${block.id}/public-link`, { method: "POST" })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.url) {
+        toast.error(json?.error || "Не удалось получить ссылку")
+        return
+      }
+      await navigator.clipboard.writeText(json.url as string)
+      toast.success("Общая ссылка скопирована")
+    } catch {
+      toast.error("Не удалось скопировать ссылку")
+    } finally {
+      setCopyingLinkId(null)
+    }
+  }, [])
+
   // Открыть диалог «Скопировать в другую вакансию…» для конкретного урока.
   const handleOpenCopyLessonDialog = useCallback((lesson: Lesson) => {
     if (!selectedBlock) return
@@ -496,6 +519,14 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleOpenCopyBlockDialog(block)}>
                   <ArrowRightLeft className="w-3.5 h-3.5" />Дублировать в вакансию…
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 cursor-pointer"
+                  disabled={copyingLinkId === block.id}
+                  onClick={() => handleCopyPublicLink(block)}
+                >
+                  {copyingLinkId === block.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                  Скопировать общую ссылку
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
