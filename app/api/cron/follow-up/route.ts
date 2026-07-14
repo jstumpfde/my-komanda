@@ -451,10 +451,17 @@ async function processOneTouch(
   // стоп-триггеры и rate-limit, рабочее окно соблюдаем. Содержит {{demo_link}},
   // указывающий на override-блок кандидата.
   const isSecondDemoInvite = msg.branch === "second_demo_invite"
+  // branch='demo3_invite' — адресная кампания «Демо-3» (scripts/send-demo3-invite.ts):
+  // приглашение пройти конкретный демо-блок по прямой ссылке /demo/<token>?block=<id>.
+  // Одиночное транзакционное касание (не дожим): пропускаем стоп-триггеры, дневной
+  // rate-limit и портрет-гейт дожимов. Ссылка подставлена скриптом при создании
+  // строки; штатные {{переменные}} ({{имя}} и т.п.) рендерит cron как обычно.
+  // Собственная страховка на момент отправки — блок isDemo3Invite ниже.
+  const isDemo3Invite = msg.branch === "demo3_invite"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
     || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder || isTestFollowup
-    || isScheduleInvite || isSecondDemoInvite
+    || isScheduleInvite || isSecondDemoInvite || isDemo3Invite
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -510,6 +517,31 @@ async function processOneTouch(
       return { outcome: "cancelled", reason: "demo_opened" }
     }
     if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "stage_terminal" }
+    }
+  }
+
+  // demo3_invite: страховка на момент отправки — между созданием строки скриптом
+  // и cron-тиком кандидат мог уйти в отказ/найм или попросить остановить
+  // автоматику (automation_paused / auto_processing_stopped). Стадии interview+
+  // НЕ отменяем — владелец явно включил «пропустивших Демо-2» на интервью в
+  // когорту кампании (14.07).
+  if (isDemo3Invite) {
+    const [cand] = await db
+      .select({
+        stage:            candidates.stage,
+        autoStopped:      candidates.autoProcessingStopped,
+        automationPaused: candidates.automationPaused,
+      })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!cand) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped || cand.automationPaused) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "stage_terminal" }
     }
