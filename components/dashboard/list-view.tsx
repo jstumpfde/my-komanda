@@ -688,22 +688,51 @@ export function ListView({
             title="Прогресс прохождения демо/анкеты (сколько шагов из скольки пройдено)"
           />
         ),
-        renderCell: (candidate, ctx) => (
-          <div className="flex items-center justify-center">
-            <DemoProgressBar
-              variant="list"
-              progressPercent={ctx.demoFraction.hasData && ctx.demoFraction.total > 0
-                ? Math.min(100, Math.round((ctx.demoFraction.current / ctx.demoFraction.total) * 100))
-                : null}
-              completedBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.current : undefined}
-              totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
-              hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
-              stage={candidate.stage}
-              completedByAnswers={candidate.demoCompletedByAnswers}
-              demoProgress={candidate.demoProgressJson}
-            />
-          </div>
-        ),
+        renderCell: (candidate, ctx) => {
+          // Задача 4 (14.07, решение владельца на источнике правды из задачи 1
+          // «12/12 · 1/2»): бейдж «ДN» — номер наивысшего пройденного демо-блока
+          // (demo_block_scores), заменяет снятую нотацию «частей: N/M» в
+          // колонке «Анкета» ниже. null → бейдж не рисуется вовсе (ничего не
+          // пройдено). Тултип — только когда у вакансии >1 демо-блока
+          // (demoBlockTooltip придёт null для одночастевых — нет смысла).
+          const highestBlock = (candidate as { highestCompletedDemoBlockIndex?: number | null }).highestCompletedDemoBlockIndex ?? null
+          const blockTooltip = (candidate as { demoBlockTooltip?: string | null }).demoBlockTooltip ?? null
+          const cell = (
+            <div className="flex flex-col items-center justify-center gap-0.5">
+              <DemoProgressBar
+                variant="list"
+                progressPercent={ctx.demoFraction.hasData && ctx.demoFraction.total > 0
+                  ? Math.min(100, Math.round((ctx.demoFraction.current / ctx.demoFraction.total) * 100))
+                  : null}
+                completedBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.current : undefined}
+                totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
+                hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+                stage={candidate.stage}
+                completedByAnswers={candidate.demoCompletedByAnswers}
+                demoProgress={candidate.demoProgressJson}
+              />
+              {highestBlock != null && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-semibold px-1 py-0 h-4 leading-none border-indigo-200 text-indigo-700 bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:bg-indigo-950/30"
+                >
+                  Д{highestBlock}
+                </Badge>
+              )}
+            </div>
+          )
+          if (!blockTooltip) {
+            return <div className="flex items-center justify-center">{cell}</div>
+          }
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center justify-center">{cell}</div>
+              </TooltipTrigger>
+              <TooltipContent side="top">{blockTooltip}</TooltipContent>
+            </Tooltip>
+          )
+        },
       })
     }
 
@@ -719,17 +748,19 @@ export function ListView({
       //
       // Вариант Б (решение Юрия 05.07): если сдана только часть 1 — балл =
       // балл части 1 (как раньше). После сдачи части 2 — балл пересчитан по
-      // ОТВЕЧЕННЫМ вопросам обеих частей (lib/demo/unified-score.ts). Рядом —
-      // компактный индикатор "N/M" (сколько частей сдал кандидат из скольких
-      // сконфигурировано у вакансии), показывается ТОЛЬКО когда у вакансии
-      // есть 2-я часть (anketaPartsTotal >= 2) — иначе одночастевые вакансии
-      // не видят лишний шум.
+      // ОТВЕЧЕННЫМ вопросам обеих частей (lib/demo/unified-score.ts).
+      //
+      // Задача 4 (14.07, решение владельца): компактный индикатор "N/M" СНЯТ
+      // отсюда — заменён бейджем «ДN» в колонке «Демо» (см. showProgress
+      // выше), который явно называет НОМЕР пройденного демо-блока вместо
+      // абстрактной дроби «частей». anketaPartsAnswered/anketaPartsTotal
+      // остаются в API (карточка/дровер, таб «Оценки»), просто список их
+      // больше не рисует.
       list.push({
         id: "answersScore",
         // 68px — минимум под заголовок с иконкой сортировки: ListFilter 14px +
         // gap 6px + «Анкета» ~63px по факту (замер Inter 12px) → взят
-        // безопасный запас. Индикатор "N/M" — надстрочный, в ширину не влезает
-        // отдельным элементом, поэтому вынесен в тултип (не раздувает колонку).
+        // безопасный запас.
         gridWidth: "68px",
         header: (
           <SortHeader
@@ -741,45 +772,23 @@ export function ListView({
             title="Единый AI-балл ответов анкеты (0–100) по отвеченным вопросам"
           />
         ),
-        renderCell: (candidate) => {
-          const partsTotal = candidate.anketaPartsTotal ?? 0
-          const partsAnswered = candidate.anketaPartsAnswered ?? 0
-          const hasParts = partsTotal >= 2
-          const tooltip = hasParts
-            ? `Сдана часть ${partsAnswered} из ${partsTotal}; балл по отвеченным вопросам`
-            : "Единый AI-балл ответов анкеты (0–100) по отвеченным вопросам"
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex flex-col items-center justify-center gap-0 leading-none">
-                  {candidate.demoAnswersScore != null ? (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
-                        getScoreColor(candidate.demoAnswersScore),
-                      )}
-                    >
-                      {candidate.demoAnswersScore}
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground/40 text-xs">—</span>
-                  )}
-                  {hasParts && (
-                    // Юрий 05.07: было text-[9px] text-muted-foreground/70 —
-                    // едва читалось в обеих темах. 10px + secondary-foreground
-                    // (обычный контраст, не приглушённый /70) — заметно, но
-                    // компактно (колонка 68px не раздувается).
-                    <span className="mt-0.5 text-[10px] leading-none text-secondary-foreground font-medium tabular-nums">
-                      {partsAnswered}/{partsTotal}
-                    </span>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top">{tooltip}</TooltipContent>
-            </Tooltip>
-          )
-        },
+        renderCell: (candidate) => (
+          <div className="flex items-center justify-center">
+            {candidate.demoAnswersScore != null ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[11px] font-semibold border px-1.5 py-0 h-5 w-8 justify-center",
+                  getScoreColor(candidate.demoAnswersScore),
+                )}
+              >
+                {candidate.demoAnswersScore}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground/40 text-xs">—</span>
+            )}
+          </div>
+        ),
       })
     }
 
@@ -1055,11 +1064,22 @@ export function ListView({
           {/* «Пред. отказ»: кандидат не прошёл гейт (анкеты ИЛИ входной гейт
               Портрета по resume_score, Юрий 06.07), помечен на ручной разбор/
               таймер (pendingRejectionReason), сообщений ему НЕ уходило. Бэдж
-              перекрывает стадию, пока HR не примет решение/cron не исполнит. */}
+              перекрывает стадию, пока HR не примет решение/cron не исполнит.
+              Разведка 14.07: «На ручной проверке» — родственное, но ОТДЕЛЬНОЕ
+              состояние (autoProcessingStoppedReason='below_threshold_manual_
+              review', ветка process-queue.ts "keep_new" — низкий/средний
+              AI-балл, авто-обработка остановлена, НО pendingRejectionReason
+              не проставляется вовсе, стадия остаётся как была). Раньше эти
+              кандидаты были не видны никак (23 шт. у «Маркетолога» на 14.07) —
+              тот же бейдж-стиль, отдельная подпись, не плодим второй рендер. */}
           {(candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === "anketa_gate_failed" ||
            (candidate as { pendingRejectionReason?: string | null }).pendingRejectionReason === PORTRAIT_BELOW_THRESHOLD_REASON ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
               Предвар. отказ
+            </span>
+          ) : (candidate as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason === "below_threshold_manual_review" ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+              На ручной проверке
             </span>
           ) : (() => {
             const fullLabel = candidate.stage

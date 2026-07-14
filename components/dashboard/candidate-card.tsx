@@ -45,8 +45,15 @@ export interface Candidate {
   // Индикатор прогресса частей анкеты "N/M" рядом с баллом (только если у
   // вакансии есть 2-я часть, т.е. anketaPartsTotal >= 2). anketaPartsAnswered —
   // сколько частей кандидат СДАЛ (demo_block_scores keys count).
+  // Список кандидатов больше не рисует эту дробь (задача 4, 14.07) — поля
+  // остаются для карточки/дровера (таб «Оценки»).
   anketaPartsAnswered?: number
   anketaPartsTotal?: number
+  // Задача 4 (14.07): бейдж «ДN» — номер наивысшего пройденного демо-блока
+  // (см. lib/demo/block-completion.ts). null = ничего не пройдено.
+  highestCompletedDemoBlockIndex?: number | null
+  // Готовый текст тултипа бейджа «ДN» («Д1 ✓ · Д2 начат · Д3 — не проходил»).
+  demoBlockTooltip?: string | null
   // Имя «под вопросом» — резолвер уйдёт в нейтральное «Здравствуйте» (фамилия/аноним/
   // редкое имя). HR стоит проверить и при желании вписать имя вручную.
   nameUncertain?: boolean
@@ -81,6 +88,12 @@ export interface Candidate {
   lastRespondedAt?: string | Date | null
   /** «Пред. отказ»: не прошёл гейт анкеты, помечен на ручной разбор. */
   pendingRejectionReason?: string | null
+  /** Есть ли таймер авто-отказа (не NULL = запланирован, см. lib/rejection/execute.ts). */
+  pendingRejectionAt?: string | Date | null
+  /** Разведка 14.07: авто-обработка остановлена (низкий AI-балл). Значение
+   *  "below_threshold_manual_review" → бейдж «На ручной проверке» (отдельно
+   *  от pendingRejectionReason — тот путь его не ставит). */
+  autoProcessingStoppedReason?: string | null
   /** Реальный stage из БД (для status-бейджа в list-view paginated режиме). */
   stage?: string | null
   // Page-based progress fields, populated from API in vacancy page mapping

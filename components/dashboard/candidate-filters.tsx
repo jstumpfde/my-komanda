@@ -22,6 +22,7 @@ import type { Candidate } from "./candidate-card"
 import {
   PLATFORM_STAGES,
   ALL_STAGE_SLUGS,
+  LEGACY_STAGE_LABELS,
   getEnabledStages,
   getStageLabel,
   type StageSlug,
@@ -81,6 +82,10 @@ export interface FilterState {
    *  видимость для ручной проверки перед авто-отказом. */
   reviewQueue: boolean
   demoProgress: string[]
+  /** Задача 4 (14.07): «Демо: ДN / не проходил» — номер наивысшего пройденного
+   *  демо-блока вакансии. Значения — "1"/"2"/"3"/... или "none". Заменяет
+   *  снятую нотацию «частей: N/M». См. lib/demo/block-completion.ts. */
+  demoBlock: string[]
   dateRange: string
   dateFrom: string
   dateTo: string
@@ -146,12 +151,24 @@ const DEFAULT_FILTERS: FilterState = {
   ctaClicked: false,
   hhPublication: undefined,
   demoProgress: [],
+  demoBlock: [],
   dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [],
   skills: [], industries: [],
 }
 
 const DEMO_PROGRESS = [
   "Не начал", "В процессе", "Завершил (≥85%)", "Завершил (<85%)",
+]
+
+// Задача 4 (14.07): бейдж «ДN» — номер наивысшего пройденного демо-блока.
+// Фиксированный набор Д1–Д3 (не читаем реальное число демо-блоков вакансии —
+// лишние варианты просто дают 0 совпадений, безвредно); покрывает и
+// сегодняшний максимум (2 блока), и «скоро появится Демо-3» (владелец, 14.07).
+const DEMO_BLOCK_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "1", label: "Д1" },
+  { value: "2", label: "Д2" },
+  { value: "3", label: "Д3" },
+  { value: "none", label: "Не проходил" },
 ]
 
 const DATE_PRESETS = [
@@ -238,13 +255,34 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
   // охватывает и «Отказ», и «Отказался» — это одна стадия rejected,
   // различающаяся инициатором).
   const funnelStageItems = useMemo<{ slug: string; label: string }[]>(() => {
-    if (stageOptions && stageOptions.length > 0) {
-      return stageOptions.filter((o) => o.slug !== "rejected")
+    // rejected И preliminary_reject исключены здесь: оба управляются
+    // отдельными элементами ниже (тумблер «Показать отказы» и свой чекбокс
+    // «обратимый»). Раньше fallback-ветка (без stageOptions — глобальная
+    // /hr/candidates) не исключала preliminary_reject и он дублировался —
+    // рисовался и тут, и отдельным чекбоксом (разведка 14.07, задача 2).
+    const base: { slug: string; label: string }[] = stageOptions && stageOptions.length > 0
+      ? stageOptions.filter((o) => o.slug !== "rejected" && o.slug !== "preliminary_reject")
+      : (vacancyPipeline ? getEnabledStages(vacancyPipeline) : ALL_STAGE_SLUGS)
+          .filter((slug) => slug !== "rejected" && slug !== "preliminary_reject")
+          .map((slug) => ({ slug, label: getStageLabel(slug, vacancyPipeline) }))
+    // Разведка 14.07 (задача 2): исходы решения по кандидату вне канона
+    // PLATFORM_STAGES/lib/stages.ts, но АКТИВНО достижимые из карточки/канбана
+    // ЛЮБОЙ вакансии (кнопки «В резерв» / «Подумаем над кандидатом» /
+    // «Пребординг» — не гейтятся pipeline-конфигом, в отличие от обычных
+    // стадий воронки). Раньше для них не было чекбокса нигде — нельзя было
+    // отфильтровать НИ на одной странице, хотя сервер (candidates.stage
+    // inArray) их и так принимал байт-в-байт (talent_pool живой на проде).
+    // Добавляем, если слуга ещё нет в списке (напр. кастомный pipeline).
+    const seen = new Set(base.map((o) => o.slug))
+    const legacyLiveOutcomes: Array<{ slug: string; label: string }> = [
+      { slug: "talent_pool", label: LEGACY_STAGE_LABELS.talent_pool },
+      { slug: "pending", label: LEGACY_STAGE_LABELS.pending },
+      { slug: "preboarding", label: LEGACY_STAGE_LABELS.preboarding },
+    ]
+    for (const item of legacyLiveOutcomes) {
+      if (!seen.has(item.slug)) base.push(item)
     }
-    const base = vacancyPipeline ? getEnabledStages(vacancyPipeline) : ALL_STAGE_SLUGS
     return base
-      .filter((slug) => slug !== "rejected")
-      .map((slug) => ({ slug, label: getStageLabel(slug, vacancyPipeline) }))
   }, [stageOptions, vacancyPipeline])
 
   // #18: если есть серверные фасеты по всей вакансии — берём их (полный список),
@@ -315,6 +353,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
     // отказы ПОКАЗАНЫ (!hideRejected). Иначе бейдж горел бы на чистом экране.
     !filters.hideRejected ? 1 : 0,
     (filters.demoProgress?.length ?? 0) > 0 ? 1 : 0,
+    (filters.demoBlock?.length ?? 0) > 0 ? 1 : 0,
     filters.anketaFilled ? 1 : 0,
     filters.demoAnswered ? 1 : 0,
     filters.secondDemoPassed ? 1 : 0,
@@ -610,7 +649,7 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
             <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium [&[data-state=open]>svg]:rotate-180">
               <span className="flex items-center gap-2">
                 Статус и этап
-                {((filters.funnelStatuses?.length ?? 0) > 0 || !filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0 || !!filters.anketaFilled) && (
+                {((filters.funnelStatuses?.length ?? 0) > 0 || !filters.hideRejected || (filters.demoProgress?.length ?? 0) > 0 || (filters.demoBlock?.length ?? 0) > 0 || !!filters.anketaFilled) && (
                   <span className="text-[10px] rounded-full bg-primary/15 text-primary px-1.5 py-0.5">активны</span>
                 )}
               </span>
@@ -671,6 +710,26 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                     <span className="text-[10px] text-muted-foreground">обратимый</span>
                   </label>
                 </div>
+                {/* Разведка 14.07 (задача 3): «На ручной проверке» — низкий/
+                    средний AI-балл, авто-отказ переведён в предварительный
+                    режим (resumeThresholds.rejectAction='pending_manual' ИЛИ
+                    midRangeAction='keep_new'). НЕ то же самое, что «Предв.
+                    отказ» выше — тут решение об отказе ещё не принято вовсе,
+                    кандидат просто ждёт ручного разбора HR. "manual_review" —
+                    синтетический слуг (как preliminary_reject), сервер
+                    разворачивает в OR по auto_processing_stopped_reason /
+                    pendingRejectionReason (см. candidates/route.ts). */}
+                <div className="flex items-center gap-2 mt-2">
+                  <Checkbox
+                    id="funnel-manual_review"
+                    checked={filters.funnelStatuses.includes("manual_review")}
+                    onCheckedChange={() => onFiltersChange({ ...filters, funnelStatuses: toggleArray(filters.funnelStatuses, "manual_review") })}
+                  />
+                  <label htmlFor="funnel-manual_review" className="text-sm cursor-pointer flex items-center gap-2">
+                    <span>На ручной проверке</span>
+                    <span className="text-[10px] text-muted-foreground">низкий балл</span>
+                  </label>
+                </div>
               </div>
               {/* Прогресс демо */}
               <div className="space-y-1.5">
@@ -684,6 +743,23 @@ export function CandidateFilters({ filters, onFiltersChange, candidates = [], va
                         onCheckedChange={() => onFiltersChange({ ...filters, demoProgress: toggleArray(filters.demoProgress, s) })}
                       />
                       <label htmlFor={`demo-${s}`} className="text-sm cursor-pointer">{s}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Задача 4 (14.07): «Демо: ДN» — номер наивысшего пройденного
+                  демо-блока (заменяет снятую нотацию «частей: N/M»). */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Демо: пройденный блок</label>
+                <div className="space-y-1">
+                  {DEMO_BLOCK_OPTIONS.map(({ value, label }) => (
+                    <div key={value} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`demo-block-${value}`}
+                        checked={filters.demoBlock.includes(value)}
+                        onCheckedChange={() => onFiltersChange({ ...filters, demoBlock: toggleArray(filters.demoBlock, value) })}
+                      />
+                      <label htmlFor={`demo-block-${value}`} className="text-sm cursor-pointer">{label}</label>
                     </div>
                   ))}
                 </div>
