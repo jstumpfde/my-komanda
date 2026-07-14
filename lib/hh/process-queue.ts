@@ -351,6 +351,17 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     let botClarifyOn = false
     // Мягкое письмо отказа из «Портрета» (spec.rejectLetter) — уходит при авто-отказе.
     let rejectLetterText: string | null = null
+    // Стадия 1 воронки v2: при включённом движке текст/задержку авто-отказа
+    // берём из funnelV2.stage1 (перенос из Портрета 14.07), а не из spec.
+    let nativeStage1ForReject: import("@/lib/funnel-v2/native-config").EffectiveStage1 | null = null
+    if (localVac?.funnelV2RuntimeEnabled) {
+      try {
+        const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
+        const { resolveStage1 } = await import("@/lib/funnel-v2/native-config")
+        const fv2 = normalizeFunnelV2((localVac.descriptionJson as Record<string, unknown> | null)?.funnelV2)
+        if (fv2.enabled) nativeStage1ForReject = resolveStage1(fv2)
+      } catch { nativeStage1ForReject = null }
+    }
     // Авто-приглашение (spec.resumeThresholds.autoInviteEnabled, контур «Портрет»):
     // по умолчанию ВЫКЛ (решение Юрия) — сильных/прошедших середину НЕ зовём сами,
     // паркуем на ручной разбор. Приглашаем только при явном autoInviteEnabled===true
@@ -753,6 +764,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 // Бот-уточнение: спорных по баллу не режем — пусть бот уточнит в чате.
                 if (portraitOn && spec) botClarifyOn = spec.botClarifyAmbiguous === true
                 if (portraitOn && spec) rejectLetterText = spec.rejectLetter?.trim() || null
+                // v2: нативный текст отказа Стадии 1 побеждает Портрет (если задан).
+                if (nativeStage1ForReject && nativeStage1ForReject.rejectLetter.trim().length > 0) {
+                  rejectLetterText = nativeStage1ForReject.rejectLetter.trim()
+                }
                 if (portraitOn && spec?.resumeThresholds) {
                   autoInviteOn   = spec.resumeThresholds.autoInviteEnabled === true
                   inviteNextStep = spec.resumeThresholds.inviteNextStep ?? "demo"
@@ -1109,7 +1124,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // belowThreshold.delayMinutes, guard-minor 06.07); legacy-настройки —
               // только если Spec задержку не содержит (не должно случаться:
               // Zod-дефолт 60 бэкфиллит поле на чтении).
-              delayMinutes: belowThreshold.delayMinutes ?? rejectionDelayMinutes(effAiSettings),
+              // v2: при включённом движке задержку отказа даёт native Стадии 1.
+              delayMinutes: nativeStage1ForReject?.rejectionDelayMinutes
+                ?? belowThreshold.delayMinutes ?? rejectionDelayMinutes(effAiSettings),
             })
           } else if (belowThreshold.action === "portrait_pending_manual") {
             // Входной гейт Портрета, сценарий "pending_manual" (дополнение 06.07,
