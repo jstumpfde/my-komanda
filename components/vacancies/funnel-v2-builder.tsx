@@ -735,6 +735,114 @@ function Stage1Card({ stage1, summary, loading, onChange, onOpenPortrait }: {
   )
 }
 
+// ── Панель Стадии 2 «Демо 1-я часть → переход на 2-ю часть» (нативные поля) ────
+// Зеркало spec.anketaPassInvite. Гейт срабатывает на сабмите анкеты демо; при
+// включённом движке v2 рантайм читает эти поля (см. native-config.ts).
+const STAGE2_TRANSFER_OPTS: Array<{ v: "seamless" | "message" | "both"; label: string }> = [
+  { v: "both", label: "Бесшовно + письмо (рекомендуется)" },
+  { v: "seamless", label: "Только бесшовно (на странице)" },
+  { v: "message", label: "Только письмом" },
+]
+const STAGE2_FAIL_OPTS: Array<{ v: "none" | "pending_manual" | "pending_rejection"; label: string }> = [
+  { v: "none", label: "Ничего (мягкий экран «Спасибо»)" },
+  { v: "pending_manual", label: "Ручной разбор HR" },
+  { v: "pending_rejection", label: "Отложенный авто-отказ" },
+]
+function Stage2Card({ stage2, content, onChange }: {
+  stage2: FunnelV2Stage2
+  content: ContentBlock[]
+  onChange: (s: FunnelV2Stage2) => void
+}) {
+  const patch = (p: Partial<FunnelV2Stage2>) => onChange({ ...stage2, ...p })
+  const enabled = stage2.enabled ?? false
+  const transferMode = stage2.transferMode ?? "both"
+  const failAction = stage2.failAction ?? "none"
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <Route className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium">Стадия 2 · Переход на 2-ю часть демо</span>
+        <Switch checked={enabled} onCheckedChange={v => patch({ enabled: v })} className="ml-auto" />
+      </div>
+      {enabled && (
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+          <FieldRow label="Порог правильных ответов">
+            <div className="flex items-center gap-1.5">
+              <Input type="number" min={0} max={100} value={stage2.passThreshold ?? 35} onChange={e => patch({ passThreshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" />
+              <span className="text-[11px] text-muted-foreground w-8">%</span>
+            </div>
+          </FieldRow>
+          <FieldRow label="Порог AI-оценки ответов">
+            <div className="flex items-center gap-1.5">
+              <Input type="number" min={0} max={100} value={stage2.aiEvalThreshold ?? 45} onChange={e => patch({ aiEvalThreshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" />
+              <span className="text-[11px] text-muted-foreground w-8">из 100</span>
+            </div>
+          </FieldRow>
+          <p className="text-[11px] text-muted-foreground/80">Проходит во 2-ю часть, если взят <b>любой</b> из двух порогов (ИЛИ-гейт).</p>
+          <FieldRow label="Блок «2-я часть»">
+            <Select value={stage2.contentBlockId ?? "none"} onValueChange={v => patch({ contentBlockId: v === "none" ? null : v })}>
+              <SelectTrigger className="h-11 text-base"><SelectValue placeholder="боевой блок" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— боевой блок —</SelectItem>
+                {content.map(c => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </FieldRow>
+          <FieldRow label="Способ перевода">
+            <Select value={transferMode} onValueChange={v => patch({ transferMode: v as "seamless" | "message" | "both" })}>
+              <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
+              <SelectContent>{STAGE2_TRANSFER_OPTS.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </FieldRow>
+          {(transferMode === "seamless" || transferMode === "both") && (
+            <>
+              <FieldRow label="Плашка: заголовок">
+                <Input value={stage2.passScreenTitle ?? ""} onChange={e => patch({ passScreenTitle: e.target.value })} placeholder="Вы молодец!" className="h-11 text-base" />
+              </FieldRow>
+              <FieldRow label="Плашка: текст" align="top">
+                <Textarea value={stage2.passScreenText ?? ""} onChange={e => patch({ passScreenText: e.target.value })} placeholder="Вы прошли первую часть. Продолжим — впереди 2-я часть демо." className="min-h-[70px] text-base md:text-base" />
+              </FieldRow>
+            </>
+          )}
+          {(transferMode === "message" || transferMode === "both") && (
+            <>
+              <FieldRow label="Письмо-приглашение" align="top">
+                <Textarea value={stage2.messageText ?? ""} onChange={e => patch({ messageText: e.target.value })} placeholder="{{name}}, отлично — вы прошли первую часть! Следующий шаг: {{demo_link}}" className="min-h-[80px] text-base md:text-base" />
+              </FieldRow>
+              <FieldRow label="Задержка письма, сек">
+                <div className="flex items-center gap-1.5">
+                  <Input type="number" min={0} value={stage2.delaySeconds ?? 900} onChange={e => patch({ delaySeconds: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+                  <span className="text-[11px] text-muted-foreground">{fmtDelay(stage2.delaySeconds ?? 900)}</span>
+                </div>
+              </FieldRow>
+            </>
+          )}
+          <div className="rounded-lg bg-muted/40 p-3 space-y-2.5">
+            <span className="text-xs font-medium text-rose-700 dark:text-rose-400">Не прошёл гейт →</span>
+            <FieldRow label="Экран «Спасибо»: заголовок">
+              <Input value={stage2.failScreenTitle ?? ""} onChange={e => patch({ failScreenTitle: e.target.value })} placeholder="Спасибо!" className="h-11 text-base" />
+            </FieldRow>
+            <FieldRow label="Экран «Спасибо»: текст" align="top">
+              <Textarea value={stage2.failScreenText ?? ""} onChange={e => patch({ failScreenText: e.target.value })} placeholder="Пусто → стандартный финальный экран демо" className="min-h-[70px] text-base md:text-base" />
+            </FieldRow>
+            <FieldRow label="Действие">
+              <Select value={failAction} onValueChange={v => patch({ failAction: v as "none" | "pending_manual" | "pending_rejection" })}>
+                <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
+                <SelectContent>{STAGE2_FAIL_OPTS.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </FieldRow>
+            {failAction === "pending_rejection" && (
+              <FieldRow label="Задержка отказа, мин">
+                <Input type="number" min={1} value={stage2.failRejectDelayMinutes ?? 60} onChange={e => patch({ failRejectDelayMinutes: Math.max(1, Number(e.target.value) || 60) })} className="w-24 h-10 text-base" />
+              </FieldRow>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Главный конструктор ──────────────────────────────────────────────────────
 export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, onOpenChatbot }: { vacancyId: string; isOwner?: boolean; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
   const [config, setConfig] = useState<FunnelV2Config | null>(null)
@@ -1032,6 +1140,8 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
           </div>
         </SortableContext>
       </DndContext>
+
+      <Stage2Card stage2={config?.stage2 ?? {}} content={content} onChange={changeStage2} />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
