@@ -703,7 +703,15 @@ async function processOneTouch(
 
   // Пауза исходящей очереди: если HR приостановил отправки на вакансии —
   // оставляем сообщение pending (не отменяем), следующий cron проверит снова.
+  //
+  // Инцидент 11-14.07 (head-of-line blocking, см. комментарий у гейта
+  // Портрета выше): пауза — ручной тумблер без авто-снятия, её pending-хвост
+  // так же вечно торчал бы в голове очереди и съедал LIMIT у всех компаний.
+  // Переносим scheduled_at на +6ч (симметрично low_portrait_score).
   if (vacancy.outboundPaused) {
+    await db.update(followUpMessages)
+      .set({ scheduledAt: new Date(now.getTime() + 6 * 60 * 60 * 1000) })
+      .where(eq(followUpMessages.id, msg.id))
     return { outcome: "skipped", reason: "outbound_paused" }
   }
 
