@@ -63,6 +63,7 @@ export function branchToTouchCategory(branch: string | null | undefined): TouchC
     case "test_invite":
     case "schedule_invite":
     case "demo3_invite": // адресная кампания «Демо-3» (scripts/send-demo3-invite.ts)
+    case "demo3_before_interview": // мягкое напоминание «пройдите Демо-3 до интервью»
       return "invite"
     // Подтверждения / напоминания
     case "anketa_confirmation":

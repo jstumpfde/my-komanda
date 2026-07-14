@@ -1019,6 +1019,11 @@ export const vacancies = pgTable("vacancies", {
   // Пусто → используется DEFAULT_SCHEDULE_INVITE_TEXT (lib/messaging/schedule-invite.ts).
   // Плейсхолдеры: {{name}} {{vacancy}} {{company}} {{schedule_link}} {{manager}}.
   scheduleInviteText:     text("schedule_invite_text").notNull().default(""),
+  // Мягкое напоминание «пройдите Демо-3 до интервью» (drizzle/0279). Ставится
+  // записавшимся/переведённым в interview, кто НЕ прошёл последний демо-блок.
+  // Пусто → DEFAULT_DEMO3_BEFORE_INTERVIEW_TEXT (lib/messaging/demo3-before-interview.ts).
+  // Плейсхолдеры: {{name}} {{vacancy}} {{company}} {{manager}} {{demo3_link}}.
+  demo3BeforeInterviewText: text("demo3_before_interview_text").notNull().default(""),
   // #21: серия из до 3 первых сообщений с тумблерами и задержками.
   firstMessagesChain: jsonb("first_messages_chain")
     .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()

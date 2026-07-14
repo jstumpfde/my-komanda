@@ -7,6 +7,7 @@ import { trySyncStageToHh, trySyncRejectToHh, trySyncInviteToHh } from "@/lib/hh
 import { sendWebhook } from "@/lib/webhooks"
 import { sendToBitrix } from "@/lib/bitrix"
 import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
+import { maybeScheduleDemo3BeforeInterview } from "@/lib/messaging/demo3-before-interview"
 import { ALL_STAGE_SLUGS, LEGACY_STAGE_LABELS, type StageSlug } from "@/lib/stages"
 import { PORTRAIT_BELOW_THRESHOLD_REASON } from "@/lib/hh/entry-gate"
 
@@ -203,6 +204,11 @@ export async function PUT(
           : undefined
         void scheduleInterviewInvite({ candidateId: id, vacancyId: updated.vacancyId, messageText: overrideText })
           .catch((err) => console.warn(`[stage-route] schedule invite failed for ${id}:`, err))
+        // Мягкое напоминание «пройдите Демо-3 до интервью» (14.07): если у
+        // вакансии есть последний скорируемый демо-блок и кандидат его не
+        // прошёл — ставим одно напоминание (гейт/дедуп — внутри).
+        void maybeScheduleDemo3BeforeInterview({ candidateId: id, vacancyId: updated.vacancyId })
+          .catch((err) => console.warn(`[stage-route] demo3 reminder failed for ${id}:`, err))
       }
     } else {
       console.info(`[stage-route] sendMessage=false → тихий перевод ${id} → ${stage}`)
