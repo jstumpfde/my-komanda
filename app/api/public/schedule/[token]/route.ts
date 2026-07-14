@@ -18,6 +18,10 @@ import { isNonWorkingDay } from "@/lib/schedule/holidays"
 import { getHolidaysForCountry } from "@/lib/holidays"
 import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 import { METHOD_DEFAULT_DURATIONS, DEFAULT_METHOD_BUFFER } from "@/lib/hiring/interview-methods"
+import {
+  DEFAULT_INTERVIEW_BOOKED_TITLE as DEFAULT_BOOKED_TITLE,
+  DEFAULT_INTERVIEW_BOOKED_TEXT as DEFAULT_BOOKED_TEXT,
+} from "@/lib/hh/default-messages"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
@@ -51,9 +55,9 @@ const METHOD_LABELS: Record<string, string> = {
 
 // #26.4: платформенный дефолт текстов экрана "Вы записаны" — переопределяется
 // per-вакансия через descriptionJson.interviewBookedScreen {title, text}.
-// {{дата, время}} подставляется из подтверждённого слота.
-const DEFAULT_BOOKED_TITLE = "Вы записаны на интервью!"
-const DEFAULT_BOOKED_TEXT  = "Ждём вас {{дата, время}}. Мы напомним вам накануне и за 2 часа до встречи. Если планы изменятся — просто выберите другое время по этой же ссылке."
+// {{дата, время}} подставляется из подтверждённого слота. Константы —
+// DEFAULT_INTERVIEW_BOOKED_TITLE/TEXT (lib/hh/default-messages.ts), единый
+// источник с UI-редактором (interview-booked-screen-settings.tsx, 14.07).
 
 function buildBookedScreenTexts(
   descriptionJson: unknown,

@@ -2,11 +2,20 @@
 
 // Секция «Коммуникации» → блок «Отказы» (утверждено Б1, консолидация 08.07).
 //
-// Read-only сводка трёх источников текста отказа кандидату — редактирования
+// Read-only сводка источников текста отказа кандидату — редактирования
 // здесь НЕТ (каждый текст живёт и правится в своём месте, это только витрина
-// с переходом «Изменить»). Данные — из «Карты настроек»
+// с переходом «Изменить»). Первые три строки — из «Карты настроек»
 // (GET /api/modules/hr/settings-map), которая уже считает эффективные
 // значения и origin (vacancy/company/default).
+//
+// 14.07 (Ф.А): добавлены ещё два источника read-only ссылок — их значения
+// НЕ в реестре settings-map (это отдельные подсистемы со своим хранением),
+// поэтому передаются пропами от родителя (page.tsx), который уже читает
+// apiVacancy целиком:
+//   - 4 отказных текста AI чат-бота (vacancy.aiChatbotSettings.rejectionMessages);
+//   - тексты отказа стадий Воронки v2 (descriptionJson.funnelV2.stages[].rejectText
+//     / stages[].rule.rejectText) — строка показывается, только если хотя бы
+//     одна стадия имеет свой текст (иначе это шум для вакансий без Воронки v2).
 
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,12 +23,38 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Loader2, UserX, ExternalLink } from "lucide-react"
 
+interface ChatbotRejectionMessages {
+  injection?:     string
+  severeAbuse?:   string
+  repeatedAbuse?: string
+  unstable?:      string
+}
+
 interface Props {
   vacancyId: string
   /** vacancies.portrait_scoring — определяет, какой текст «Низкий балл резюме» показать. */
   portraitScoring?: boolean
   /** Переход к редактированию Портрета (первые две строки). */
   onNavigateToSpec?: () => void
+  /** 14.07: 4 текста отказа AI чат-бота (aiChatbotSettings.rejectionMessages).
+   *  undefined/null — трактуем как «ничего не переопределено» (действуют дефолты). */
+  chatbotRejectionMessages?: ChatbotRejectionMessages | null
+  /** Переход к панели AI чат-бота (там же редактируются 4 текста выше). */
+  onNavigateToChatbot?: () => void
+  /** 14.07: сколько стадий Воронки v2 имеют свой текст отказа (rule.rejectText
+   *  или top-level rejectText — Воронка 3). 0/undefined → строку не показываем. */
+  funnelV2RejectStagesCount?: number
+  /** Переход в конструктор «Воронка v2». */
+  onNavigateToFunnelV2?: () => void
+}
+
+// «1 стадия» / «2 стадии» / «5 стадий».
+function pluralizeStages(n: number): string {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return "стадия"
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "стадии"
+  return "стадий"
 }
 
 type Origin = "default" | "company" | "vacancy" | "code"
@@ -54,7 +89,15 @@ function originBadge(origin: Origin) {
   return <Badge variant="outline" className="text-muted-foreground">дефолт</Badge>
 }
 
-export function RejectionTextsSummary({ vacancyId, portraitScoring, onNavigateToSpec }: Props) {
+export function RejectionTextsSummary({
+  vacancyId,
+  portraitScoring,
+  onNavigateToSpec,
+  chatbotRejectionMessages,
+  onNavigateToChatbot,
+  funnelV2RejectStagesCount,
+  onNavigateToFunnelV2,
+}: Props) {
   const [rows, setRows] = useState<SettingsMapRow[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -101,6 +144,36 @@ export function RejectionTextsSummary({ vacancyId, portraitScoring, onNavigateTo
     })
   }
 
+  // 14.07: 4 текста отказа AI чат-бота — отдельная подсистема (Группа 30),
+  // не в реестре settings-map. Показываем всегда (в отличие от строки
+  // Воронки v2 ниже) — это не опциональная фича, а часть чат-бота, который
+  // может быть выключен, но тексты всё равно настроены/дефолтны.
+  const chatbotKeys: (keyof ChatbotRejectionMessages)[] = ["injection", "severeAbuse", "repeatedAbuse", "unstable"]
+  const chatbotCustomizedCount = chatbotKeys.filter(
+    (k) => typeof chatbotRejectionMessages?.[k] === "string" && (chatbotRejectionMessages[k] as string).trim().length > 0,
+  ).length
+  items.push({
+    label:  "AI чат-бот — отказы при нарушениях (4 шаблона)",
+    value:  chatbotCustomizedCount > 0
+      ? `${chatbotCustomizedCount} из 4 переопределено вручную`
+      : "используются дефолты платформы",
+    origin: chatbotCustomizedCount > 0 ? "vacancy" : "default",
+    action: { label: "Настроить в чат-боте", onClick: () => onNavigateToChatbot?.() },
+  })
+
+  // 14.07: тексты отказа стадий Воронки v2 — показываем, только если у
+  // вакансии реально есть хоть одна стадия со своим текстом (иначе для
+  // большинства вакансий это была бы бесполезная строка).
+  if ((funnelV2RejectStagesCount ?? 0) > 0) {
+    const n = funnelV2RejectStagesCount as number
+    items.push({
+      label:  "Отказы стадий Воронки v2",
+      value:  `${n} ${pluralizeStages(n)} со своим текстом отказа`,
+      origin: "vacancy",
+      action: { label: "Открыть конструктор", onClick: () => onNavigateToFunnelV2?.() },
+    })
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -109,7 +182,7 @@ export function RejectionTextsSummary({ vacancyId, portraitScoring, onNavigateTo
           Отказы
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1">
-          Три независимых источника текста отказа кандидату. Только просмотр — правьте в месте назначения.
+          Независимые источники текста отказа кандидату. Только просмотр — правьте в месте назначения.
         </p>
       </CardHeader>
       <CardContent>
