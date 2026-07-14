@@ -49,11 +49,14 @@ import {
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
   type DozhimPreset, type InterviewMode, type DozhimTouch,
   type ScoreGate, type ScoreGateType, type ScoreGateFailAction,
+  type FunnelV2Stage1, type FunnelV2Stage2, type FunnelV2Communications,
 } from "@/lib/funnel-v2/types"
+import { resolveStage1, prefillNativeFromSpec, DEFAULT_HOT_CANDIDATE_THRESHOLD } from "@/lib/funnel-v2/native-config"
 import { STAGE_COLOR_CLASSES, type StageColor } from "@/lib/stages"
 import type { DripTemplates } from "@/lib/db/schema"
 import { renderTemplate } from "@/lib/template-renderer"
 import { guardOutgoingMessage } from "@/lib/messaging/outgoing-guard"
+import { AutoResponderSettings } from "@/components/vacancies/auto-responder-settings"
 
 // Предпросмотр: тестовые данные для подстановки переменных (как увидит кандидат).
 const PREVIEW_VARS: Record<string, string> = {
@@ -656,25 +659,78 @@ function fmtDelay(sec: number): string {
   return s === 0 ? `${m} мин` : `${m} мин ${s} сек`
 }
 
-function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary | null; loading: boolean; onOpen?: () => void }) {
-  const empty = !loading && summary && summary.criteriaCount === 0 && summary.stops.length === 0
+// ── Панель Стадии 1 «Отклик → приглашение» (нативные редактируемые поля) ──────
+// Заменяет вчерашние read-only бэджи задержки/нерабочего времени: теперь это
+// собственные поля funnelV2.stage1, а не чтение из Портрета. Пороги отбора по
+// баллу и авто-приглашение остаются в Портрете (модель скоринга) — показываем
+// их read-only строкой со ссылкой «Открыть Портрет».
+function Stage1Card({ stage1, summary, loading, onChange, onOpenPortrait }: {
+  stage1: FunnelV2Stage1
+  summary: SpecSummary | null
+  loading: boolean
+  onChange: (s: FunnelV2Stage1) => void
+  onOpenPortrait?: () => void
+}) {
+  const patch = (p: Partial<FunnelV2Stage1>) => onChange({ ...stage1, ...p })
+  const inviteDelay = stage1.inviteDelaySeconds ?? 180
+  const offEnabled = stage1.offHoursEnabled ?? true
+  const offDelay = stage1.offHoursDelaySeconds ?? 15
+  const rejectDelay = stage1.rejectionDelayMinutes ?? 60
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-1 text-muted-foreground/80">
-      <Target className="w-3.5 h-3.5 shrink-0" />
-      <span className="text-xs">Входной скан резюме настраивается в Портрете</span>
-      {onOpen && <button onClick={onOpen} className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>}
-      <span className="flex flex-wrap gap-1 ml-auto">
-        {loading ? <span className="text-[11px] inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> загрузка…</span>
+    <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <Target className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium">Стадия 1 · Отклик → приглашение на демо</span>
+        <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground ml-auto">входной скан</span>
+      </div>
+
+      {/* Пороги/авто-приглашение — read-only из Портрета (модель скоринга) */}
+      <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground/80">
+        <span className="text-[11px]">Пороги балла и авто-приглашение — в Портрете</span>
+        {onOpenPortrait && <button onClick={onOpenPortrait} className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>}
+        {loading ? <span className="text-[11px] inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> …</span>
           : summary ? (<>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">пороги &lt;{summary.lower ?? 40} / {summary.lower ?? 40}–{(summary.upper ?? 75) - 1} / ≥{summary.upper ?? 75}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">зона отказа: {summary.rejectAction === "pending_rejection" ? "авто-отказ" : summary.rejectAction === "pending_manual" ? "ручной разбор" : "выкл"}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
-            {typeof summary.inviteDelaySeconds === "number" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">задержка 1-го сообщения: {fmtDelay(summary.inviteDelaySeconds)}</span>}
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">нерабочее время: {summary.offHoursEnabled ? `вкл${typeof summary.offHoursDelaySeconds === "number" ? `, +${fmtDelay(summary.offHoursDelaySeconds)}` : ""}` : "выкл"}</span>
-            {summary.stops.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">стоп: {summary.stops.join(", ")}</span>}
-            {empty && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/60">пусто → 100% проходят дальше</span>}
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">пороги &lt;{summary.lower ?? 40} / ≥{summary.upper ?? 75}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">зона отказа: {summary.rejectAction === "pending_rejection" ? "авто-отказ" : summary.rejectAction === "pending_manual" ? "ручной разбор" : "выкл"}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
+            {summary.stops.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">стоп: {summary.stops.join(", ")}</span>}
           </>) : <span className="text-[10px] text-muted-foreground/60">Портрет не настроен → проходят все</span>}
-      </span>
+      </div>
+
+      {/* Нативные редактируемые поля тайминга/текстов */}
+      <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+        <FieldRow label="Задержка первого сообщения, сек">
+          <div className="flex items-center gap-1.5">
+            <Input type="number" min={0} value={inviteDelay} onChange={e => patch({ inviteDelaySeconds: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+            <span className="text-[11px] text-muted-foreground">{fmtDelay(inviteDelay)}</span>
+          </div>
+        </FieldRow>
+        <FieldRow label="Слать в нерабочее время">
+          <Switch checked={offEnabled} onCheckedChange={v => patch({ offHoursEnabled: v })} />
+        </FieldRow>
+        {offEnabled && (
+          <>
+            <FieldRow label="Задержка в нерабочее время, сек">
+              <div className="flex items-center gap-1.5">
+                <Input type="number" min={0} value={offDelay} onChange={e => patch({ offHoursDelaySeconds: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+                <span className="text-[11px] text-muted-foreground">{fmtDelay(offDelay)}</span>
+              </div>
+            </FieldRow>
+            <FieldRow label="Текст в нерабочее время" align="top">
+              <Textarea value={stage1.offHoursText ?? ""} onChange={e => patch({ offHoursText: e.target.value })} placeholder="Мягкое подтверждение: «{{name}}, спасибо за отклик! Ответим утром.»" className="min-h-[80px] text-base md:text-base" />
+            </FieldRow>
+          </>
+        )}
+        <FieldRow label="Текст авто-отказа" align="top">
+          <Textarea value={stage1.rejectLetter ?? ""} onChange={e => patch({ rejectLetter: e.target.value })} placeholder="Пусто → стандартный мягкий текст отказа" className="min-h-[80px] text-base md:text-base" />
+        </FieldRow>
+        <FieldRow label="Задержка отказа, мин">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={0} value={rejectDelay} onChange={e => patch({ rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+            {rejectDelay >= 60 && <span className="text-[11px] text-muted-foreground">= {Math.floor(rejectDelay / 60)} ч{rejectDelay % 60 ? ` ${rejectDelay % 60} мин` : ""}</span>}
+          </div>
+        </FieldRow>
+      </div>
     </div>
   )
 }
@@ -850,6 +906,9 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
 
   const addStage = (action: StageActionType) => { if (!config) return; const st = makeStage(action, `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`); update({ ...config, stages: [...config.stages, st] }); setEditingId(st.id) }
   const changeStage = (s: FunnelV2Stage) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === s.id ? s : x) }) }
+  const changeStage1 = (s1: FunnelV2Stage1) => { if (!config) return; update({ ...config, stage1: s1 }) }
+  const changeStage2 = (s2: FunnelV2Stage2) => { if (!config) return; update({ ...config, stage2: s2 }) }
+  const changeCommunications = (c: FunnelV2Communications) => { if (!config) return; update({ ...config, communications: c }) }
   const toggleStageEnabled = (id: string, val: boolean) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === id ? { ...x, enabled: val } as FunnelV2Stage : x) }) }
   // «Загрузить типовую воронку» — заполнить пустую воронку дефолт-шаблоном пути продаж.
   const loadDefault = () => {
@@ -928,7 +987,7 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
         </div>
       </div>
 
-      <PortraitStageCard summary={summary} loading={specLoading} onOpen={onOpenPortrait} />
+      <Stage1Card stage1={config?.stage1 ?? {}} summary={summary} loading={specLoading} onChange={changeStage1} onOpenPortrait={onOpenPortrait} />
 
       {/* Сквозной слой: AI чат-бот. Не стадия — работает поверх ВСЕХ стадий
           (отвечает кандидатам на любом шаге). Тумблер тут же; промпт/фильтры/
