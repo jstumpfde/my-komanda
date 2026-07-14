@@ -2,9 +2,11 @@
 //
 // Директор помечает алерт «принято» (acked). Не resolved — статус остаётся
 // видимым для истории/аудита, но пропадает из баннера (баннер фильтрует
-// status='open' в GET /api/modules/hr/admin-alerts). Тенант-изоляция:
-// company-level алерт — только своя компания; платформенный (companyId=NULL)
-// — только platform_admin.
+// status='open' в GET /api/modules/hr/admin-alerts). Видимость (Юрий 14.07,
+// см. комментарий в GET-роуте) — СТРОГО platform admin, вне зависимости от
+// companyId алерта (company-scoped тоже скрыты от директора клиента). 404
+// для не-админа — тихое скрытие, не 403 (не обнаруживаем факт существования
+// алерта/фичи).
 import { NextRequest } from "next/server"
 import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -15,6 +17,7 @@ import { isPlatformAdminEmail } from "@/lib/platform/auth"
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireDirector()
+    if (!isPlatformAdminEmail(user.email)) return apiError("Алерт не найден", 404)
     const { id } = await params
 
     const [alert] = await db
@@ -23,13 +26,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       .where(eq(adminAlerts.id, id))
       .limit(1)
     if (!alert) return apiError("Алерт не найден", 404)
-
-    const isPlatformAlert = alert.companyId === null
-    if (isPlatformAlert) {
-      if (!isPlatformAdminEmail(user.email)) return apiError("Алерт не найден", 404)
-    } else if (alert.companyId !== user.companyId) {
-      return apiError("Алерт не найден", 404)
-    }
 
     if (alert.status !== "open") {
       return apiSuccess({ id: alert.id, status: alert.status })
