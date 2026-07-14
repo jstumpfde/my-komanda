@@ -233,6 +233,31 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null
 
+    // ── Воронка v2: нормализованный конфиг + нативная Стадия 1 (движок включён) ──
+    // Вычисляем ОДИН раз за итерацию, чтобы переиспользовать: РАНО — в off-hours-
+    // гейте ниже (Стадия 1 = «нерабочее время»), затем в блоке авто-отказа Стадии 1
+    // и во входе в воронку. resolveStage1 фоллбэчит на Портрет (spec), если stage1
+    // ещё не сохранён нативно (симметрично resolveEffectiveAnketaPassInvite и др.).
+    // При выключенном движке ОБЕ переменные остаются null → легаси-путь не меняется.
+    let v2Config: import("@/lib/funnel-v2/types").FunnelV2Config | null = null
+    let v2NativeStage1: import("@/lib/funnel-v2/native-config").EffectiveStage1 | null = null
+    if (localVac?.funnelV2RuntimeEnabled) {
+      try {
+        const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
+        const { resolveStage1 } = await import("@/lib/funnel-v2/native-config")
+        const cfg = normalizeFunnelV2((localVac.descriptionJson as Record<string, unknown> | null)?.funnelV2)
+        v2Config = cfg
+        if (cfg.enabled) {
+          // Портрет (spec) — источник фоллбэка, если stage1 ещё не настроен нативно.
+          // Ошибка чтения spec не должна ломать v2-вход: тихий null → платформенные
+          // дефолты в resolveStage1 (как было до переноса Стадии 1 в native).
+          let specForStage1: Awaited<ReturnType<typeof getSpec>> = null
+          try { specForStage1 = await getSpec(localVac.id) } catch { specForStage1 = null }
+          v2NativeStage1 = resolveStage1(specForStage1, cfg, true)
+        }
+      } catch { v2Config = null; v2NativeStage1 = null }
+    }
+
     // Проверка расписания — для cron'а: если нерабочее время / выходной /
     // праздник — обычно оставляем status='response', следующий cron подберёт.
     //
@@ -250,8 +275,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         const offText = (typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
           ? localVac.firstMessageOffHoursText.trim()
           : md.offHoursMessage
+        // Флаг «слать в нерабочее время»: при включённом движке v2 — из нативной
+        // Стадии 1 (funnelV2.stage1.offHoursEnabled, с фоллбэком на Портрет), НЕ из
+        // легаси-колонки. Иначе (движок выключен) — прежняя легаси-колонка, байт-в-байт.
+        const offHoursSoftEnabled = (localVac.funnelV2RuntimeEnabled && v2Config?.enabled)
+          ? v2NativeStage1?.offHoursEnabled === true
+          : localVac.firstMessageOffHoursEnabled === true
         if (
-          localVac.firstMessageOffHoursEnabled === true &&
+          offHoursSoftEnabled &&
           offText.length > 0 &&
           // Phase 3: «бот выключен» — через адаптер (флаг off → прежнее legacy).
           !isBlockEnabled(localVac, "ai_chatbot", localVac.aiChatbotEnabled === true)
@@ -351,17 +382,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     let botClarifyOn = false
     // Мягкое письмо отказа из «Портрета» (spec.rejectLetter) — уходит при авто-отказе.
     let rejectLetterText: string | null = null
-    // Стадия 1 воронки v2: при включённом движке текст/задержку авто-отказа
-    // берём из funnelV2.stage1 (перенос из Портрета 14.07), а не из spec.
-    let nativeStage1ForReject: import("@/lib/funnel-v2/native-config").EffectiveStage1 | null = null
-    if (localVac?.funnelV2RuntimeEnabled) {
-      try {
-        const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
-        const { resolveStage1 } = await import("@/lib/funnel-v2/native-config")
-        const fv2 = normalizeFunnelV2((localVac.descriptionJson as Record<string, unknown> | null)?.funnelV2)
-        if (fv2.enabled) nativeStage1ForReject = resolveStage1(fv2)
-      } catch { nativeStage1ForReject = null }
-    }
+    // Стадия 1 воронки v2: при включённом движке текст/задержку авто-отказа берём
+    // из funnelV2.stage1 (перенос из Портрета 14.07). resolveStage1 фоллбэчит на
+    // Портрет (spec), если stage1 ещё НЕ настроен нативно — поэтому дефолт платформы
+    // 60 мин больше не перебивает задержку, заданную в Портрете (было: находка-2).
+    // Вычислено единожды выше (v2NativeStage1); null при выключенном движке.
+    const nativeStage1ForReject: import("@/lib/funnel-v2/native-config").EffectiveStage1 | null = v2NativeStage1
     // Авто-приглашение (spec.resumeThresholds.autoInviteEnabled, контур «Портрет»):
     // по умолчанию ВЫКЛ (решение Юрия) — сильных/прошедших середину НЕ зовём сами,
     // паркуем на ручной разбор. Приглашаем только при явном autoInviteEnabled===true
@@ -1296,20 +1322,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       //
       // Единственная точка ветвления; легаси-ветка не трогается вообще.
       let funnelV2Handled = false
-      if (candidateId && localVac && localVac.funnelV2RuntimeEnabled) {
+      if (candidateId && localVac && localVac.funnelV2RuntimeEnabled && v2Config?.enabled) {
         try {
-          const descJson = localVac.descriptionJson as Record<string, unknown> | null
-          const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
-          const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
-          // Стадия 1 воронки v2 — нативные поля funnelV2.stage1 (перенос из
-          // Портрета 14.07). При включённом движке v2 нерабочее время/задержку
-          // первого сообщения берём отсюда, а не из vacancy-колонок-зеркал.
-          const { resolveStage1 } = await import("@/lib/funnel-v2/native-config")
-          const nativeStage1 = resolveStage1(funnelV2)
+          // Конфиг и нативная Стадия 1 вычислены единожды в начале итерации
+          // (v2Config / v2NativeStage1). Стадия 1 = Портрет: нерабочее время/
+          // задержку первого сообщения берём из native (funnelV2.stage1) с
+          // фоллбэком на Портрет, а не из vacancy-колонок-зеркал.
+          const funnelV2 = v2Config
+          const nativeStage1 = v2NativeStage1
           // Вход кандидата — ПЕРВАЯ ВКЛЮЧЁННАЯ стадия (enabled===false пропускаем;
           // отсутствие поля = включена, прежнее поведение).
           const firstStageEnabled = funnelV2.stages.find(s => s.enabled !== false)
-          if (funnelV2.enabled && firstStageEnabled) {
+          if (nativeStage1 && firstStageEnabled) {
             const firstStage = firstStageEnabled
             const nowIso = new Date().toISOString()
             // Читаем token кандидата для CandidateForExecutor

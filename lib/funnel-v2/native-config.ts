@@ -32,16 +32,43 @@ export interface EffectiveStage1 {
   rejectionDelayMinutes: number
 }
 
-/** Эффективные значения Стадии 1 (нативные поля + дефолты). */
-export function resolveStage1(config: FunnelV2Config): EffectiveStage1 {
-  const s = config.stage1 ?? {}
+/**
+ * Эффективные значения Стадии 1.
+ *
+ * Сигнатура симметрична resolveEffectiveAnketaPassInvite / resolveTgAlerts /
+ * resolveHotCandidate: принимает spec-источник (Портрет), конфиг и флаг движка.
+ * - Движок v2 включён И stage1 сохранён явно (config.stage1 != null) → нативные
+ *   поля (+ платформенные дефолты для отсутствующих).
+ * - Иначе (движок выключен ИЛИ stage1 ещё НЕ настроен) → эффективные значения
+ *   ИЗ ПОРТРЕТА (spec.resumeThresholds / spec.offHoursLetter / spec.rejectLetter),
+ *   а не платформенные дефолты. Маппинг идентичен prefillNativeFromSpec.
+ */
+export function resolveStage1(
+  spec: SpecLike,
+  config: FunnelV2Config,
+  runtimeEnabled: boolean,
+): EffectiveStage1 {
+  const useNative = runtimeEnabled && config.stage1 != null
+  if (useNative) {
+    const s = config.stage1 ?? {}
+    return {
+      inviteDelaySeconds: s.inviteDelaySeconds ?? DEFAULT_STAGE1_INVITE_DELAY,
+      offHoursEnabled: s.offHoursEnabled ?? true,
+      offHoursDelaySeconds: s.offHoursDelaySeconds ?? DEFAULT_STAGE1_OFF_HOURS_DELAY,
+      offHoursText: s.offHoursText ?? "",
+      rejectLetter: s.rejectLetter ?? "",
+      rejectionDelayMinutes: s.rejectionDelayMinutes ?? DEFAULT_STAGE1_REJECT_DELAY_MIN,
+    }
+  }
+  // Фоллбэк на Портрет (spec) — маппинг spec→stage1 идентичен prefillNativeFromSpec.
+  const rt = (spec?.resumeThresholds ?? {}) as Record<string, unknown>
   return {
-    inviteDelaySeconds: s.inviteDelaySeconds ?? DEFAULT_STAGE1_INVITE_DELAY,
-    offHoursEnabled: s.offHoursEnabled ?? true,
-    offHoursDelaySeconds: s.offHoursDelaySeconds ?? DEFAULT_STAGE1_OFF_HOURS_DELAY,
-    offHoursText: s.offHoursText ?? "",
-    rejectLetter: s.rejectLetter ?? "",
-    rejectionDelayMinutes: s.rejectionDelayMinutes ?? DEFAULT_STAGE1_REJECT_DELAY_MIN,
+    inviteDelaySeconds: num(rt.inviteDelaySeconds) ?? DEFAULT_STAGE1_INVITE_DELAY,
+    offHoursEnabled: bool(rt.offHoursEnabled) ?? true,
+    offHoursDelaySeconds: num(rt.offHoursDelaySeconds) ?? DEFAULT_STAGE1_OFF_HOURS_DELAY,
+    offHoursText: text(spec?.offHoursLetter) ?? "",
+    rejectLetter: text(spec?.rejectLetter) ?? "",
+    rejectionDelayMinutes: num(rt.rejectionDelayMinutes) ?? DEFAULT_STAGE1_REJECT_DELAY_MIN,
   }
 }
 

@@ -8,8 +8,16 @@ import {
 } from "./native-config"
 import { normalizeFunnelV2 } from "./types"
 
-test("resolveStage1: пустой конфиг → дефолты", () => {
-  const s1 = resolveStage1(normalizeFunnelV2({ enabled: true, stages: [] }))
+// Портрет-источник для фоллбэка (resolveStage1 читает resumeThresholds +
+// offHoursLetter/rejectLetter — маппинг идентичен prefillNativeFromSpec).
+const SPEC_STAGE1 = {
+  resumeThresholds: { inviteDelaySeconds: 45, offHoursEnabled: false, offHoursDelaySeconds: 20, rejectionDelayMinutes: 300 },
+  offHoursLetter: "добрый вечер",
+  rejectLetter: "к сожалению",
+}
+
+test("resolveStage1: движок включён, stage1 нет, spec нет → дефолты платформы", () => {
+  const s1 = resolveStage1(null, normalizeFunnelV2({ enabled: true, stages: [] }), true)
   assert.equal(s1.inviteDelaySeconds, DEFAULT_STAGE1_INVITE_DELAY)
   assert.equal(s1.offHoursEnabled, true)
   assert.equal(s1.offHoursDelaySeconds, DEFAULT_STAGE1_OFF_HOURS_DELAY)
@@ -18,13 +26,35 @@ test("resolveStage1: пустой конфиг → дефолты", () => {
   assert.equal(s1.rejectionDelayMinutes, DEFAULT_STAGE1_REJECT_DELAY_MIN)
 })
 
-test("resolveStage1: нативные значения побеждают дефолты", () => {
-  const cfg = normalizeFunnelV2({ enabled: true, stages: [], stage1: { inviteDelaySeconds: 30, offHoursEnabled: false, offHoursText: "ночь", rejectionDelayMinutes: 5 } })
-  const s1 = resolveStage1(cfg)
+test("resolveStage1: движок включён + stage1 сохранён → нативные значения (Портрет игнор)", () => {
+  const cfg = normalizeFunnelV2({ enabled: true, stages: [], stage1: { inviteDelaySeconds: 30, offHoursEnabled: true, offHoursText: "ночь", rejectionDelayMinutes: 5 } })
+  const s1 = resolveStage1(SPEC_STAGE1, cfg, true)
   assert.equal(s1.inviteDelaySeconds, 30)
-  assert.equal(s1.offHoursEnabled, false)
+  assert.equal(s1.offHoursEnabled, true)          // native, не Портрет false
   assert.equal(s1.offHoursText, "ночь")
-  assert.equal(s1.rejectionDelayMinutes, 5)
+  assert.equal(s1.rejectionDelayMinutes, 5)        // native, не Портрет 300
+})
+
+test("resolveStage1: движок включён, но stage1 нет → Портрет (обратная совместимость)", () => {
+  // Симметрия со stage2: если нативный блок не сохранён — эффективные значения
+  // из Портрета (spec), НЕ платформенные дефолты. Закрывает находки 1/2:
+  // offHoursEnabled и rejectionDelayMinutes корректно берутся из Портрета.
+  const cfg = normalizeFunnelV2({ enabled: true, stages: [] })
+  const s1 = resolveStage1(SPEC_STAGE1, cfg, true)
+  assert.equal(s1.inviteDelaySeconds, 45)
+  assert.equal(s1.offHoursEnabled, false)          // из Портрета (находка 1)
+  assert.equal(s1.offHoursDelaySeconds, 20)
+  assert.equal(s1.offHoursText, "добрый вечер")
+  assert.equal(s1.rejectLetter, "к сожалению")
+  assert.equal(s1.rejectionDelayMinutes, 300)      // из Портрета, НЕ дефолт 60 (находка 2)
+})
+
+test("resolveStage1: движок выключен → Портрет (даже если stage1 сохранён нативно)", () => {
+  const cfg = normalizeFunnelV2({ enabled: true, stages: [], stage1: { offHoursEnabled: true, rejectionDelayMinutes: 5, offHoursText: "native" } })
+  const s1 = resolveStage1(SPEC_STAGE1, cfg, false)
+  assert.equal(s1.offHoursEnabled, false)          // из Портрета, не native true
+  assert.equal(s1.rejectionDelayMinutes, 300)      // из Портрета, не native 5
+  assert.equal(s1.offHoursText, "добрый вечер")    // из Портрета, не "native"
 })
 
 test("prefillNativeFromSpec: заполняет отсутствующие блоки из Портрета", () => {
