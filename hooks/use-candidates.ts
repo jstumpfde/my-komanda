@@ -98,6 +98,10 @@ export interface ApiCandidate {
   updatedAt: string | null
   hhResponseId?: string | null
   hhRawData?: unknown
+  // Кандидату доступно скачивание PDF резюме с hh (резолвится resume_id по
+  // hh_candidates/hh_responses — lib/hh/resolve-resume-id.ts). Отдаётся ТОЛЬКО
+  // пер-кандидатным GET /api/modules/hr/candidates/[id] (не списками).
+  hasResumePdf?: boolean
   demoLessons?: unknown
   stageHistory?: unknown
   shortId?: string | null
