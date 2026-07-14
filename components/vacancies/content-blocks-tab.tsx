@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard, Copy, MoreHorizontal, ArrowRightLeft, Link2 } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Sparkles, FileText, AlertCircle, Save, BookOpen, Eye, Check, Download, ChevronDown, ChevronRight, FilePlus, Zap, Clapperboard, Copy, MoreHorizontal, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useContentBlocks, visibleContentBlocks, type ContentBlock, type ContentType } from "@/hooks/use-content-blocks"
@@ -255,10 +255,9 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
     toast.success(`Урок скопирован в блок «${target.title}»`)
   }, [blocks, updateBlock])
 
-  // Открыть диалог «Дублировать в вакансию…» (блок целиком, серверная копия).
-  const handleOpenCopyBlockDialog = useCallback((block: ContentBlock) => {
-    setCopyDialog({ mode: "block", block })
-  }, [])
+  // «Дублировать в вакансию…» (блок) убран (Юрий 14.07) — перенос между
+  // вакансиями через сохранение шаблона. Диалог CopyToVacancyDialog остаётся
+  // для урочного «Скопировать в другую вакансию…» (mode: "lesson").
 
   // «Скопировать общую ссылку» — универсальная (обезличенная) ссылка на блок
   // (/start/<publicToken>): можно рассылать МНОГИМ кандидатам, в отличие от
@@ -524,9 +523,8 @@ export function ContentBlocksTab({ vacancyId, onNavigateNext, funnelV2RuntimeEna
                 <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleDuplicateBlock(block)}>
                   <Copy className="w-3.5 h-3.5" />Дублировать блок
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => handleOpenCopyBlockDialog(block)}>
-                  <ArrowRightLeft className="w-3.5 h-3.5" />Дублировать в вакансию…
-                </DropdownMenuItem>
+                {/* «Дублировать в вакансию…» убран (Юрий 14.07): перенос между
+                    вакансиями — через сохранение шаблона, не прямым дублем. */}
                 <DropdownMenuItem
                   className="gap-2 cursor-pointer"
                   disabled={copyingLinkId === block.id}
