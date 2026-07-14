@@ -843,6 +843,77 @@ function Stage2Card({ stage2, content, onChange }: {
   )
 }
 
+// ── Секция «Коммуникации воронки» ─────────────────────────────────────────────
+// Нативные поля funnelV2.communications: TG-уведомления о подходящих кандидатах
+// и «горячий кандидат стынет» (перенос из Портрета). Стоп-слова и FAQ — через
+// встроенный AutoResponderSettings (общее режимо-независимое хранилище).
+function CommunicationsCard({ vacancyId, comms, onChange }: {
+  vacancyId: string
+  comms: FunnelV2Communications
+  onChange: (c: FunnelV2Communications) => void
+}) {
+  const tg = comms.tgAlerts ?? { enabled: false, minResumeScore: null, minAnswersScore: null, onGatePassed: true }
+  const hot = comms.hotCandidate ?? { enabled: false, threshold: DEFAULT_HOT_CANDIDATE_THRESHOLD, staleAfterHours: 3 }
+  const patchTg = (p: Partial<typeof tg>) => onChange({ ...comms, tgAlerts: { ...tg, ...p } })
+  const patchHot = (p: Partial<typeof hot>) => onChange({ ...comms, hotCandidate: { ...hot, ...p } })
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 space-y-4">
+      <div className="flex items-center gap-2">
+        <MessageSquare className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium">Коммуникации воронки</span>
+      </div>
+
+      {/* Стоп-слова + частые вопросы (общее хранилище, работает во всех режимах) */}
+      <AutoResponderSettings vacancyId={vacancyId} />
+
+      {/* Telegram: подходящие кандидаты */}
+      <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="text-xs font-medium">Telegram: подходящие кандидаты</span>
+            <p className="text-[11px] text-muted-foreground/80">Карточка кандидата в канал компании, когда он проходит пороги.</p>
+          </div>
+          <Switch checked={tg.enabled} onCheckedChange={v => patchTg({ enabled: v })} className="shrink-0" />
+        </div>
+        {tg.enabled && (
+          <>
+            <FieldRow label="Мин. балл резюме">
+              <Input type="number" min={0} max={100} value={tg.minResumeScore ?? ""} placeholder="—" onChange={e => patchTg({ minResumeScore: e.target.value === "" ? null : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+            <FieldRow label="Мин. балл ответов">
+              <Input type="number" min={0} max={100} value={tg.minAnswersScore ?? ""} placeholder="—" onChange={e => patchTg({ minAnswersScore: e.target.value === "" ? null : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+            <FieldRow label="Слать при прохождении гейта">
+              <Switch checked={tg.onGatePassed} onCheckedChange={v => patchTg({ onGatePassed: v })} />
+            </FieldRow>
+          </>
+        )}
+      </div>
+
+      {/* Горячий кандидат стынет */}
+      <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="text-xs font-medium">Горячий кандидат стынет</span>
+            <p className="text-[11px] text-muted-foreground/80">Уведомить HR, если кандидат с высоким баллом открыл демо и застыл.</p>
+          </div>
+          <Switch checked={hot.enabled} onCheckedChange={v => patchHot({ enabled: v })} className="shrink-0" />
+        </div>
+        {hot.enabled && (
+          <>
+            <FieldRow label="Порог «высокого» балла">
+              <Input type="number" min={0} max={100} value={hot.threshold} onChange={e => patchHot({ threshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+            <FieldRow label="Часов бездействия до алерта">
+              <Input type="number" min={1} max={72} value={hot.staleAfterHours} onChange={e => patchHot({ staleAfterHours: Math.max(1, Math.min(72, Number(e.target.value) || 1)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Главный конструктор ──────────────────────────────────────────────────────
 export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, onOpenChatbot }: { vacancyId: string; isOwner?: boolean; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
   const [config, setConfig] = useState<FunnelV2Config | null>(null)
@@ -1142,6 +1213,8 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
       </DndContext>
 
       <Stage2Card stage2={config?.stage2 ?? {}} content={content} onChange={changeStage2} />
+
+      <CommunicationsCard vacancyId={vacancyId} comms={config?.communications ?? {}} onChange={changeCommunications} />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
