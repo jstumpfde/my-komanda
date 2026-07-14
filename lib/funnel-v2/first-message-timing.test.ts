@@ -8,6 +8,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   resolveV2FirstMessageDelayMs,
+  resolveOffHoursSoftText,
   DEFAULT_OFF_HOURS_DELAY_SECONDS,
 } from "./first-message-timing"
 import type { VacancySchedule } from "@/lib/schedule/can-send-now"
@@ -67,4 +68,39 @@ test("расписание выключено → всегда рабочее в
     OFF_HOURS_NOW,
   )
   assert.equal(ms, 0)
+})
+
+// ── resolveOffHoursSoftText: какой ТЕКСТ слать в нерабочее время ──────────────
+// Инвариант (зеркало legacy offHoursSoftMode): свой непустой текст вакансии
+// имеет приоритет; иначе — эффективный дефолт компании (md.offHoursMessage).
+
+const COMPANY_DEFAULT = "Спасибо за отклик! Ответим в рабочее время."
+
+test("off-hours текст: свой непустой текст вакансии → он и уходит", () => {
+  const t = resolveOffHoursSoftText(
+    { firstMessageOffHoursText: "Получили ваш отклик ночью, напишем утром." },
+    COMPANY_DEFAULT,
+  )
+  assert.equal(t, "Получили ваш отклик ночью, напишем утром.")
+})
+
+test("off-hours текст: пустая строка вакансии → дефолт компании", () => {
+  const t = resolveOffHoursSoftText({ firstMessageOffHoursText: "" }, COMPANY_DEFAULT)
+  assert.equal(t, COMPANY_DEFAULT)
+})
+
+test("off-hours текст: только пробелы → дефолт компании", () => {
+  const t = resolveOffHoursSoftText({ firstMessageOffHoursText: "   \n\t " }, COMPANY_DEFAULT)
+  assert.equal(t, COMPANY_DEFAULT)
+})
+
+test("off-hours текст: null/undefined вакансии → дефолт компании", () => {
+  assert.equal(resolveOffHoursSoftText({ firstMessageOffHoursText: null }, COMPANY_DEFAULT), COMPANY_DEFAULT)
+  assert.equal(resolveOffHoursSoftText({}, COMPANY_DEFAULT), COMPANY_DEFAULT)
+})
+
+test("off-hours текст: свой текст с ведущими/хвостовыми пробелами → возвращается КАК ЕСТЬ (не триммим)", () => {
+  // Триммим только для проверки «непустой», но шлём исходный текст (паритет legacy).
+  const raw = "\nЗдравствуйте! "
+  assert.equal(resolveOffHoursSoftText({ firstMessageOffHoursText: raw }, COMPANY_DEFAULT), raw)
 })

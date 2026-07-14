@@ -1336,7 +1336,7 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 scheduleExcludedHolidayIds: localVac.scheduleExcludedHolidayIds,
               }
 
-              // ── Портрет-паритет: нерабочая пауза перед ПЕРВЫМ сообщением v2 ──
+              // ── Портрет-паритет: нерабочий режим перед ПЕРВЫМ сообщением v2 ──
               // Стадия 1 воронки = Портрет. Его spec.resumeThresholds.
               // offHoursDelaySeconds (зеркало vacancy.first_message_off_hours_
               // delay_seconds) даёт «человеческую» паузу перед первым сообщением
@@ -1344,8 +1344,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // Рабочая задержка inviteDelaySeconds уже выдержана deferral'ом
               // (shouldDeferFirstMessage) ДО этой точки — здесь её НЕ спим,
               // иначе задержка удвоится. См. lib/funnel-v2/first-message-timing.ts.
+              // КРОМЕ паузы — в off-hours слаём НЕ обычное приглашение, а мягкое
+              // подтверждение спец-текстом (firstMessageOffHoursText / дефолт
+              // компании), БЕЗ демо-ссылки/дожима: паритет с legacy-веткой ниже.
+              let offHoursSoftText: string | null = null
               if (offHoursSoftMode) {
-                const { resolveV2FirstMessageDelayMs, DEFAULT_OFF_HOURS_DELAY_SECONDS } =
+                const { resolveV2FirstMessageDelayMs, DEFAULT_OFF_HOURS_DELAY_SECONDS, resolveOffHoursSoftText } =
                   await import("@/lib/funnel-v2/first-message-timing")
                 const offDelayMs = resolveV2FirstMessageDelayMs(localVac, {
                   enabled:      localVac.firstMessageOffHoursEnabled === true,
@@ -1354,9 +1358,10 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                     : DEFAULT_OFF_HOURS_DELAY_SECONDS,
                 })
                 if (offDelayMs > 0) await sleep(offDelayMs)
+                offHoursSoftText = resolveOffHoursSoftText(localVac, md.offHoursMessage)
               }
 
-              await executeStageEntry(candidateForV2, vacancyForV2, firstStage)
+              await executeStageEntry(candidateForV2, vacancyForV2, firstStage, { offHoursSoftText })
 
               // Помечаем отклик как обработанный
               await db.update(hhResponses)

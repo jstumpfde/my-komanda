@@ -5,8 +5,12 @@
 // (действие, сообщение/контент, правило прохода+куда зовёт, цепочка дожима,
 // hh-статус, интервью). Над списком — тонкая read-only врезка «входной скан
 // резюме из Портрета» (НЕ пронумерована, это не стадия воронки); нумерация
-// реальных стадий начинается с 1. Конструктор без рантайма. Видно только
-// владельцу (гейт на странице + 404 на API).
+// реальных стадий начинается с 1.
+// Доступ (фикс 13.07): вкладка и сам конструктор (config/стадии) видны и
+// РЕДАКТИРУЕМЫ любым пользователем компании (изоляция по companyId в роуте).
+// Owner-only — только ВКЛючение рантайма движка (runtimeEnabled: true, 403
+// не-владельцу); ВЫКЛючение (false) и правка стадий доступны всем.
+// См. lib/funnel-v2/authz.ts + app/api/modules/hr/vacancies/[id]/funnel-v2/route.ts.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -896,9 +900,12 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
       </div>
 
       {/* Тумблер движка v2: включает рантайм для ЭТОЙ вакансии. По умолчанию
-          выключен — кандидаты идут по легаси-пути. Включение = живая автоматика. */}
+          выключен — кандидаты идут по легаси-пути. Включение = живая автоматика.
+          Направленный гейт (паритет с бэкендом canApplyFunnelV2Update): ВКЛючить
+          может только владелец и только при наличии стадий; ВЫКЛючить (напр.
+          аварийно, если владелец включил и ушёл) — любой пользователь компании. */}
       <div className={cn("rounded-xl border p-3 flex items-start gap-3", runtimeEnabled ? "border-emerald-300/60 bg-emerald-500/5" : "border-border bg-muted/30")}>
-        <Switch checked={runtimeEnabled} onCheckedChange={toggleRuntime} disabled={runtimeBusy || stages.length === 0 || !isOwner} className="mt-0.5" />
+        <Switch checked={runtimeEnabled} onCheckedChange={toggleRuntime} disabled={runtimeBusy || (!runtimeEnabled && (stages.length === 0 || !isOwner))} className="mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Движок воронки v2</span>
@@ -909,7 +916,9 @@ export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, on
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             {!isOwner
-              ? "Включение движка доступно только владельцу платформы. Стадии воронки вы можете настраивать и сохранять — они применятся, когда движок включат."
+              ? runtimeEnabled
+                ? "Движок включён владельцем платформы — новые кандидаты идут по воронке v2. В экстренном случае вы можете его выключить; включить обратно сможет только владелец."
+                : "Включение движка доступно только владельцу платформы. Стадии воронки вы можете настраивать и сохранять — они применятся, когда движок включат."
               : stages.length === 0
                 ? "Добавьте хотя бы одну стадию, чтобы включить движок."
                 : runtimeEnabled

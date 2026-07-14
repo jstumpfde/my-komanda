@@ -57,3 +57,23 @@ export function resolveV2FirstMessageDelayMs(
   const s = Number.isFinite(offHours.delaySeconds) ? offHours.delaySeconds : DEFAULT_OFF_HOURS_DELAY_SECONDS
   return Math.max(0, Math.round(s * 1000))
 }
+
+/**
+ * Какой ТЕКСТ слать первым сообщением в нерабочее время (off-hours soft mode).
+ *
+ * Зеркало legacy (lib/hh/process-queue.ts, ветка offHoursSoftMode):
+ *   свой текст вакансии (firstMessageOffHoursText), если он непустой, иначе —
+ *   эффективный дефолт компании (md.offHoursMessage). Это «мягкое подтверждение
+ *   получения», которое HR специально сформулировал для вечера/ночи; шлётся
+ *   ВМЕСТО полноценного приглашения — БЕЗ демо-ссылки и БЕЗ запуска дожима
+ *   (суппрессию делает исполнитель стадии, см. runtime-executor.ts).
+ *
+ * Чистая функция — юнит-тестируется отдельно от cron/БД.
+ */
+export function resolveOffHoursSoftText(
+  vac: { firstMessageOffHoursText?: string | null },
+  companyDefaultOffHoursMessage: string,
+): string {
+  const own = typeof vac.firstMessageOffHoursText === "string" ? vac.firstMessageOffHoursText : ""
+  return own.trim().length > 0 ? own : companyDefaultOffHoursMessage
+}
