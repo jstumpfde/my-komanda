@@ -122,6 +122,44 @@ interface WaitingCandidate {
   id: string; name: string; stage: string | null; phone: string | null; token: string | null
 }
 
+// ВРЕМЕННАЯ РАЗОВАЯ ПОМЕТКА (не системная фича!) — 14.07.2026.
+// Координатор вручную сверил nginx-логи (IP ручных кликов HR) с БД и
+// forensic-путём определил именно этих 20 кандидатов вакансии «Менеджер по
+// продажам IT (удалённо, B2B) от 170К» (Revoluterra, vacancy_id
+// 6916db01-a765-4c4e-a652-81475566f95b), которых HR вручную поставил на
+// стадию «ждёт назначения времени» этой ночью. Это НЕ общий признак
+// «кандидата пригласили вручную» — у нас нет надёжного поля для этого:
+// большинство ручных действий HR не пишут в stage_history (выяснено в ходе
+// того же разбора 14.07). Список — просто фиксированный набор id для
+// одноразовой визуальной сортировки в секции «Ждут назначения времени».
+// Применяется только если id кандидата совпал (не завязано на vacancyId),
+// так что на других вакансиях раздел просто не появляется.
+// После того как HR обработает этих кандидатов (или на следующем большом
+// рефакторе секции), эту константу и связанную с ней сортировку/разделитель
+// можно и нужно удалить — она не должна жить в коде постоянно.
+const MANUAL_FORENSIC_MARK_20260714 = new Set<string>([
+  "043096da-d1ab-4d0a-a4d9-1711b40a5af9",
+  "0c33d2be-8553-4fc4-b93d-1025d85c9e49",
+  "0eec29fb-7ca4-4861-8378-7af6e43d8031",
+  "1f56d94f-b446-4474-96ba-0a9256e549e7",
+  "21398d69-e01b-4f72-ad68-cde7d515bb96",
+  "28f8705d-8f79-4f4f-8641-00934e9d3916",
+  "3169a9fb-0314-403b-897e-4af8845a07ce",
+  "39e4910c-34b9-4f75-ab57-52b13ba5b370",
+  "3fa50072-9c5d-4b82-be9b-77c04ac8fd5e",
+  "77a7914b-0954-459a-91c5-ab31803578f6",
+  "a9f0101b-f7f3-46ec-99ec-538cbadf3d0e",
+  "b6c7d637-84a3-477e-90be-1161293f845c",
+  "b90e4c2c-2674-4741-a425-3def43ece66e",
+  "baacfa55-25b7-4626-bcf9-26d88fd4fed1",
+  "c2d9fa88-5755-40cc-9710-74e3f20dab5f",
+  "c714ad97-9806-43a3-abfd-ff470d07219b",
+  "cd2f0ce7-ab32-4fdf-afc4-b036f3bbffd0",
+  "d397fab6-7559-47b0-bc6a-13b5bc2427b1",
+  "d7c14302-0044-4690-8879-fa2f82a2d1cc",
+  "fd56367b-b315-444f-9622-20a401c90e47",
+])
+
 const today2 = new Date()
 
 // Событие календаря type='interview' → форма Interview для этой страницы.
@@ -700,6 +738,16 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   }, [vacancyId])
   useEffect(() => { void loadWaitingCandidates() }, [loadWaitingCandidates])
 
+  // Разовая сортировка «Ждут назначения времени» для forensic-пометки 14.07
+  // (см. MANUAL_FORENSIC_MARK_20260714 выше) — помеченные кандидаты идут
+  // первыми (порядок между ними сохраняем как пришёл от API), остальные —
+  // ниже как обычно. Если ни один id не совпал, marked пуст и разделитель не рисуется.
+  const waitingCandidatesSorted = useMemo(() => {
+    const marked = waitingCandidates.filter(c => MANUAL_FORENSIC_MARK_20260714.has(c.id))
+    const rest = waitingCandidates.filter(c => !MANUAL_FORENSIC_MARK_20260714.has(c.id))
+    return { marked, rest }
+  }, [waitingCandidates])
+
   // Текущий пользователь (для авто-интервьюера) + команда (для доп. интервьюеров).
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then((j) => {
@@ -1203,7 +1251,40 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                       <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-300 text-amber-700 dark:text-amber-400">{waitingCandidates.length}</Badge>
                     </div>
                     <div className="space-y-1.5">
-                      {waitingCandidates.map(c => (
+                      {waitingCandidatesSorted.marked.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
+                          <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
+                          {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
+                          {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Phone className="w-3 h-3" />{c.phone}</a>}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            {c.token && (
+                              <Button
+                                variant="outline" size="sm" className="h-7 text-xs gap-1"
+                                onClick={() => {
+                                  const url = `${window.location.origin}/schedule/${c.token}`
+                                  navigator.clipboard.writeText(url).then(
+                                    () => toast.success("Ссылка самозаписи скопирована"),
+                                    () => toast.error("Не удалось скопировать ссылку"),
+                                  )
+                                }}
+                              >
+                                <Link2 className="w-3 h-3" /> Скопировать ссылку
+                              </Button>
+                            )}
+                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => openCreate({ candidateId: c.id, name: c.name })}>
+                              <Plus className="w-3 h-3" /> Запланировать
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      {/* Разделитель разовой forensic-пометки 14.07 (MANUAL_FORENSIC_MARK_20260714) —
+                          удалить вместе с константой, когда пометка перестанет быть нужна. */}
+                      {waitingCandidatesSorted.marked.length > 0 && waitingCandidatesSorted.rest.length > 0 && (
+                        <div className="my-3 border-t-2 border-dashed border-amber-400 relative">
+                          <span className="absolute -top-2.5 left-2 bg-amber-50/40 dark:bg-amber-950/10 px-2 text-[10px] text-muted-foreground">остальные</span>
+                        </div>
+                      )}
+                      {waitingCandidatesSorted.rest.map(c => (
                         <div key={c.id} className="flex items-center gap-2 flex-wrap rounded-lg border bg-card px-3 py-2">
                           <span className="font-medium text-sm truncate flex-1 min-w-[120px] cursor-pointer hover:text-primary" onClick={() => openCandidate(c.id)}>{c.name}</span>
                           {c.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(c.stage)}</Badge>}
