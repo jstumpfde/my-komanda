@@ -60,6 +60,10 @@ export interface SettingsRegistryEntry {
   hardcoded?: true
   /** Статичный текст значения для hardcoded-записей (не читаем из БД). */
   codeValue?: string
+  /** true — запись мертва (UI/поле удалено из продукта), держим в реестре
+   *  ТОЛЬКО для истории/аудита (аддитивность — строки не удаляем). Резолвер
+   *  карты настроек продолжает её показывать; UI решает, скрывать/помечать. */
+  deprecated?: true
 }
 
 export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
@@ -130,12 +134,21 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     resolve: { kind: "vacancy", path: "descriptionJson.autoResponder.stopWordFarewellText", default: "" },
   },
   {
+    // DEPRECATED (14.07, аудит карты настроек): UI-блок удалён 22.05.2026
+    // (см. components/vacancies/automation-settings.tsx:378, комментарий
+    // "#19 anketaConfirmation — устаревший блок"). Поле
+    // descriptionJson.automation.anketaConfirmation.messageText в БД
+    // остаётся только для совместимости со старыми записями (сохраняется
+    // байт-в-байт при пересохранении вакансии, новых значений никто не
+    // пишет). Строку из реестра НЕ удаляем (аддитивность/аудит-хвост) —
+    // помечена deprecated:true.
     key: "msg.anketaConfirmation",
     title: "Подтверждение после анкеты",
-    description: "Автосообщение сразу после отправки кандидатом финальной анкеты.",
+    description: "УСТАРЕЛО: автосообщение сразу после отправки кандидатом финальной анкеты. UI редактирования удалён 22.05.2026, значение в БД только читается (совместимость).",
     group: "Сообщения кандидатам",
     level: "vacancy",
-    editPath: "/hr/vacancies/[id]?tab=settings&section=communications",
+    editPath: null,
+    deprecated: true,
     resolve: { kind: "vacancy", path: "descriptionJson.automation.anketaConfirmation.messageText", default: "" },
   },
   {
@@ -742,6 +755,241 @@ export const SETTINGS_REGISTRY: SettingsRegistryEntry[] = [
     hardcoded: true,
     codeValue: "REMINDER_LEAD_PHRASES (lib/hr/interview-reminder-texts.ts)",
     resolve: { kind: "code" },
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Группа: Воронка v2 — нативные поля (добавлено 14.07, аудит карты настроек)
+  // Хранение — vacancies.description_json.funnelV2.{stage1,stage2,communications}
+  // (jsonb, без миграции; см. lib/funnel-v2/types.ts::FunnelV2Stage1/Stage2/
+  // Communications). Редактируются в конструкторе воронки v2
+  // (components/vacancies/funnel-v2-builder.tsx, Stage1Card/Stage2Card/
+  // CommunicationsCard). Дефолты кода — lib/funnel-v2/native-config.ts
+  // (DEFAULT_STAGE1_*/DEFAULT_STAGE2_*/DEFAULT_HOT_CANDIDATE_THRESHOLD) —
+  // используются, ТОЛЬКО когда движок v2 включён на вакансии И блок сохранён
+  // явно; иначе эффективные значения берутся из Портрета (см. resolveStage1
+  // и др. в native-config.ts — сюда карта настроек не заглядывает, показывает
+  // только собственно нативное значение вакансии/дефолт кода).
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    key: "funnelV2.stage1.inviteDelaySeconds",
+    title: "Воронка v2 — Стадия 1: задержка первого сообщения",
+    description: "«Человеческая» пауза перед первым сообщением, секунды.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage1.inviteDelaySeconds", default: 180 },
+  },
+  {
+    key: "funnelV2.stage1.offHoursEnabled",
+    title: "Воронка v2 — Стадия 1: мягкое подтверждение в нерабочее время",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage1.offHoursEnabled", default: true },
+  },
+  {
+    key: "funnelV2.stage1.offHoursDelaySeconds",
+    title: "Воронка v2 — Стадия 1: задержка подтверждения в нерабочее время",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage1.offHoursDelaySeconds", default: 15 },
+  },
+  {
+    key: "funnelV2.stage1.offHoursText",
+    title: "Воронка v2 — Стадия 1: текст подтверждения в нерабочее время",
+    description: "Пусто → дефолт компании/Портрета.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage1.offHoursText", default: "" },
+  },
+  {
+    key: "funnelV2.stage1.rejectLetter",
+    title: "Воронка v2 — Стадия 1: письмо авто-отказа по баллу резюме",
+    description: "Пусто → дефолт вакансии/платформы (Портрет).",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage1.rejectLetter", default: "" },
+  },
+  {
+    key: "funnelV2.stage1.rejectionDelayMinutes",
+    title: "Воронка v2 — Стадия 1: задержка авто-отказа",
+    description: "Минуты.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage1.rejectionDelayMinutes", default: 60 },
+  },
+  {
+    key: "funnelV2.stage2.enabled",
+    title: "Воронка v2 — Стадия 2: переход на 2-ю часть демо включён",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.enabled", default: false },
+  },
+  {
+    key: "funnelV2.stage2.passThreshold",
+    title: "Воронка v2 — Стадия 2: порог объективного балла",
+    description: "0-100, вопросы-выбора (ИЛИ-гейт с aiEvalThreshold).",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.passThreshold", default: 35 },
+  },
+  {
+    key: "funnelV2.stage2.aiEvalThreshold",
+    title: "Воронка v2 — Стадия 2: порог AI-оценки ответов анкеты",
+    description: "0-100, ИЛИ-гейт с passThreshold.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.aiEvalThreshold", default: 45 },
+  },
+  {
+    key: "funnelV2.stage2.transferMode",
+    title: "Воронка v2 — Стадия 2: режим перехода",
+    description: "seamless / message / both.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.transferMode", default: "both" },
+  },
+  {
+    key: "funnelV2.stage2.contentBlockId",
+    title: "Воронка v2 — Стадия 2: блок контента 2-й части",
+    description: "id demos-записи. null = боевой блок.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.contentBlockId", default: null },
+  },
+  {
+    key: "funnelV2.stage2.passScreenTitle",
+    title: "Воронка v2 — Стадия 2: заголовок экрана «прошёл гейт»",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.passScreenTitle", default: "" },
+  },
+  {
+    key: "funnelV2.stage2.passScreenText",
+    title: "Воронка v2 — Стадия 2: текст экрана «прошёл гейт»",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.passScreenText", default: "" },
+  },
+  {
+    key: "funnelV2.stage2.messageText",
+    title: "Воронка v2 — Стадия 2: текст письма-приглашения",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.messageText", default: "" },
+  },
+  {
+    key: "funnelV2.stage2.delaySeconds",
+    title: "Воронка v2 — Стадия 2: задержка приглашения на 2-ю часть",
+    description: "Секунды.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.delaySeconds", default: 900 },
+  },
+  {
+    key: "funnelV2.stage2.failScreenTitle",
+    title: "Воронка v2 — Стадия 2: заголовок экрана «не прошёл гейт»",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.failScreenTitle", default: "" },
+  },
+  {
+    key: "funnelV2.stage2.failScreenText",
+    title: "Воронка v2 — Стадия 2: текст экрана «не прошёл гейт»",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.failScreenText", default: "" },
+  },
+  {
+    key: "funnelV2.stage2.failAction",
+    title: "Воронка v2 — Стадия 2: сценарий при непрохождении гейта",
+    description: "none / pending_manual / pending_rejection.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.failAction", default: "none" },
+  },
+  {
+    key: "funnelV2.stage2.failRejectDelayMinutes",
+    title: "Воронка v2 — Стадия 2: задержка авто-отказа не прошедших гейт",
+    description: "Минуты.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.stage2.failRejectDelayMinutes", default: 60 },
+  },
+  {
+    key: "funnelV2.communications.tgAlerts.enabled",
+    title: "Воронка v2 — Коммуникации: TG-алерт подходящих кандидатов",
+    description: "Карточка кандидата в Telegram-канал компании, когда он проходит пороги.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.communications.tgAlerts.enabled", default: false },
+  },
+  {
+    key: "funnelV2.communications.tgAlerts.minResumeScore",
+    title: "Воронка v2 — Коммуникации: мин. балл резюме для TG-алерта",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.communications.tgAlerts.minResumeScore", default: null },
+  },
+  {
+    key: "funnelV2.communications.tgAlerts.minAnswersScore",
+    title: "Воронка v2 — Коммуникации: мин. балл ответов для TG-алерта",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.communications.tgAlerts.minAnswersScore", default: null },
+  },
+  {
+    key: "funnelV2.communications.tgAlerts.onGatePassed",
+    title: "Воронка v2 — Коммуникации: слать TG-алерт при прохождении гейта",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.communications.tgAlerts.onGatePassed", default: true },
+  },
+  {
+    key: "funnelV2.communications.hotCandidate.enabled",
+    title: "Воронка v2 — Коммуникации: алерт «горячий кандидат стынет»",
+    description: "Уведомить HR, если кандидат с высоким баллом открыл демо и застыл.",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.communications.hotCandidate.enabled", default: false },
+  },
+  {
+    key: "funnelV2.communications.hotCandidate.threshold",
+    title: "Воронка v2 — Коммуникации: порог «горячего» балла",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.communications.hotCandidate.threshold", default: 70 },
+  },
+  {
+    key: "funnelV2.communications.hotCandidate.staleAfterHours",
+    title: "Воронка v2 — Коммуникации: часов бездействия до алерта",
+    group: "Воронка v2 — нативные поля",
+    level: "vacancy",
+    editPath: "/hr/vacancies/[id]?tab=settings&section=funnel-v2",
+    resolve: { kind: "vacancy", path: "descriptionJson.funnelV2.communications.hotCandidate.staleAfterHours", default: 3 },
   },
 
   // ─────────────────────────────────────────────────────────────────────────

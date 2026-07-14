@@ -11,77 +11,74 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { calcStageScore } from "./calc-stage-score"
-import { nextStageId } from "./advance-stage"
+import { nextStageId, mapActionToLegacyStage } from "./advance-stage"
 import type { FunnelV2Stage } from "./types"
 import type { StructuredAnswer } from "@/lib/score-test-objective"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Маппинг action → legacy candidates.stage (D)
-//    Воспроизводим логику mapActionToLegacyStage из advance-stage.ts
+//    B9-фикс 14.07: mapActionToLegacyStage теперь экспортирована и делегирует
+//    в FUNNEL_V2_ACTION_TO_SLUG (lib/stages.ts) — тестируем РЕАЛЬНУЮ функцию,
+//    больше не держим отдельную копию карты (та копия и разошлась с боевой,
+//    что привело к этому фиксу: offer писал 'final_decision', а не
+//    'offer_sent').
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Копия маппинга из advance-stage.ts (тестируем контракт, а не импортируем
-// приватную функцию — это чище и не ломается при рефакторинге).
-const ACTION_TO_LEGACY: Record<string, string | null> = {
-  prequalification: "primary_contact",
-  demo:             "demo_opened",
-  test:             "test_task_sent",
-  task:             "test_task_sent",
-  interview:        "interview",
-  decision:         "decision",
-  offer:            "final_decision",
-  hired:            "hired",
-  security_check:   "interview",
-  reference_check:  "interview",
-  message:          "primary_contact",
-}
-
 test("маппинг action→legacy: demo → demo_opened", () => {
-  assert.equal(ACTION_TO_LEGACY["demo"], "demo_opened")
+  assert.equal(mapActionToLegacyStage("demo"), "demo_opened")
 })
 
 test("маппинг action→legacy: test → test_task_sent", () => {
-  assert.equal(ACTION_TO_LEGACY["test"], "test_task_sent")
+  assert.equal(mapActionToLegacyStage("test"), "test_task_sent")
 })
 
 test("маппинг action→legacy: task → test_task_sent (как test)", () => {
-  assert.equal(ACTION_TO_LEGACY["task"], "test_task_sent")
+  assert.equal(mapActionToLegacyStage("task"), "test_task_sent")
 })
 
 test("маппинг action→legacy: interview → interview", () => {
-  assert.equal(ACTION_TO_LEGACY["interview"], "interview")
+  assert.equal(mapActionToLegacyStage("interview"), "interview")
 })
 
 test("маппинг action→legacy: decision → decision", () => {
-  assert.equal(ACTION_TO_LEGACY["decision"], "decision")
+  assert.equal(mapActionToLegacyStage("decision"), "decision")
 })
 
-test("маппинг action→legacy: offer → final_decision", () => {
-  assert.equal(ACTION_TO_LEGACY["offer"], "final_decision")
+// B9-фикс 14.07: раньше писал legacy 'final_decision' (расходилось с
+// каноническим StageSlug 'offer_sent' — см. lib/stages.ts). Теперь 1:1.
+test("маппинг action→legacy: offer → offer_sent (канон, было final_decision)", () => {
+  assert.equal(mapActionToLegacyStage("offer"), "offer_sent")
 })
 
 test("маппинг action→legacy: hired → hired", () => {
-  assert.equal(ACTION_TO_LEGACY["hired"], "hired")
+  assert.equal(mapActionToLegacyStage("hired"), "hired")
 })
 
 test("маппинг action→legacy: prequalification → primary_contact", () => {
-  assert.equal(ACTION_TO_LEGACY["prequalification"], "primary_contact")
+  assert.equal(mapActionToLegacyStage("prequalification"), "primary_contact")
 })
 
 test("маппинг action→legacy: message → primary_contact", () => {
-  assert.equal(ACTION_TO_LEGACY["message"], "primary_contact")
+  assert.equal(mapActionToLegacyStage("message"), "primary_contact")
 })
 
-test("маппинг action→legacy: security_check → interview (ручная стадия)", () => {
-  assert.equal(ACTION_TO_LEGACY["security_check"], "interview")
+// B9-фикс 14.07: раньше оба (security_check и reference_check) писали
+// 'interview' — терялась разница с интервью. Теперь оба → канонический
+// 'reference_check' (нет отдельного слага «СБ-проверка»; docs/architecture/
+// FUNNEL-V2.md сам группирует СБ+реф-чек в одну стадию «Проверки». НЕ
+// 'decision' — тот слаг в живом легаси-пути (demo/[token]/answer/route.ts,
+// F2.B) означает «демо пройдено» (РАННЯЯ стадия), было бы хуже, чем текущий
+// баг: интервью уже пройдено, а читатель увидел бы «только демо».
+test("маппинг action→legacy: security_check → reference_check (было interview, теряло разницу с интервью)", () => {
+  assert.equal(mapActionToLegacyStage("security_check"), "reference_check")
 })
 
-test("маппинг action→legacy: reference_check → interview (ручная стадия)", () => {
-  assert.equal(ACTION_TO_LEGACY["reference_check"], "interview")
+test("маппинг action→legacy: reference_check → reference_check (канон, было interview)", () => {
+  assert.equal(mapActionToLegacyStage("reference_check"), "reference_check")
 })
 
 test("маппинг action→legacy: неизвестный action → null (нет синка)", () => {
-  assert.equal(ACTION_TO_LEGACY["unknown_action"] ?? null, null)
+  assert.equal(mapActionToLegacyStage("unknown_action"), null)
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
