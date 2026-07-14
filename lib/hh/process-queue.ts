@@ -790,10 +790,6 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 // Бот-уточнение: спорных по баллу не режем — пусть бот уточнит в чате.
                 if (portraitOn && spec) botClarifyOn = spec.botClarifyAmbiguous === true
                 if (portraitOn && spec) rejectLetterText = spec.rejectLetter?.trim() || null
-                // v2: нативный текст отказа Стадии 1 побеждает Портрет (если задан).
-                if (nativeStage1ForReject && nativeStage1ForReject.rejectLetter.trim().length > 0) {
-                  rejectLetterText = nativeStage1ForReject.rejectLetter.trim()
-                }
                 if (portraitOn && spec?.resumeThresholds) {
                   autoInviteOn   = spec.resumeThresholds.autoInviteEnabled === true
                   inviteNextStep = spec.resumeThresholds.inviteNextStep ?? "demo"
@@ -807,6 +803,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               } catch (specErr) {
                 console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)
               }
+            }
+            // v2: нативный текст отказа Стадии 1 побеждает Портрет (если задан).
+            // БЕЗ гейта isSpecScoringEnabled/portraitOn (предеплой-гард 14.07,
+            // находка после фикса 1/2) — иначе для вакансий вне spec-скоринга с
+            // включённым движком v2 rejectLetterText оставался null и в hh уходил
+            // общий дефолтный текст вместо настроенного в Стадии 1 письма.
+            if (nativeStage1ForReject && nativeStage1ForReject.rejectLetter.trim().length > 0) {
+              rejectLetterText = nativeStage1ForReject.rejectLetter.trim()
             }
 
             // Осевой результат (если сработал) заменяет screenResume: его форма
