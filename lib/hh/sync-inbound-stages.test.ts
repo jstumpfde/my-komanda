@@ -15,7 +15,7 @@ import assert from "node:assert/strict"
 // process.env.DATABASE_URL нужен для конструктора — ставим заглушку.
 process.env.DATABASE_URL ??= "postgres://test:test@localhost:5432/test"
 
-import { fetchNegotiationState } from "./sync-inbound-stages"
+import { fetchNegotiationState, shouldMoveForward } from "./sync-inbound-stages"
 
 const realFetch = globalThis.fetch
 
@@ -77,4 +77,62 @@ test("исключение fetch (таймаут/сеть) → null, не бро
     throw new Error("network")
   }) as typeof fetch
   assert.equal(await fetchNegotiationState("token", "n5"), null)
+})
+
+// ─── shouldMoveForward: защита от отката прогресса (инцидент 14.07) ──────────
+//
+// hh-папка consider/phone_interview маппится в раннюю primary_contact; если
+// наш внутренний прогресс уже дальше — входящий синк НЕ должен тянуть назад.
+
+test("НЕ откатывает: demo_opened + hh=consider(→primary_contact) → остаёмся", () => {
+  // Именно этот кейс сбросил 500 кандидатов Revoluterra demo_opened→primary_contact.
+  assert.equal(shouldMoveForward("demo_opened", "primary_contact"), false)
+})
+
+test("НЕ откатывает: decision(«Демо пройдено»)/anketa_filled + hh=consider → остаёмся", () => {
+  assert.equal(shouldMoveForward("decision", "primary_contact"), false)
+  assert.equal(shouldMoveForward("anketa_filled", "primary_contact"), false)
+})
+
+test("НЕ откатывает: interview/offer_sent + hh=assessment(→test_task_sent) → остаёмся", () => {
+  assert.equal(shouldMoveForward("interview", "test_task_sent"), false)
+  assert.equal(shouldMoveForward("offer_sent", "test_task_sent"), false)
+})
+
+test("НЕ откатывает терминальные: hired/started_work + hh=interview → остаёмся", () => {
+  assert.equal(shouldMoveForward("hired", "interview"), false)
+  assert.equal(shouldMoveForward("started_work", "interview"), false)
+})
+
+test("НЕ воскрешает: rejected + не-отказный сигнал(→interview) → остаёмся", () => {
+  assert.equal(shouldMoveForward("rejected", "interview"), false)
+})
+
+test("НЕ выдёргивает из резерва/подумаем: talent_pool/pending + hh-сигнал → остаёмся (predeploy-guard 14.07)", () => {
+  assert.equal(shouldMoveForward("talent_pool", "primary_contact"), false)
+  assert.equal(shouldMoveForward("pending", "test_task_sent"), false)
+})
+
+test("ДВИГАЕТ вперёд: new + hh=phone_interview(→primary_contact) → двигаем", () => {
+  assert.equal(shouldMoveForward("new", "primary_contact"), true)
+})
+
+test("ДВИГАЕТ вперёд: primary_contact→test_task_sent, demo_opened→interview", () => {
+  assert.equal(shouldMoveForward("primary_contact", "test_task_sent"), true)
+  assert.equal(shouldMoveForward("demo_opened", "interview"), true)
+})
+
+test("ДВИГАЕТ вперёд к найму: offer_sent + hh=hired → двигаем", () => {
+  assert.equal(shouldMoveForward("offer_sent", "hired"), true)
+})
+
+test("идемпотентность: current === target → не двигаем", () => {
+  assert.equal(shouldMoveForward("primary_contact", "primary_contact"), false)
+  assert.equal(shouldMoveForward("interview", "interview"), false)
+})
+
+test("legacy-slug resolved: final_decision + hh=consider → НЕ откатываем", () => {
+  // final_decision → канонический decision; interviewed → interview.
+  assert.equal(shouldMoveForward("final_decision", "primary_contact"), false)
+  assert.equal(shouldMoveForward("interviewed", "test_task_sent"), false)
 })
