@@ -410,7 +410,76 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
         dozhim: (["off", "soft", "standard", "strong"] as DozhimPreset[]).includes(st.dozhim) ? st.dozhim : "standard",
       }
     }),
+    stage1: normalizeStage1(r.stage1),
+    stage2: normalizeStage2(r.stage2),
+    communications: normalizeCommunications(r.communications),
   }
+}
+
+// ── Нормализация нативных полей (терпимо к мусору; отсутствие → undefined) ──────
+const clamp100 = (n: unknown): number | undefined =>
+  typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : undefined
+const posInt = (n: unknown): number | undefined =>
+  typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.round(n)) : undefined
+const str = (s: unknown): string | undefined => (typeof s === "string" ? s : undefined)
+
+function normalizeStage1(raw: unknown): FunnelV2Stage1 | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const s = raw as Record<string, unknown>
+  const out: FunnelV2Stage1 = {}
+  if (posInt(s.inviteDelaySeconds) !== undefined) out.inviteDelaySeconds = posInt(s.inviteDelaySeconds)
+  if (typeof s.offHoursEnabled === "boolean") out.offHoursEnabled = s.offHoursEnabled
+  if (posInt(s.offHoursDelaySeconds) !== undefined) out.offHoursDelaySeconds = posInt(s.offHoursDelaySeconds)
+  if (str(s.offHoursText) !== undefined) out.offHoursText = str(s.offHoursText)
+  if (str(s.rejectLetter) !== undefined) out.rejectLetter = str(s.rejectLetter)
+  if (posInt(s.rejectionDelayMinutes) !== undefined) out.rejectionDelayMinutes = posInt(s.rejectionDelayMinutes)
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function normalizeStage2(raw: unknown): FunnelV2Stage2 | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const s = raw as Record<string, unknown>
+  const out: FunnelV2Stage2 = {}
+  if (typeof s.enabled === "boolean") out.enabled = s.enabled
+  if (clamp100(s.passThreshold) !== undefined) out.passThreshold = clamp100(s.passThreshold)
+  if (clamp100(s.aiEvalThreshold) !== undefined) out.aiEvalThreshold = clamp100(s.aiEvalThreshold)
+  if (s.transferMode === "seamless" || s.transferMode === "message" || s.transferMode === "both") out.transferMode = s.transferMode
+  if (typeof s.contentBlockId === "string") out.contentBlockId = s.contentBlockId
+  else if (s.contentBlockId === null) out.contentBlockId = null
+  if (str(s.passScreenTitle) !== undefined) out.passScreenTitle = str(s.passScreenTitle)
+  if (str(s.passScreenText) !== undefined) out.passScreenText = str(s.passScreenText)
+  if (str(s.messageText) !== undefined) out.messageText = str(s.messageText)
+  if (posInt(s.delaySeconds) !== undefined) out.delaySeconds = posInt(s.delaySeconds)
+  if (str(s.failScreenTitle) !== undefined) out.failScreenTitle = str(s.failScreenTitle)
+  if (str(s.failScreenText) !== undefined) out.failScreenText = str(s.failScreenText)
+  if (s.failAction === "none" || s.failAction === "pending_manual" || s.failAction === "pending_rejection") out.failAction = s.failAction
+  if (posInt(s.failRejectDelayMinutes) !== undefined) out.failRejectDelayMinutes = posInt(s.failRejectDelayMinutes)
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function normalizeCommunications(raw: unknown): FunnelV2Communications | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const c = raw as Record<string, unknown>
+  const out: FunnelV2Communications = {}
+  if (c.tgAlerts && typeof c.tgAlerts === "object") {
+    const t = c.tgAlerts as Record<string, unknown>
+    out.tgAlerts = {
+      enabled: t.enabled === true,
+      minResumeScore: clamp100(t.minResumeScore) ?? null,
+      minAnswersScore: clamp100(t.minAnswersScore) ?? null,
+      onGatePassed: t.onGatePassed !== false,
+    }
+  }
+  if (c.hotCandidate && typeof c.hotCandidate === "object") {
+    const h = c.hotCandidate as Record<string, unknown>
+    out.hotCandidate = {
+      enabled: h.enabled === true,
+      threshold: clamp100(h.threshold) ?? 70,
+      staleAfterHours: typeof h.staleAfterHours === "number" && Number.isFinite(h.staleAfterHours)
+        ? Math.max(1, Math.min(72, Math.round(h.staleAfterHours))) : 3,
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 // ── Дефолт-шаблон воронки v2 (инициализация пустой воронки) ───────────────────
