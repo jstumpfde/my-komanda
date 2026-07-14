@@ -27,6 +27,8 @@ import {
   vacancies,
 } from "@/lib/db/schema"
 import { getSpec } from "@/lib/core/spec/store"
+import { resolveEffectiveAnketaPassInvite } from "@/lib/funnel-v2/native-config"
+import { normalizeFunnelV2 } from "@/lib/funnel-v2/types"
 import { isFollowUpPreset } from "@/lib/followup/presets"
 import { generateTouchSchedule, mergeMessagesWithDefaults } from "@/lib/followup/schedule"
 import { DEFAULT_TEST_NOT_OPENED } from "@/lib/followup/default-messages"
@@ -63,6 +65,27 @@ async function ensureCampaign(vacancyId: string): Promise<string | null> {
 }
 
 /**
+ * Эффективный anketaPassInvite для Стадии 2: при включённом движке v2 — из
+ * funnelV2.stage2 (перенос 14.07), иначе — spec.anketaPassInvite (Портрет).
+ * Возвращает объект в форме spec.anketaPassInvite (или null).
+ */
+async function loadEffectiveAnketaPassInvite(vacancyId: string): Promise<ReturnType<typeof resolveEffectiveAnketaPassInvite>> {
+  const spec = await getSpec(vacancyId)
+  const [row] = await db
+    .select({ runtimeEnabled: vacancies.funnelV2RuntimeEnabled, descriptionJson: vacancies.descriptionJson })
+    .from(vacancies)
+    .where(eq(vacancies.id, vacancyId))
+    .limit(1)
+  const runtimeEnabled = row?.runtimeEnabled === true
+  const funnelV2 = normalizeFunnelV2((row?.descriptionJson as Record<string, unknown> | null)?.funnelV2)
+  return resolveEffectiveAnketaPassInvite(
+    (spec?.anketaPassInvite ?? null) as Record<string, unknown> | null,
+    funnelV2,
+    runtimeEnabled,
+  )
+}
+
+/**
  * Read-only описание решения по приглашению на 2-ю часть (для карточки кандидата).
  * НЕ пишет в БД. Повторяет гейт maybeScheduleSecondDemoInvite, чтобы HR видел
  * ПОЧЕМУ кандидат приглашён/не приглашён (балл vs порог), а не гадал.
@@ -82,8 +105,7 @@ export async function describeSecondDemoInvite(
   blockTitle:      string | null // название целевого блока «Путь менеджера»
 } | null> {
   try {
-    const spec = await getSpec(vacancyId)
-    const ap = spec?.anketaPassInvite
+    const ap = await loadEffectiveAnketaPassInvite(vacancyId)
     if (!ap || ap.enabled !== true) return null
 
     const [cand] = await db
@@ -194,10 +216,8 @@ export async function maybeScheduleSecondDemoInvite(args: {
   vacancyId:   string
 }): Promise<{ scheduled: boolean; reason?: string; score?: number; scheduledAt?: string }> {
   try {
-    // 1. Конфиг из Портрета. Защищаемся от undefined (getSpec не применяет
-    //    дефолты схемы — см. инцидент 30.06).
-    const spec = await getSpec(args.vacancyId)
-    const ap = spec?.anketaPassInvite
+    // 1. Эффективный конфиг Стадии 2: native при движке v2, Портрет иначе.
+    const ap = await loadEffectiveAnketaPassInvite(args.vacancyId)
     if (!ap || ap.enabled !== true) return { scheduled: false, reason: "disabled" }
 
     // 2. Дедуп: override уже стоит → кандидат уже приглашён.
