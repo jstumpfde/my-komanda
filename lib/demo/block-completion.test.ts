@@ -11,6 +11,7 @@ import {
   buildDemoBlockDefs,
   computeDemoBlockCompletion,
   getCompletedDemoBlockIndexes,
+  computeUniformDemoOverride,
   formatDemoBlockBadge,
   parseDemoBlockFilterValues,
   buildDemoBlockContainmentSpec,
@@ -230,4 +231,58 @@ test("tooltip: все пройдены — каждый со своим балл
   assert.ok(lines[0].includes("пройден, балл 60"))
   assert.ok(lines[1].includes("пройден, балл 90"))
   assert.ok(lines[2].includes("пройден, балл 40"))
+})
+
+// ── computeUniformDemoOverride («прошёл демо-часть → полное демо, ЕДИНЫЙ M») ─
+// Реальные размеры Revoluterra (прод 14.07): Д1=15 блоков, Д2=16, Д3=19;
+// единый знаменатель N/M = МАКС(blockIds) + 1 (анкета) = 19+1 = 20 для ЛЮБОГО
+// пройденного набора демо (компромисс: не менять числа клиенту, см. код).
+const REVOL_DEFS = [
+  { index: 1, blockIds: Array.from({ length: 15 }, (_, i) => `d1-${i}`) },
+  { index: 2, blockIds: Array.from({ length: 16 }, (_, i) => `d2-${i}`) },
+  { index: 3, blockIds: Array.from({ length: 19 }, (_, i) => `d3-${i}`) },
+]
+
+test("override: прошёл Д1+Д3 (Алексеева) → 20/20 (единый макс. знаменатель)", () => {
+  assert.deepEqual(computeUniformDemoOverride(REVOL_DEFS, [1, 3]), {
+    total: 20, completed: 20, percent: 100,
+  })
+})
+
+test("override: прошёл Д1+Д2 (когорта, Касьянов) → тоже 20/20 (единообразно)", () => {
+  assert.deepEqual(computeUniformDemoOverride(REVOL_DEFS, [1, 2]), {
+    total: 20, completed: 20, percent: 100,
+  })
+})
+
+test("override: прошёл только Д1 → тоже 20/20 (знаменатель не зависит от набора)", () => {
+  assert.deepEqual(computeUniformDemoOverride(REVOL_DEFS, [1]), {
+    total: 20, completed: 20, percent: 100,
+  })
+})
+
+test("override: любой набор пройденных демо даёт ОДИН и тот же 20/20", () => {
+  for (const idxs of [[1], [2], [3], [1, 2], [2, 3], [1, 3], [1, 2, 3], [3, 1]]) {
+    assert.deepEqual(
+      computeUniformDemoOverride(REVOL_DEFS, idxs),
+      { total: 20, completed: 20, percent: 100 },
+      `единый 20/20 ожидается для ${idxs}`,
+    )
+  }
+})
+
+test("override: одно-демо вакансия НЕ меняется (defs.length<=1 → null)", () => {
+  assert.equal(computeUniformDemoOverride([REVOL_DEFS[0]], [1]), null)
+})
+
+test("override: кандидат не прошёл ни одного демо → null (остаётся базовый расчёт)", () => {
+  assert.equal(computeUniformDemoOverride(REVOL_DEFS, []), null)
+})
+
+test("override: все демо без физических блоков → null (не выдумываем 1/1)", () => {
+  const defs = [
+    { index: 1, blockIds: [] as string[] },
+    { index: 2, blockIds: [] as string[] },
+  ]
+  assert.equal(computeUniformDemoOverride(defs, [1, 2]), null)
 })

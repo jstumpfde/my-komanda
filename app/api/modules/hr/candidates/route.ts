@@ -15,6 +15,7 @@ import {
   buildDemoBlockDefs,
   computeDemoBlockCompletion,
   getCompletedDemoBlockIndexes,
+  computeUniformDemoOverride,
   parseDemoBlockFilterValues,
   buildDemoBlockContainmentSpec,
   matchesDemoBlockSelection,
@@ -792,6 +793,12 @@ export async function GET(req: NextRequest) {
         const completedDemoBlockIndexes = getCompletedDemoBlockIndexes(demoBlockCompletionG)
         const demoBlockTooltip = demoBlockDefsG.length > 1 ? formatDemoBlockTooltip(demoBlockCompletionG) : null
 
+        // Правило владельца (14.07, уточнение): «прошёл демо-часть → полное демо,
+        // единый знаменатель = макс блоков среди демо вакансии» (Revoluterra=20).
+        // Компромисс для текущих вакансий; корректный per-демо подсчёт — будущая
+        // модель контента (см. computeUniformDemoOverride). null → базовый расчёт.
+        const uniformOverrideG = computeUniformDemoOverride(demoBlockDefsG, completedDemoBlockIndexes)
+
         // Strip служебные поля — не нужны клиенту
         const { demoProgressJson: _drop1, anketaAnswers: _drop2, hhCandidateName: _drop3, firstNameOverride: _drop4, ...rest } = r
         void _drop1; void _drop2; void _drop3; void _drop4
@@ -799,9 +806,9 @@ export async function GET(req: NextRequest) {
           ...rest,
           name: displayName,
           nameUncertain,
-          demoTotalBlocks: effTotal,
-          demoCompletedBlocks,
-          progressPercent,
+          demoTotalBlocks: uniformOverrideG ? uniformOverrideG.total : effTotal,
+          demoCompletedBlocks: uniformOverrideG ? uniformOverrideG.completed : demoCompletedBlocks,
+          progressPercent: uniformOverrideG ? uniformOverrideG.percent : progressPercent,
           demoCompletedByAnswers,
           completedDemoBlockIndexes,
           demoBlockTooltip,
@@ -1545,14 +1552,19 @@ export async function GET(req: NextRequest) {
       const completedDemoBlockIndexes = getCompletedDemoBlockIndexes(demoBlockCompletion)
       const demoBlockTooltip = demoBlockDefs.length > 1 ? formatDemoBlockTooltip(demoBlockCompletion) : null
 
+      // Правило владельца (14.07, уточнение): «прошёл демо-часть → полное демо,
+      // единый знаменатель» — см. path A выше и computeUniformDemoOverride.
+      // null → базовый расчёт.
+      const uniformOverride = computeUniformDemoOverride(demoBlockDefs, completedDemoBlockIndexes)
+
       return {
         ...r,
         birthDate: effectiveBirthDate,
         name: deriveCandidateName(r.name, r.anketaAnswers, hhNameByCandidateId.get(r.id) ?? null),
         nameUncertain,
-        demoTotalBlocks,
-        demoCompletedBlocks,
-        progressPercent,
+        demoTotalBlocks: uniformOverride ? uniformOverride.total : demoTotalBlocks,
+        demoCompletedBlocks: uniformOverride ? uniformOverride.completed : demoCompletedBlocks,
+        progressPercent: uniformOverride ? uniformOverride.percent : progressPercent,
         demoCompletedByAnswers,
         testScore: test?.score ?? null,
         testStatus,
