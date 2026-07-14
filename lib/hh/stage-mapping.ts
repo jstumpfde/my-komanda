@@ -109,7 +109,8 @@ export function platformStageToHhState(stage: string | null | undefined): HhNego
 //
 //   phone_interview / consider → primary_contact
 //   assessment                 → test_task_sent
-//   interview                  → interview
+//   interview                  → null (НЕ двигаем; на interview — только ручным
+//                                переводом HR, Юрий 15.07, см. case ниже)
 //   discard_by_employer        → rejected (мы отказали; initiator=company)
 //   discard_by_applicant       → rejected (кандидат сам; initiator=candidate)
 //   hired                      → hired («Выход на работу» — входящий сигнал
