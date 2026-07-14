@@ -63,6 +63,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  Download,
 } from "lucide-react"
 import {
   Dialog,
@@ -2224,6 +2225,7 @@ export function CandidateDrawer({
                 {candidate.hhRawData ? (
                   <HhResumeInfo
                     rawData={candidate.hhRawData}
+                    candidateId={candidate.id}
                     fallback={{
                       phone: candidate.phone,
                       email: candidate.email,
@@ -2313,6 +2315,22 @@ export function CandidateDrawer({
                       )}
                     </section>
                   ) : null
+                )}
+
+                {/* Нет hh-связки вообще — «Скачать PDF» недоступна, показываем
+                    disabled-кнопку с тултипом вместо того, чтобы просто скрыть. */}
+                {!candidate.hhRawData && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled
+                    title="У кандидата нет привязки к резюме hh.ru — PDF недоступен"
+                    className="h-6 px-2 text-xs text-muted-foreground gap-1 cursor-not-allowed opacity-60 hover:bg-transparent"
+                  >
+                    <Download className="w-3 h-3" />
+                    Скачать PDF
+                  </Button>
                 )}
 
                 {(candidate.source || candidate.referredByShortId) && (
