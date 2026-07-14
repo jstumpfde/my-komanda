@@ -108,20 +108,9 @@ export function calcDemoFraction(dp: DemoProgressData | null | undefined): DemoF
 
 export type DemoProgressVariant = "list" | "kanban"
 
-// P0-31: стадии, прошедшие точку «решение по демо». Только в них прогресс-бар
-// рендерится зелёным при 100%. Остальные стадии (включая demo_opened,
-// primary_contact, demo_in_progress и т.д.) → синий даже при 16/16,
-// чтобы зелёный сигнал означал «кандидат прошёл воронку дальше демо»,
-// а не просто «досмотрел видео».
-const GREEN_GATING_STAGES = new Set([
-  "decision",
-  "anketa_filled",
-  "ai_screening",
-  "test_task_sent",
-  "interview",
-  "offer",
-  "hired",
-])
+// P0-31 (стадийный гейтинг зелёного цвета) ОТМЕНЁН Юрием 14.07: прошёл демо
+// (100%) → зелёный ВСЕГДА, независимо от стадии воронки. Прежний набор
+// GREEN_GATING_STAGES и вычисление stagePassedDecision удалены как мёртвые.
 
 interface DemoProgressBarProps {
   /** Процент 0..100 при наличии данных, либо null — кандидат не приступал. */
@@ -133,9 +122,8 @@ interface DemoProgressBarProps {
   /** Если true — рядом с подписью процента показывается иконка видео-визитки. */
   hasVideoVizitka?: boolean
   /**
-   * Стадия воронки кандидата (`candidate.stage`). Если задана — зелёный цвет
-   * при 100% включается только когда stage ∈ GREEN_GATING_STAGES.
-   * Если не передана — fallback на старое поведение (только cur/tot).
+   * Стадия воронки кандидата — принимается для совместимости вызовов, но с
+   * 14.07 на ЦВЕТ не влияет (стадийный гейтинг зелёного отменён, см. выше).
    */
   stage?: string | null
   /**
@@ -143,7 +131,6 @@ interface DemoProgressBarProps {
    * даже если хвост декоративных блоков (media/button/image) не пролистан и
    * прогресс по страницам < 100%. Если true — бар считается завершённым
    * (зелёный / «готово» / 100%-заливка), знаменатель/число НЕ меняем.
-   * Stage-гейтинг зелёного цвета сохраняется (как и для обычного 100%).
    */
   completedByAnswers?: boolean
   /**
@@ -176,16 +163,11 @@ export function DemoProgressBar({
   // «Пройдено по ответам» — кандидат заполнил все обязательные вопросы; считаем
   // демо завершённым (для цвета/подписи), даже если по страницам < 100%.
   const hasData = pct !== null || completedByAnswers === true
-  // P0-31: при 100% — зелёный только если stage прошёл точку «decision».
-  // Если stage не передан (legacy-вызовы) — оставляем зелёный (backward-compat).
-  const stagePassedDecision = stage === undefined || stage === null
-    ? true
-    : GREEN_GATING_STAGES.has(stage)
+  void stage // с 14.07 стадия на цвет не влияет (см. коммент выше)
 
   if (variant === "kanban") {
     // «Пройдено по ответам» приравниваем к 100% для цвета/подписи бара.
     const effPct = completedByAnswers === true ? 100 : (pct ?? 0)
-    const at100 = effPct === 100
     const barColor = !hasData
       ? "bg-muted-foreground/20"
       : effPct === 0
@@ -235,11 +217,10 @@ export function DemoProgressBar({
   // (переопределяет прежнее P0-31 «зелёный только после decision»). Владелец
   // хочет видеть прохождение демо цветом сразу, независимо от стадии воронки.
   const isComplete = completedFraction
-  const isCompletedButNotPassed = false
   const isStarted = hasFraction && cur > 0 && cur < tot && !completedFraction
   const fillColor = isComplete
     ? "bg-emerald-500"
-    : (isStarted || isCompletedButNotPassed)
+    : isStarted
       ? "bg-blue-500"
       : "bg-transparent"
   // "Не начато" — когда нет данных вообще ИЛИ кандидат ещё не сделал ни одного шага.
