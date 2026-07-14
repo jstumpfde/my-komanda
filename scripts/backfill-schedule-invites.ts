@@ -27,6 +27,9 @@
  *     --vacancy=6916db01-a765-4c4e-a652-81475566f95b
  *   pnpm exec tsx --env-file=.env scripts/backfill-schedule-invites.ts \
  *     --vacancy=6916db01-a765-4c4e-a652-81475566f95b --execute
+ *
+ * --favorites-only — только избранные (is_favorite) кандидаты: «проверенный
+ * список HR», с которого начинаем самозапись (решение Юрия 14.07).
  */
 
 import { and, eq, inArray, isNull } from "drizzle-orm"
@@ -42,6 +45,9 @@ function arg(name: string): string | undefined {
   return found ? found.slice(pfx.length) : undefined
 }
 const EXECUTE = process.argv.includes("--execute")
+// Сузить когорту до избранных (is_favorite) — «проверенный список HR»
+// (решение Юрия 14.07: самозапись запускаем сначала по избранным).
+const FAVORITES_ONLY = process.argv.includes("--favorites-only")
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -86,6 +92,7 @@ async function main() {
       eq(candidates.vacancyId, vacancyId),
       eq(candidates.stage, "interview"),
       isNull(candidates.deletedAt),
+      ...(FAVORITES_ONLY ? [eq(candidates.isFavorite, true)] : []),
     ))
 
   if (interviewCands.length === 0) {
