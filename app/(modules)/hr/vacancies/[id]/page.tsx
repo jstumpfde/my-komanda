@@ -868,8 +868,12 @@ export default function VacancyPage() {
   const HEADER_STAT_STAGE_MAP: Record<string, string[]> = {
     demoOpened: DEMO_OPENED_STAGE_SLUGS,
     interview:  ["scheduled", "interview", "interviewed"],
+    // Пост-interview стадии — точечно по своей стадии (канон lib/stages.ts).
+    referenceCheck: ["reference_check"],
+    decision:       ["decision"],
     offer:      ["offer_sent", "offer"],
     hired:      ["hired", "started_work"],
+    startedWork:    ["started_work"],
     rejected:   ["rejected"],
   }
   // Спец-флаги (НЕ стадии воронки) — каждый счётчик активирует ровно один
@@ -1501,6 +1505,10 @@ export default function VacancyPage() {
     // #15: интервью (scheduled + interview + legacy interviewed) и оферы
     // (offer_sent + legacy offer) — считаются из byStage стадий кандидатов.
     interview: number; offer: number;
+    // Пост-interview стадии воронки (канон lib/stages.ts, sortOrder 10/11/14).
+    // Показываются в шапке только при count>0 (нулевые скрыты). Считаются из
+    // byStage напрямую — точечно по стадии, как interview/offer.
+    referenceCheck: number; decision: number; startedWork: number;
     ctaClicked: number;
     // «2-я часть демо» (Путь менеджера): приглашены / прошли (балл 2-го блока).
     secondDemoInvited: number; secondDemoPassed: number;
@@ -1533,6 +1541,12 @@ export default function VacancyPage() {
       const bs = stats.byStage ?? {}
       const interviewCount = (bs["scheduled"] ?? 0) + (bs["interview"] ?? 0) + (bs["interviewed"] ?? 0)
       const offerCount = (bs["offer_sent"] ?? 0) + (bs["offer"] ?? 0)
+      // Пост-interview стадии (канон lib/stages.ts): «Рекомендации»,
+      // «Решение» между интервью и офером, «Выход на работу» после найма.
+      // Точечно по стадии (byStage), как interview/offer.
+      const referenceCheckCount = bs["reference_check"] ?? 0
+      const decisionCount = bs["decision"] ?? 0
+      const startedWorkCount = bs["started_work"] ?? 0
       setHeaderStats({
         total:        stats.total,
         pending:      cand.pending,
@@ -1551,6 +1565,9 @@ export default function VacancyPage() {
         demoAnswered: stats.demoAnswered,
         interview:    interviewCount,
         offer:        offerCount,
+        referenceCheck: referenceCheckCount,
+        decision:       decisionCount,
+        startedWork:    startedWorkCount,
         ctaClicked:   stats.ctaClicked ?? 0,
         secondDemoInvited: stats.secondDemoInvited ?? 0,
         secondDemoPassed:  stats.secondDemoPassed ?? 0,
@@ -3071,11 +3088,14 @@ export default function VacancyPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* #15: счётчики шапки. Порядок: откликов → новых → демо →
-                        анкет → интервью → оферы → нанято → отказ.
+                    {/* #15: счётчики шапки. Порядок (канон lib/stages.ts):
+                        откликов → новых → демо → анкет → демо-2 → перешли →
+                        интервью → рекомендации → решение → оферы → нанято →
+                        работает → отказ.
                         HIDE-AT-ZERO: всегда показываем «откликов всего»,
-                        «новых», «открыли демо» (даже 0); анкет/интервью/оферы/
-                        нанято/отказ — только если >0.
+                        «новых», «открыли демо» (даже 0); анкет/демо-2/интервью/
+                        рекомендации/решение/оферы/нанято/работает/отказ —
+                        только если >0.
                         Разделитель «·» рендерит каждый видимый элемент ПЕРЕД
                         собой, кроме первого (isFirst), чтобы не было висячих
                         точек при скрытых метриках. */}
@@ -3216,6 +3236,23 @@ export default function VacancyPage() {
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты на стадии интервью — назначено или уже прошло — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
+                      // Пост-interview стадии (канон lib/stages.ts, только >0):
+                      // «Рекомендации» (reference_check) и «Решение» (decision)
+                      // между интервью и офером.
+                      if ((s?.referenceCheck ?? 0) > 0) push("referenceCheck",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            {clickableLabel("referenceCheck", s!.referenceCheck, "рекомендации")}
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты на стадии «Рекомендации» — проверка рекомендаций — нажмите, чтобы отфильтровать</TooltipContent>
+                        </UITooltip>)
+                      if ((s?.decision ?? 0) > 0) push("decision",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            {clickableLabel("decision", s!.decision, "решение")}
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты на стадии «Решение» — по ним принимается решение о найме — нажмите, чтобы отфильтровать</TooltipContent>
+                        </UITooltip>)
                       if ((s?.offer ?? 0) > 0) push("offer",
                         <UITooltip>
                           <TooltipTrigger asChild>
@@ -3229,6 +3266,16 @@ export default function VacancyPage() {
                             {clickableLabel("hired", s!.hired, "нанято")}
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты, нанятые по этой вакансии — нажмите, чтобы отфильтровать</TooltipContent>
+                        </UITooltip>)
+                      // Пост-найм стадия (канон lib/stages.ts, только >0):
+                      // «Выход на работу» (started_work) — подмножество «нанято»
+                      // (счётчик «нанято» = hired + started_work, не ломаем).
+                      if ((s?.startedWork ?? 0) > 0) push("startedWork",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            {clickableLabel("startedWork", s!.startedWork, "работает")}
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты, вышедшие на работу — из числа нанятых уже приступили — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       // Только >0: отказ.
                       if ((s?.rejected ?? 0) > 0) push("rejected",
