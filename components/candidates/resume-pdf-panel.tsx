@@ -53,56 +53,44 @@ export function ResumePdfPanel({ candidateId, candidateName, open, onOpenChange 
     if (!open) setExpanded(false)
   }, [open])
 
-  // Роут может ответить 404/400/502 (нет привязки к резюме, hh не подключён,
-  // резюме скрыто кандидатом) — если посадить <iframe> сразу на URL, браузер
-  // красиво отрисует внутри него голый JSON { error: "..." }, что уродливо.
-  // Поэтому ПЕРЕД показом iframe делаем отдельный fetch и проверяем res.ok:
-  //   - HEAD технически не нужен: route.ts экспортирует только GET, а Next.js
-  //     (проверено в исходниках next/dist — auto-implement-methods.js) в этом
-  //     случае реализует HEAD, ПРОСТО ВЫЗЫВАЯ ТУ ЖЕ функцию GET целиком — то
-  //     есть HEAD не экономит ни одного похода в hh.ru (роут не может отдать
-  //     статус, не сделав fetch резюме и PDF внутри hh.ru). Разницы в цене
-  //     между HEAD и GET здесь нет, поэтому используем обычный GET.
-  //   - Тело НЕ читаем целиком при res.ok — иначе PDF (может быть несколько
-  //     МБ) скачивался бы дважды: один раз тут впустую, второй раз — самим
-  //     <iframe> по src. Явно отменяем поток через res.body?.cancel().
-  //   - При !res.ok тело маленькое (apiError JSON) — читаем его ради текста
-  //     ошибки для пользователя.
+  // Предпроверки запросом СОЗНАТЕЛЬНО НЕТ. Соблазн «сначала fetch, проверим
+  // res.ok, потом покажем iframe» здесь дорого стоит: роут не отдаёт статус,
+  // не сходив в hh.ru ДВАЖДЫ (GET /resumes/{id} → download.pdf.url → скачать
+  // байты), и он ничего не кэширует (см. resume-pdf/route.ts). Отмена потока
+  // на клиенте серверу не помогает — работа уже сделана. Итого предпроверка
+  // удваивала бы поход в hh на КАЖДОЕ открытие панели, а у hh лимиты.
+  // Дублировать проверку и не нужно: кнопка, открывающая панель, отрисована
+  // только при hasResumePdf, а он считается ТЕМ ЖЕ резолвером
+  // (lib/hh/resolve-resume-id.ts), что и роут. Остаточные ошибки (резюме
+  // удалено на hh, hh лежит) без реального похода в hh не узнать — а это ровно
+  // тот запрос, который делает сам iframe.
+  //
+  // Роут same-origin, поэтому на onLoad можно заглянуть внутрь и отличить
+  // отрисованный PDF от JSON-ошибки apiError. Успешный PDF отдаётся плагином
+  // просмотрщика: доступ к contentDocument либо бросит, либо вернёт документ
+  // без нашего JSON — оба случая трактуем как «всё хорошо».
   useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-
-    fetch(viewUrl)
-      .then(async (res) => {
-        if (cancelled) return
-        if (res.ok) {
-          res.body?.cancel().catch(() => {})
-          return
-        }
-        let message = "Не удалось загрузить PDF резюме"
-        try {
-          const data = await res.json()
-          if (data && typeof data.error === "string" && data.error.trim()) {
-            message = data.error
-          }
-        } catch {
-          // тело не JSON — оставляем дефолтное сообщение
-        }
-        setError(message)
-      })
-      .catch(() => {
-        if (!cancelled) setError("Не удалось загрузить PDF резюме")
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
+    if (open) {
+      setLoading(true)
+      setError(null)
     }
   }, [open, viewUrl])
+
+  const handleIframeLoad = () => {
+    setLoading(false)
+    try {
+      const doc = iframeRef.current?.contentDocument
+      const text = doc?.body?.textContent?.trim()
+      if (!text || !text.startsWith("{")) return
+      const data = JSON.parse(text)
+      if (data && typeof data.error === "string" && data.error.trim()) {
+        setError(data.error)
+      }
+    } catch {
+      // contentDocument недоступен (штатно для плагина-просмотрщика) либо тело
+      // не JSON — значит PDF отрисовался, ошибки нет.
+    }
+  }
 
   const handlePrint = () => {
     // Роут — same-origin, поэтому contentWindow.print() разрешён без CORS-
@@ -164,18 +152,12 @@ export function ResumePdfPanel({ candidateId, candidateName, open, onOpenChange 
           </div>
         </SheetHeader>
 
-        <SheetBody className="p-0 flex-1 min-h-0">
-          {loading ? (
-            <div className="h-full w-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                <svg className="animate-spin size-6" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                <span className="text-sm">Загрузка PDF…</span>
-              </div>
-            </div>
-          ) : error ? (
+        {/* iframe держим смонтированным ВСЕГДА, пока нет ошибки: именно его
+            onLoad снимает загрузку и отличает PDF от JSON-ошибки. Спиннер —
+            оверлеем поверх, а не вместо: если рендерить его вместо iframe,
+            onLoad никогда не случится и панель зависнет на «Загрузка PDF…». */}
+        <SheetBody className="p-0 flex-1 min-h-0 relative">
+          {error ? (
             <div className="h-full w-full flex items-center justify-center p-6">
               <div className="flex flex-col items-center gap-3 text-center max-w-sm">
                 <AlertCircle className="h-8 w-8 text-muted-foreground" />
@@ -191,12 +173,26 @@ export function ResumePdfPanel({ candidateId, candidateName, open, onOpenChange 
               </div>
             </div>
           ) : (
-            <iframe
-              ref={iframeRef}
-              src={`${viewUrl}#toolbar=1`}
-              title={`Резюме PDF${candidateName ? ` — ${candidateName}` : ""}`}
-              className="w-full h-full border-0"
-            />
+            <>
+              <iframe
+                ref={iframeRef}
+                src={`${viewUrl}#toolbar=1`}
+                title={`Резюме PDF${candidateName ? ` — ${candidateName}` : ""}`}
+                onLoad={handleIframeLoad}
+                className={cn("w-full h-full border-0", loading && "invisible")}
+              />
+              {loading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <svg className="animate-spin size-6" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span className="text-sm">Загрузка PDF…</span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </SheetBody>
       </SheetContent>
