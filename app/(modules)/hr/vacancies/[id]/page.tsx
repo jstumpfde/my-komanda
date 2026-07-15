@@ -2488,29 +2488,6 @@ export default function VacancyPage() {
     handleListSortChange(toApply)
   }, [userPrefsLoaded, useListPaginated, userPrefs.listSort, searchParams, handleListSortChange])
 
-  // ─── Unified 6-stage metrics (single source of truth) ───
-  const allCandidates = columns.flatMap((c) => c.candidates)
-  const newCol = columns.find((c) => c.id === "new")
-  const demoCol = columns.find((c) => c.id === "demo")
-  const decisionCol = columns.find((c) => c.id === "decision")
-  const interviewCol = columns.find((c) => c.id === "interview")
-  const finalDecisionCol = columns.find((c) => c.id === "final_decision")
-  const hiredCol = columns.find((c) => c.id === "hired")
-
-  const afterDecision = [interviewCol, finalDecisionCol, hiredCol]
-    .reduce((acc, col) => acc + (col?.candidates.length || 0), 0)
-
-  const funnelStages = [
-    { stage: "Новый", count: totalCandidates, color: "#94a3b8" },
-    { stage: "Демо", count: totalCandidates - (newCol?.candidates.length || 0), color: "#3b82f6" },
-    { stage: "Решение", count: (decisionCol?.candidates.length || 0) + afterDecision, color: "#ef4444" },
-    { stage: "Интервью", count: (interviewCol?.candidates.length || 0) + (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#8b5cf6" },
-    { stage: "Передан", count: (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#f97316" },
-    { stage: "Нанято", count: hiredCol?.candidates.length || 0, color: "#22c55e" },
-  ]
-
-  const funnelData = funnelStages
-
   // ── AI Screening ──
   const [screeningIds, setScreeningIds] = useState<Set<string>>(new Set())
   const [bulkScreening, setBulkScreening] = useState(false)
@@ -4052,7 +4029,11 @@ export default function VacancyPage() {
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                 <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[0, funnelData[0]?.count || 1]} allowDataOverflow />
                                 <YAxis type="category" dataKey="stage" tick={{ fontSize: 11 }} width={140} stroke="var(--muted-foreground)" />
-                                <Tooltip contentStyle={ttStyle} />
+                                {/* Recharts по умолчанию рисует cursor во всю ширину/высоту
+                                    категории — на близких к нулю стадиях это выглядит как
+                                    гигантская полоса-призрак под курсором (15.07). Ненавязчивая
+                                    подсветка вместо дефолтной. */}
+                                <Tooltip contentStyle={ttStyle} cursor={{ fill: "var(--muted)", fillOpacity: 0.3 }} />
                                 <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                                   {funnelData.map((e, i) => <Cell key={i} fill={e.color} />)}
                                   <LabelList
@@ -4207,7 +4188,8 @@ export default function VacancyPage() {
                               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                               <XAxis dataKey="range" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                               <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                              <Tooltip contentStyle={ttStyle} />
+                              {/* Та же полоса-призрак, что и в воронке выше (15.07) — тот же фикс. */}
+                              <Tooltip contentStyle={ttStyle} cursor={{ fill: "var(--muted)", fillOpacity: 0.3 }} />
                               <Bar dataKey="count" name="Кандидатов" radius={[6, 6, 0, 0]}>
                                 {scoreRanges.map((s, i) => <Cell key={i} fill={s.color} />)}
                               </Bar>
