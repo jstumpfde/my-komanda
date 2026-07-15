@@ -444,7 +444,11 @@ export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
   },
   full_with_test: {
     name:        "Полный с тестовым",
-    description: "С видео-визиткой, тестовым заданием и реф-чеком",
+    // «реф-чек» убран из описания и из enabledBlocks 15.07 вместе с выводом
+    // блока из BLOCK_TYPES: применение шаблона пересобирает список по
+    // BLOCK_TYPES, поэтому блок всё равно не появился бы, а описание
+    // обещало бы несуществующий шаг.
+    description: "С видео-визиткой и тестовым заданием",
     enabledBlocks: [
       "ai_resume_score",
       "first_message",
@@ -452,7 +456,6 @@ export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
       "video_intro",
       "anketa",
       "test_task",
-      "reference_check",
       "interview",
       "offer",
       "thank_you_screen",
