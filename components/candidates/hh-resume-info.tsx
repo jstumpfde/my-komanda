@@ -5,7 +5,7 @@ import {
   Phone, Mail, MapPin, Briefcase, GraduationCap, Globe2, Plane,
   DollarSign, Calendar, ExternalLink, Languages, Wrench,
   Car, Award, Link2, Clock, Send, MessageSquare,
-  Lock, Train, Globe, FileBadge, BadgeCheck, AtSign, Download,
+  Lock, Train, Globe, FileBadge, BadgeCheck, AtSign, FileText,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -777,18 +777,19 @@ export function HhResumeInfo({ rawData, candidateId, hasResumePdf, fallback }: H
                   href={`/api/modules/hr/candidates/${candidateId}/resume-pdf`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  title="Откроется в просмотрщике — сохранить можно оттуда"
                   className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                 >
-                  <Download className="w-3 h-3" />
-                  Скачать PDF
+                  <FileText className="w-3 h-3" />
+                  Открыть PDF
                 </a>
               ) : candidateId ? (
                 <span
                   title="У кандидата нет привязки к резюме hh.ru — PDF недоступен"
                   className="inline-flex items-center gap-1 text-xs text-muted-foreground opacity-60 cursor-not-allowed select-none"
                 >
-                  <Download className="w-3 h-3" />
-                  Скачать PDF
+                  <FileText className="w-3 h-3" />
+                  Открыть PDF
                 </span>
               ) : null}
             </div>
