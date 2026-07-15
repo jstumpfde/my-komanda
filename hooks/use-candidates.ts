@@ -14,6 +14,13 @@ export interface ApiCandidate {
   city: string | null
   source: string | null
   stage: string | null
+  // Момент первого открытия /demo/<shortId> кандидатом (candidates.demo_opened_at,
+  // schema.ts:1767). NULL = ещё не открывал. Заявка Юрия 15.07: колонка «Демо»
+  // в списке кандидатов различает по нему «ссылка отправлена, не открыл» от
+  // «сам ещё не открывал» — раньше оба состояния выглядели как «—»
+  // (components/dashboard/list-view.tsx, колонка id="progress"). Имя поля
+  // ФИКСИРОВАНО — по нему рисует колонка.
+  demoOpenedAt: string | null
   score: number | null
   salaryMin: number | null
   salaryMax: number | null

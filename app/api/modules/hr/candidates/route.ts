@@ -520,6 +520,12 @@ export async function GET(req: NextRequest) {
           city: candidates.city,
           source: candidates.source,
           stage: candidates.stage,
+          // Заявка Юрия 15.07: колонка «Демо» в списке различала только прогресс
+          // по шагам — «ссылка отправлена, не открыл» и «сам не открывал»
+          // выглядели одинаково («—»). demoOpenedAt уже был в БД (см. schema.ts:1767),
+          // просто не читался этим select'ом. Лёгкое поле (timestamp), стрипинг
+          // служебных полей ниже (_drop1..4) его не трогает — доходит до клиента.
+          demoOpenedAt: candidates.demoOpenedAt,
           score: candidates.score,
           aiScore: candidates.aiScore,
           aiScoreV2: candidates.aiScoreV2,

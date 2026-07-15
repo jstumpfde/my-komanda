@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils"
 import type { CandidateAction } from "@/lib/column-config"
 import { applySortMode, type CandidateSortMode } from "@/lib/candidate-sort"
 import { yearsRu } from "@/lib/plural-ru"
-import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, RotateCcw } from "lucide-react"
+import { MapPin, CheckCircle2, XCircle, ArrowRight, ThumbsUp, Clock, ListFilter, ArrowUp, ArrowDown, Star, CalendarClock, CalendarPlus, MessageSquare, RotateCcw, Eye, Mail } from "lucide-react"
 import { DemoProgressBar, calcDemoPercent, calcDemoFraction } from "@/components/hr/demo-progress-bar"
 import { formatDemoBlockBadge } from "@/lib/demo/block-completion"
 import { getStageLabel, getStageColorClasses } from "@/lib/stages"
@@ -686,7 +686,7 @@ export function ListView({
             sort={sort}
             onToggle={handleSort}
             align="center"
-            title="Прогресс прохождения демо/анкеты (сколько шагов из скольки пройдено)"
+            title="Прогресс демо: отправлено → открыл → сколько шагов пройдено"
           />
         ),
         renderCell: (candidate, ctx) => {
@@ -701,41 +701,95 @@ export function ListView({
           const completedBlockIdx = (candidate as { completedDemoBlockIndexes?: number[] }).completedDemoBlockIndexes ?? []
           const badgeLabel = formatDemoBlockBadge(completedBlockIdx)
           const blockTooltip = (candidate as { demoBlockTooltip?: string | null }).demoBlockTooltip ?? null
-          const cell = (
-            <div className="flex flex-col items-center justify-center gap-0.5">
-              <DemoProgressBar
-                variant="list"
-                progressPercent={ctx.demoFraction.hasData && ctx.demoFraction.total > 0
-                  ? Math.min(100, Math.round((ctx.demoFraction.current / ctx.demoFraction.total) * 100))
-                  : null}
-                completedBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.current : undefined}
-                totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
-                hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
-                stage={candidate.stage}
-                completedByAnswers={candidate.demoCompletedByAnswers}
-                demoProgress={candidate.demoProgressJson}
-              />
-              {badgeLabel != null && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] font-semibold px-1 py-0 h-4 leading-none border-indigo-200 text-indigo-700 bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:bg-indigo-950/30"
-                >
-                  {badgeLabel}
-                </Badge>
-              )}
-            </div>
-          )
-          if (!blockTooltip) {
-            return <div className="flex items-center justify-center">{cell}</div>
+
+          // Заявка Юрия 15.07: раньше «нет прогресса по шагам» и «ссылку даже
+          // не отправляли» рисовались одинаково («—») — колонка не различала
+          // кандидата, который открыл демо 20 минут назад, от того, кому демо
+          // никогда не отправляли. «Есть прогресс» = ТОЧНО то же условие, что
+          // DemoProgressBar (variant="list") использует внутри себя для
+          // собственного noProgress (components/hr/demo-progress-bar.tsx) —
+          // иначе тут «есть прогресс», а бар всё равно рисует «—» (при
+          // изменении той логики — обновить и здесь), ЛИБО есть бейдж
+          // пройденного демо-блока (badgeLabel) — по ТЗ владельца состояние (а)
+          // это «прогресс по шагам ИЛИ по демо-блокам».
+          const hasFraction = ctx.demoFraction.hasData && ctx.demoFraction.total > 0
+          const completedByAnswers = candidate.demoCompletedByAnswers === true
+          const hasStepProgress = completedByAnswers || (hasFraction && ctx.demoFraction.current > 0) || badgeLabel != null
+
+          if (hasStepProgress) {
+            const cell = (
+              <div className="flex flex-col items-center justify-center gap-0.5">
+                <DemoProgressBar
+                  variant="list"
+                  progressPercent={hasFraction
+                    ? Math.min(100, Math.round((ctx.demoFraction.current / ctx.demoFraction.total) * 100))
+                    : null}
+                  completedBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.current : undefined}
+                  totalBlocks={ctx.demoFraction.hasData ? ctx.demoFraction.total : undefined}
+                  hasVideoVizitka={candidate.demoProgressJson?.hasVideoVizitka}
+                  stage={candidate.stage}
+                  completedByAnswers={candidate.demoCompletedByAnswers}
+                  demoProgress={candidate.demoProgressJson}
+                />
+                {badgeLabel != null && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] font-semibold px-1 py-0 h-4 leading-none border-indigo-200 text-indigo-700 bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:bg-indigo-950/30"
+                  >
+                    {badgeLabel}
+                  </Badge>
+                )}
+              </div>
+            )
+            if (!blockTooltip) {
+              return <div className="flex items-center justify-center">{cell}</div>
+            }
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-center">{cell}</div>
+                </TooltipTrigger>
+                {/* whitespace-pre-line — тултип построчный (\n-разделители). */}
+                <TooltipContent side="top" className="whitespace-pre-line text-left">{blockTooltip}</TooltipContent>
+              </Tooltip>
+            )
+          }
+
+          // Нет прогресса по шагам — два ранних состояния до него:
+          // «открыл демо» (demoOpenedAt) и «ссылка отправлена, не открыл»
+          // (stage продвинулся дальше 'new' — рассылка идёт при переходе в
+          // primary_contact, см. lib/hh/process-queue.ts). Иконки контурные
+          // (lucide stroke, не заливка/эмодзи — прямое требование владельца).
+          const openedAt = (candidate as { demoOpenedAt?: string | null }).demoOpenedAt ?? null
+          if (openedAt) {
+            const dt = formatResponseDate(openedAt)
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-center">
+                    <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>{dt ? `Открыл демо ${dt.full}` : "Открыл демо"}</TooltipContent>
+              </Tooltip>
+            )
+          }
+          if (candidate.stage !== "new") {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-center">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground/50" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>Ссылка отправлена, не открыл</TooltipContent>
+              </Tooltip>
+            )
           }
           return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center justify-center">{cell}</div>
-              </TooltipTrigger>
-              {/* whitespace-pre-line — тултип построчный (\n-разделители). */}
-              <TooltipContent side="top" className="whitespace-pre-line text-left">{blockTooltip}</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center justify-center">
+              <span className="text-muted-foreground/40 text-sm" title="Не начато">—</span>
+            </div>
           )
         },
       })

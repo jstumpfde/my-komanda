@@ -51,6 +51,8 @@ interface GlobalCandidate {
   lastRespondedAt?: string | null
   source: string | null
   city: string | null
+  // Заявка Юрия 15.07: см. Candidate.demoOpenedAt (candidate-card.tsx).
+  demoOpenedAt?: string | null
   demoTotalBlocks: number
   demoCompletedBlocks: number
   progressPercent: number | null
@@ -154,6 +156,7 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     completedDemoBlockIndexes: c.completedDemoBlockIndexes ?? [],
     demoBlockTooltip: c.demoBlockTooltip ?? null,
     stage: c.stage,
+    demoOpenedAt: c.demoOpenedAt ?? null,
     photoUrl: c.photoUrl ?? null,
     vacancyTitle: c.vacancyTitle,
     vacancyId: c.vacancyId,

@@ -243,6 +243,9 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     // Разведка 14.07: см. Candidate.autoProcessingStoppedReason (candidate-card.tsx).
     autoProcessingStoppedReason: (c as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason ?? null,
     stage: c.stage ?? null,
+    // Заявка Юрия 15.07: колонка «Демо» различает «отправлено»/«открыл» до
+    // появления прогресса по шагам (см. list-view.tsx, id="progress").
+    demoOpenedAt: c.demoOpenedAt ?? null,
     // HR-020: фильтр-поля
     birthDate: c.birthDate ?? undefined,
     experienceYears: c.experienceYears ?? null,

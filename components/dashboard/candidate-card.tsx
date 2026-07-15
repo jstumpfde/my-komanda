@@ -96,6 +96,11 @@ export interface Candidate {
   autoProcessingStoppedReason?: string | null
   /** Реальный stage из БД (для status-бейджа в list-view paginated режиме). */
   stage?: string | null
+  /** Момент первого открытия демо-ссылки (candidates.demo_opened_at). NULL =
+   *  ещё не открывал. Заявка Юрия 15.07: колонка «Демо» в list-view различает
+   *  по нему промежуточные состояния «отправлено» / «открыл» до появления
+   *  прогресса по шагам (см. components/dashboard/list-view.tsx, id="progress"). */
+  demoOpenedAt?: string | null
   // Page-based progress fields, populated from API in vacancy page mapping
   demoTotalBlocks?: number
   demoCompletedBlocks?: number
