@@ -26,17 +26,22 @@ import { resolveResumeId } from "@/lib/hh/resolve-resume-id"
 //
 // Резолв resume_id — общий хелпер lib/hh/resolve-resume-id.ts (единый
 // источник правды с флагом hasResumePdf в GET /api/modules/hr/candidates/[id],
-// который гейтит кнопку «Скачать PDF» в UI).
+// который гейтит кнопку «Резюме PDF» в UI).
+//
+// По умолчанию PDF отдаётся inline — открывается во встроенном просмотрщике
+// браузера (там же кнопки сохранить/печать), а не падает в «Загрузки».
+// ?download=1 — принудительное скачивание (Content-Disposition: attachment).
 
 const HH_UA = "Company24/1.0 (company24.pro)"
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const user = await requireCompany()
     const { id } = await params
+    const forceDownload = req.nextUrl.searchParams.get("download") === "1"
 
     // Изоляция: кандидат должен принадлежать вакансии этой же компании.
     const [row] = await db
@@ -105,7 +110,7 @@ export async function GET(
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(prettyName)}`,
+        "Content-Disposition": `${forceDownload ? "attachment" : "inline"}; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(prettyName)}`,
         "Cache-Control": "no-store",
       },
     })

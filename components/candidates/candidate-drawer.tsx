@@ -64,7 +64,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
-  Download,
+  FileText,
 } from "lucide-react"
 import {
   Dialog,
@@ -2384,10 +2384,11 @@ export function CandidateDrawer({
                     href={`/api/modules/hr/candidates/${candidate.id}/resume-pdf`}
                     target="_blank"
                     rel="noopener noreferrer"
+                    title="Откроется в просмотрщике — сохранить можно оттуда"
                     className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                   >
-                    <Download className="w-3 h-3" />
-                    Скачать PDF
+                    <FileText className="w-3 h-3" />
+                    Открыть PDF
                   </a>
                 )}
 
