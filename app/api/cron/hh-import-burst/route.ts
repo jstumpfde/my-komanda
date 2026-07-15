@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { hhVacancies, vacancies, hhResponses } from "@/lib/db/schema"
-import { and, eq, inArray, count, sql } from "drizzle-orm"
+import { and, eq, inArray, count, sql, or, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 import { checkCronAuth } from "@/lib/cron/auth"
@@ -71,6 +71,12 @@ async function runOneIteration(): Promise<IterationResult> {
         // в /api/cron/hh-import. Обе значения = «живая вакансия».
         inArray(hhVacancies.status, ["active", "open"]),
         eq(vacancies.autoProcessingEnabled, true),
+        // Гард архива — тот же, что в /api/cron/hh-import (владелец 15.07:
+        // «не тянуть по вакансиям, неактивным на hh»). hhVacancies.status
+        // протухает (пишется при линковке и не обновляется), поэтому
+        // опираемся на свежий vacancies.hh_archived от крона hh-vacancy-sync.
+        // Пропускаем только явный архив; NULL продолжаем тянуть.
+        or(isNull(vacancies.hhArchived), eq(vacancies.hhArchived, false)),
       ))
 
     const byCompany = new Map<string, typeof activeRows>()
@@ -78,6 +84,19 @@ async function runOneIteration(): Promise<IterationResult> {
       const list = byCompany.get(row.companyId) ?? []
       list.push(row)
       byCompany.set(row.companyId, list)
+    }
+
+    // Компании с накопленной очередью добираем в проход, даже если живых
+    // hh-вакансий у них не осталось — иначе гард архива выше молча заморозил
+    // бы их отклики (разбор очереди ниже привязан к компании, но живёт внутри
+    // прохода). Симметрично /api/cron/hh-import.
+    const pendingCompanies = await db
+      .select({ companyId: hhResponses.companyId })
+      .from(hhResponses)
+      .where(eq(hhResponses.status, "response"))
+      .groupBy(hhResponses.companyId)
+    for (const { companyId } of pendingCompanies) {
+      if (!byCompany.has(companyId)) byCompany.set(companyId, [])
     }
 
     await Promise.all(Array.from(byCompany.entries()).map(async ([companyId, rows]) => {
