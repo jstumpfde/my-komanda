@@ -12,9 +12,9 @@
 
 import { and, eq, like, or } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { demos } from "@/lib/db/schema"
+import { demos, vacancies } from "@/lib/db/schema"
 import { buildDemoBlockDefs } from "@/lib/demo/block-completion"
-import type { DemoButtonBlock } from "@/lib/demo/demo-quick-links"
+import type { DemoButtonBlock, FunnelLinkExtras } from "@/lib/demo/demo-quick-links"
 
 /** Демо-блоки вакансии в каноническом порядке для быстрых кнопок вставки ссылки. */
 export async function getVacancyDemoButtonBlocks(vacancyId: string): Promise<DemoButtonBlock[]> {
@@ -32,4 +32,39 @@ export async function getVacancyDemoButtonBlocks(vacancyId: string): Promise<Dem
     index: d.index,
     hasContent: d.blockIds.length > 0,
   }))
+}
+
+/**
+ * Наличие не-демо этапов воронки для быстрых кнопок инлайн-чата.
+ * Правило владельца «если нет — скрываем»:
+ *  - hasTest: активный тест-блок = demos kind='test' со статусом 'published'
+ *    (запись создаёт/публикует sync-live-battle при боевом тест-блоке; при
+ *    удалении блока переводится в 'draft' — тогда «Тест» скрыт).
+ *  - vacancyUrl: как «Вакансия» в hh-broadcast — hh-ссылка вакансии, если есть
+ *    hh_vacancy_id; иначе null (кнопку не показываем).
+ *  - hasSchedule: самозапись на интервью (/schedule/{token}) резолвится всегда
+ *    из настроек расписания вакансии/компании (дефолты), поэтому доступна всегда.
+ */
+export async function getVacancyChatLinkExtras(vacancyId: string): Promise<FunnelLinkExtras> {
+  const [vac] = await db
+    .select({ hhVacancyId: vacancies.hhVacancyId })
+    .from(vacancies)
+    .where(eq(vacancies.id, vacancyId))
+    .limit(1)
+
+  const [testRow] = await db
+    .select({ id: demos.id })
+    .from(demos)
+    .where(and(
+      eq(demos.vacancyId, vacancyId),
+      eq(demos.kind, "test"),
+      eq(demos.status, "published"),
+    ))
+    .limit(1)
+
+  return {
+    hasTest: !!testRow,
+    vacancyUrl: vac?.hhVacancyId ? `https://hh.ru/vacancy/${vac.hhVacancyId}` : null,
+    hasSchedule: true,
+  }
 }

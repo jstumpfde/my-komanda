@@ -107,7 +107,7 @@ import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
 import { getBlockScore } from "@/lib/demo/block-scores"
-import { buildDemoLinkButtons, type DemoButtonBlock } from "@/lib/demo/demo-quick-links"
+import { buildFunnelLinkButtons, type DemoButtonBlock, type FunnelLinkExtras } from "@/lib/demo/demo-quick-links"
 import { linkifyText } from "@/lib/linkify"
 import {
   generateCriteriaFromSpec,
@@ -1050,10 +1050,11 @@ export function CandidateDrawer({
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
   const hhInputRef = useRef<HTMLTextAreaElement | null>(null)
-  // Быстрая вставка демо-ссылок: демо-блоки вакансии (динамически) + базовый URL.
-  // Единый формат /demo/{длинный token}?block=<id> строит buildDemoLinkButtons.
+  // Быстрая вставка ссылок воронки: демо-блоки (динамически) + Тест/Вакансия/
+  // Интервью по наличию. Полный набор кнопок строит buildFunnelLinkButtons.
   const [demoQuickBlocks, setDemoQuickBlocks] = useState<DemoButtonBlock[]>([])
   const [demoQuickBaseUrl, setDemoQuickBaseUrl] = useState("")
+  const [funnelExtras, setFunnelExtras] = useState<FunnelLinkExtras>({ hasTest: false, vacancyUrl: null, hasSchedule: false })
   // Вставить фрагмент (ссылку) в поле «Написать кандидату» — в позицию курсора,
   // иначе в конец. Курсор ставим после вставленного текста.
   const insertIntoHhDraft = useCallback((snippet: string) => {
@@ -1304,27 +1305,31 @@ export function CandidateDrawer({
       .finally(() => setScorecardLoading(false))
   }, [candidate, candidateId])
 
-  // Демо-блоки вакансии для быстрых кнопок «Демо 1»…«Демо N» в чате кандидата.
-  // Тянем при открытии карточки/смене вакансии; порядок и формат — как в диалоге
-  // «Рассылка через hh» (общий источник, единый формат ссылки).
+  // Ссылки воронки для быстрых кнопок в чате кандидата: демо-блоки «Демо 1»…«Демо N»
+  // + наличие Тест/Вакансия/Интервью. Тянем при открытии карточки/смене вакансии;
+  // источник и формат — как в диалоге «Рассылка через hh» (общий помощник).
   useEffect(() => {
     const vacancyId = candidate?.vacancyId
-    if (!open || !vacancyId) {
+    const reset = () => {
       setDemoQuickBlocks([])
       setDemoQuickBaseUrl("")
-      return
+      setFunnelExtras({ hasTest: false, vacancyUrl: null, hasSchedule: false })
     }
+    if (!open || !vacancyId) { reset(); return }
     let cancelled = false
     fetch(`/api/modules/hr/vacancies/${vacancyId}/demo-blocks`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { demoBlocks?: DemoButtonBlock[]; baseUrl?: string } | null) => {
+      .then((data: ({ demoBlocks?: DemoButtonBlock[]; baseUrl?: string } & Partial<FunnelLinkExtras>) | null) => {
         if (cancelled) return
         setDemoQuickBlocks(Array.isArray(data?.demoBlocks) ? data!.demoBlocks : [])
         setDemoQuickBaseUrl(typeof data?.baseUrl === "string" ? data!.baseUrl : "")
+        setFunnelExtras({
+          hasTest: data?.hasTest === true,
+          vacancyUrl: typeof data?.vacancyUrl === "string" ? data!.vacancyUrl : null,
+          hasSchedule: data?.hasSchedule === true,
+        })
       })
-      .catch(() => {
-        if (!cancelled) { setDemoQuickBlocks([]); setDemoQuickBaseUrl("") }
-      })
+      .catch(() => { if (!cancelled) reset() })
     return () => { cancelled = true }
   }, [open, candidate?.vacancyId])
 
@@ -2833,29 +2838,34 @@ export function CandidateDrawer({
                       {/* Поле ввода при живом hh, иначе — плашка «не подключён» */}
                       {hhConnected ? (
                       <div className="pt-2 mt-1 border-t border-border/40 space-y-2">
-                        {/* Быстрая вставка персональной демо-ссылки кандидата
-                            (/demo/{длинный token}?block=<id>). Кнопки ДИНАМИЧЕСКИ по
-                            демо-блокам вакансии: одно демо → «Демо», несколько →
-                            «Демо 1»…«Демо N». Серая — если у блока нет контента. */}
-                        {demoQuickBlocks.length > 0 && candidate?.token && (
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">
-                              <LinkIcon className="w-3 h-3" /> Ссылка:
-                            </span>
-                            {buildDemoLinkButtons(demoQuickBlocks, candidate.token, demoQuickBaseUrl).map((b) => (
-                              <button
-                                key={b.kind}
-                                type="button"
-                                disabled={hhSending || b.disabled}
-                                onClick={() => insertIntoHhDraft(b.url)}
-                                title={b.disabled ? "У этого демо-блока пока нет контента" : `Вставить ссылку: ${b.url}`}
-                                className="text-[10px] px-2 py-0.5 rounded-full border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                              >
-                                {b.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                        {/* Быстрая вставка персональных ссылок ВОРОНКИ: Демо 1..N
+                            (/demo/{длинный token}?block=<id>) + Тест (/test/{token}),
+                            Вакансия (hh-ссылка), Интервью (/schedule/{token}).
+                            Пункт показываем ТОЛЬКО если этап есть у вакансии
+                            (владелец: «если нет — скрываем»); пустой демо-блок серый. */}
+                        {candidate?.token && (() => {
+                          const linkButtons = buildFunnelLinkButtons(demoQuickBlocks, funnelExtras, candidate.token, demoQuickBaseUrl)
+                          if (linkButtons.length === 0) return null
+                          return (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">
+                                <LinkIcon className="w-3 h-3" /> Ссылка:
+                              </span>
+                              {linkButtons.map((b) => (
+                                <button
+                                  key={b.key}
+                                  type="button"
+                                  disabled={hhSending || b.disabled}
+                                  onClick={() => insertIntoHhDraft(b.url)}
+                                  title={b.disabled ? "У этого демо-блока пока нет контента" : `Вставить ссылку: ${b.url}`}
+                                  className="text-[10px] px-2 py-0.5 rounded-full border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  {b.label}
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                         {/* «Поправка»: удалить сообщение в hh нельзя — отправляем корректирующее вдогонку */}
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">
