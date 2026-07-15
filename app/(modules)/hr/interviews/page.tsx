@@ -117,6 +117,17 @@ function migrateInterviewStages(list: Stage[]): { stages: Stage[]; changed: bool
     return true
   })
   let result = deduped
+  // «Прошёл» добираем ТАК ЖЕ, как «Отказ»/«Решение» — раньше он появлялся ТОЛЬКО
+  // из перенастройки самодельной стадии (ветка выше), и компания без такой
+  // стадии оставалась без него навсегда. Это не теория: набор, сохранённый
+  // кодом 14.07 (upcoming/today/past/cancelled), «Прошёл» не содержит, а его
+  // PATCH-ит на сервер любое действие HR в настройках стадий. Без «Прошёл»
+  // hasOutcomeStage=false — и с карточек пропадает блок «Исход интервью».
+  // Отдельно важно для ОТКАТА: код 14.07 стрипает outcome_passed как retired,
+  // поэтому rollback на .next-prev вырезал бы перенастроенную стадию, а
+  // повторный выкат уже не нашёл бы мануальную «Прошёл» для конверсии —
+  // таб терялся бы необратимо. Фолбэк снимает и это.
+  if (!result.some(s => s.condition === "outcome_passed")) result = [...result, PASSED_STAGE]
   if (!result.some(s => s.condition === "outcome_rejected")) result = [...result, REJECTED_STAGE]
   if (!result.some(s => s.condition === "stage_decision")) result = [...result, DECISION_STAGE]
   // «Отменённые» — всегда последний таб. У компаний, сохранивших список ДО
