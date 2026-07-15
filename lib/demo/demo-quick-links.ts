@@ -78,3 +78,72 @@ export function buildDemoLinkButtons(
     disabled: !b.hasContent,
   }))
 }
+
+// ─── Полный набор ссылок воронки (демо + тест + вакансия + интервью) ──────────
+//
+// Инлайн-чат кандидата (candidate-drawer): ряд «Ссылка:» показывает ВСЕ этапы
+// воронки, а не только демо. Правило владельца: пункт показываем ТОЛЬКО если
+// этап реально есть у вакансии (нет тест-блока → нет «Тест»; нет hh-ссылки →
+// нет «Вакансия»; пустой демо-блок → его «Демо N» серый). Никаких заглушек на
+// отсутствующие этапы.
+
+/** Наличие не-демо этапов воронки у вакансии (с сервера, см. vacancy-demo-blocks). */
+export interface FunnelLinkExtras {
+  /** У вакансии есть активный тест-блок → показываем «Тест» (/test/{token}). */
+  hasTest: boolean
+  /** Публичная ссылка на вакансию (как «Вакансия» в hh-broadcast). null = скрыть. */
+  vacancyUrl: string | null
+  /** Доступна самозапись на интервью → показываем «Интервью» (/schedule/{token}). */
+  hasSchedule: boolean
+}
+
+/** Готовая кнопка ссылки воронки для инлайн-чата. */
+export interface FunnelLinkButton {
+  /** Идентификатор типа: `demo${N}` | test | vacancy | interview. */
+  key: string
+  /** Подпись кнопки. */
+  label: string
+  /** Ссылка для вставки в поле «Написать кандидату». */
+  url: string
+  /** true = кнопка серая (пустой демо-блок). Тест/Вакансия/Интервью — всегда false. */
+  disabled: boolean
+}
+
+/**
+ * Персональная ссылка кандидата вида {baseUrl}/{path}/{token} (тест — /test,
+ * интервью-самозапись — /schedule). ДЛИННЫЙ token (как у демо), обе публичные
+ * страницы принимают его напрямую.
+ */
+export function buildCandidatePathLink(baseUrl: string, path: string, token: string): string {
+  const base = (baseUrl || "").replace(/\/+$/, "")
+  return `${base}/${path}/${token}`
+}
+
+/**
+ * Полный набор быстрых ссылок воронки для инлайн-чата: демо-блоки (динамически,
+ * пустые — серые) + Тест / Вакансия / Интервью по НАЛИЧИЮ (extras). Отсутствующие
+ * этапы не добавляются вовсе (владелец: «если нет — скрываем»).
+ */
+export function buildFunnelLinkButtons(
+  demoBlocks: ReadonlyArray<DemoButtonBlock>,
+  extras: FunnelLinkExtras,
+  token: string,
+  baseUrl: string,
+): FunnelLinkButton[] {
+  const buttons: FunnelLinkButton[] = buildDemoLinkButtons(demoBlocks, token, baseUrl).map((b) => ({
+    key: b.kind,
+    label: b.label,
+    url: b.url,
+    disabled: b.disabled,
+  }))
+  if (extras.hasTest) {
+    buttons.push({ key: "test", label: "Тест", url: buildCandidatePathLink(baseUrl, "test", token), disabled: false })
+  }
+  if (extras.vacancyUrl) {
+    buttons.push({ key: "vacancy", label: "Вакансия", url: extras.vacancyUrl, disabled: false })
+  }
+  if (extras.hasSchedule) {
+    buttons.push({ key: "interview", label: "Интервью", url: buildCandidatePathLink(baseUrl, "schedule", token), disabled: false })
+  }
+  return buttons
+}

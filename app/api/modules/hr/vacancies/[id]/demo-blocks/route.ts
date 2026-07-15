@@ -3,14 +3,16 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
-import { getVacancyDemoButtonBlocks } from "@/lib/demo/vacancy-demo-blocks"
+import { getVacancyDemoButtonBlocks, getVacancyChatLinkExtras } from "@/lib/demo/vacancy-demo-blocks"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 
 // GET /api/modules/hr/vacancies/[id]/demo-blocks
 //
-// Демо-блоки вакансии для быстрых кнопок «Демо 1»…«Демо N» в чате кандидата
-// (candidate-drawer). Единый формат ссылки строит клиент из этих блоков +
-// длинного token кандидата (см. lib/demo/demo-quick-links.ts).
+// Быстрые ссылки воронки для инлайн-чата кандидата (candidate-drawer): демо-блоки
+// «Демо 1»…«Демо N» + наличие Тест/Вакансия/Интервью (extras). Клиент строит
+// единый набор кнопок из этих данных + длинного token кандидата
+// (см. lib/demo/demo-quick-links.ts buildFunnelLinkButtons). Правило владельца:
+// пункт показываем только если этап реально есть у вакансии.
 // Тенант-изоляция: вакансия должна принадлежать компании пользователя.
 export async function GET(
   _req: NextRequest,
@@ -27,8 +29,11 @@ export async function GET(
       .limit(1)
     if (!vac) return apiError("Vacancy not found", 404)
 
-    const demoBlocks = await getVacancyDemoButtonBlocks(id)
-    return apiSuccess({ demoBlocks, baseUrl: getAppBaseUrl() })
+    const [demoBlocks, extras] = await Promise.all([
+      getVacancyDemoButtonBlocks(id),
+      getVacancyChatLinkExtras(id),
+    ])
+    return apiSuccess({ demoBlocks, baseUrl: getAppBaseUrl(), ...extras })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[vacancy demo-blocks GET]", err)

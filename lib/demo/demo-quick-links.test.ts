@@ -8,6 +8,8 @@ import {
   demoButtonLabel,
   buildDemoLink,
   buildDemoLinkButtons,
+  buildCandidatePathLink,
+  buildFunnelLinkButtons,
   type DemoButtonBlock,
 } from "@/lib/demo/demo-quick-links"
 
@@ -53,4 +55,47 @@ test("buildDemoLinkButtons: один демо-блок → кнопка «Дем
   assert.equal(buttons.length, 1)
   assert.equal(buttons[0].label, "Демо")
   assert.equal(buttons[0].url, "https://company24.pro/demo/TOK?block=only")
+})
+
+test("buildCandidatePathLink: {base}/{path}/{token}, срез хвостового слэша", () => {
+  assert.equal(buildCandidatePathLink("https://company24.pro", "test", "TOK"), "https://company24.pro/test/TOK")
+  assert.equal(buildCandidatePathLink("https://company24.pro/", "schedule", "TOK"), "https://company24.pro/schedule/TOK")
+})
+
+test("buildFunnelLinkButtons: демо + все этапы — единый набор в правильном порядке", () => {
+  const buttons = buildFunnelLinkButtons(
+    [{ id: "d1", index: 1, hasContent: true }, { id: "d2", index: 2, hasContent: false }],
+    { hasTest: true, vacancyUrl: "https://hh.ru/vacancy/123", hasSchedule: true },
+    "TOK",
+    "https://company24.pro",
+  )
+  assert.deepEqual(buttons.map((b) => b.key), ["demo1", "demo2", "test", "vacancy", "interview"])
+  assert.deepEqual(buttons.map((b) => b.label), ["Демо 1", "Демо 2", "Тест", "Вакансия", "Интервью"])
+  assert.deepEqual(buttons.map((b) => b.disabled), [false, true, false, false, false])
+  assert.equal(buttons.find((b) => b.key === "test")!.url, "https://company24.pro/test/TOK")
+  assert.equal(buttons.find((b) => b.key === "vacancy")!.url, "https://hh.ru/vacancy/123")
+  assert.equal(buttons.find((b) => b.key === "interview")!.url, "https://company24.pro/schedule/TOK")
+})
+
+test("buildFunnelLinkButtons: отсутствующие этапы НЕ добавляются (владелец: «если нет — скрываем»)", () => {
+  const buttons = buildFunnelLinkButtons(
+    [{ id: "d1", index: 1, hasContent: true }],
+    { hasTest: false, vacancyUrl: null, hasSchedule: true },
+    "TOK",
+    "https://company24.pro",
+  )
+  // Нет теста и нет hh-вакансии → в наборе только Демо + Интервью.
+  // Ключ демо всегда `demo${index}` (метка при одном блоке — «Демо»).
+  assert.deepEqual(buttons.map((b) => b.key), ["demo1", "interview"])
+  assert.equal(buttons[0].label, "Демо")
+})
+
+test("buildFunnelLinkButtons: нет демо и нет этапов → пустой набор (кнопок нет)", () => {
+  const buttons = buildFunnelLinkButtons(
+    [],
+    { hasTest: false, vacancyUrl: null, hasSchedule: false },
+    "TOK",
+    "https://company24.pro",
+  )
+  assert.equal(buttons.length, 0)
 })
