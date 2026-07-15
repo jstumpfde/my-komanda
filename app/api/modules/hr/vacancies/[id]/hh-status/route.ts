@@ -14,8 +14,8 @@
 //          level: 'ok'|'warn'|'error'|'none', message }
 //   level:
 //     none  — hh не привязан (нет hhVacancyId) → бейдж не показываем
-//     error — hhArchived ИЛИ есть invalid_vacancy за 24ч
-//     warn  — есть обычные failed-отправки за 24ч (но не фатально)
+//     error — invalid_vacancy за 24ч (hh активно блокирует переписку = аномалия)
+//     warn  — hhArchived (штатный конец жизни, ~30 дн) ИЛИ обычные failed за 24ч
 //     ok    — привязан, не архив, отправки идут
 import { NextRequest } from "next/server"
 import { and, eq, gte, count, sql } from "drizzle-orm"
@@ -87,12 +87,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     let level: Level
     let message: string
-    if (archived) {
-      level = "error"
-      message = "Вакансия в архиве hh — сообщения кандидатам не отправляются"
-    } else if (invalidVacancyRecent > 0) {
+    // Порядок важен: сначала АНОМАЛИЯ (hh активно блокирует переписку), потом
+    // штатный конец жизни (архив). Архив НЕ красный (Юрий 15.07): любая
+    // hh-вакансия уходит в архив через ~30 дней — это нормальный жизненный цикл,
+    // а не поломка. Красный на каждой вакансии старше месяца превращается в
+    // обои, которые перестают читать, и настоящая ошибка (invalid_vacancy)
+    // теряется в шуме. Последствие архива (сообщения не уходят) остаётся —
+    // но янтарным, текст тултипа не меняем.
+    if (invalidVacancyRecent > 0) {
       level = "error"
       message = "hh блокирует переписку по вакансии — сообщения не доходят"
+    } else if (archived) {
+      level = "warn"
+      message = "Вакансия в архиве hh — сообщения кандидатам не отправляются"
     } else if (sendFailedRecent > 0) {
       level = "warn"
       message = "hh: часть сообщений не доходит"

@@ -3270,7 +3270,11 @@ export default function VacancyPage() {
                       // Пост-найм стадия (канон lib/stages.ts, только >0):
                       // «Выход на работу» (started_work) — подмножество «нанято»
                       // (счётчик «нанято» = hired + started_work, не ломаем).
-                      if ((s?.startedWork ?? 0) > 0) push("startedWork",
+                      // Показываем ТОЛЬКО когда несёт информацию: если все нанятые
+                      // уже вышли (startedWork === hired), цифра дублирует «нанято»
+                      // («5 нанято · 5 работает») — шум (Юрий 15.07). Расходятся
+                      // (нанят, но ещё не вышел) → показываем, это уже сигнал.
+                      if ((s?.startedWork ?? 0) > 0 && s!.startedWork !== s!.hired) push("startedWork",
                         <UITooltip>
                           <TooltipTrigger asChild>
                             {clickableLabel("startedWork", s!.startedWork, "работает")}
