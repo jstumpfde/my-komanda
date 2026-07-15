@@ -67,28 +67,70 @@ const INTERVIEW_DECISION_OPTIONS: { id: NonNullable<InterviewDecision>; label: s
 // живут только здесь, из активных табов (Предстоящие/Сегодня/Прошедшие) они
 // исключены (см. lib/interviews/stage-filters.ts). Дефолтная (не удаляется).
 const CANCELLED_STAGE: Stage = { id: "cancelled", name: "Отменённые", emoji: "❌", color: "#9ca3af", condition: "status_cancelled", isDefault: true }
+// «Прошёл»/«Отказ» — реальный исход интервью (calendar_events.interview_decision,
+// см. lib/interviews/stage-filters.ts). «Решение» — кандидат сейчас на стадии
+// воронки "decision" (lib/stages.ts PLATFORM_STAGES). Гибридные табы, решение
+// владельца 15.07 (см. migrateInterviewStages ниже).
+const PASSED_STAGE: Stage = { id: "passed", name: "Прошёл", emoji: "🏆", color: "#eab308", condition: "outcome_passed", isDefault: true }
+const REJECTED_STAGE: Stage = { id: "rejected", name: "Отказ", emoji: "⛔", color: "#ef4444", condition: "outcome_rejected", isDefault: true }
+const DECISION_STAGE: Stage = { id: "decision", name: "Решение", emoji: "⚖️", color: "#8b5cf6", condition: "stage_decision", isDefault: true }
 
 const DEFAULT_STAGES: Stage[] = [
   { id: "upcoming", name: "Предстоящие", emoji: "📅", color: "#3b82f6", condition: "date_after", isDefault: true },
   { id: "today", name: "Сегодня", emoji: "🌅", color: "#f59e0b", condition: "date_today", isDefault: true },
   { id: "past", name: "Прошедшие", emoji: "✅", color: "#22c55e", condition: "date_before", isDefault: true },
+  PASSED_STAGE,
+  REJECTED_STAGE,
+  DECISION_STAGE,
   CANCELLED_STAGE,
 ]
 
-// Владелец 14.07 свёл раздел «Интервью» к 5 табам: Все + Предстоящие + Сегодня
-// + Прошедшие + Отменённые. Устаревшие «Повторные»/«Прошёл» (condition
-// repeat_interview / outcome_passed) убраны — они путали (исход интервью теперь
-// отмечается прямо на карточке через «Отметить исход», см. InterviewOutcomeMenu).
-// Миграция: стрипаем эти два condition-типа у компаний, сохранивших стадии
-// раньше, и гарантируем дефолтный таб «Отменённые». changed=true → перезаписать
-// сохранённый список (одноразово, как legacy-миграция).
-const RETIRED_CONDITIONS: StageCondition[] = ["repeat_interview", "outcome_passed"]
+// 14.07: владелец сначала свёл раздел к 5 табам (Все + Предстоящие + Сегодня +
+// Прошедшие + Отменённые), убрав «Повторные»/«Прошёл» — путали. 15.07 владелец
+// вернул исход/решение гибридным набором табов (см. DEFAULT_STAGES выше:
+// «Прошёл»/«Отказ»/«Решение»). Миграция сохранённых на сервере стадий теперь:
+//  - «Повторные» (condition repeat_interview ИЛИ имя «Повторные») — концепт
+//    по-прежнему выпилен, чистим безусловно.
+//  - Самодельная стадия «Прошёл» с condition="manual" (кейс Revoluterra —
+//    HR завёл свой таб, но вручную никто не проставлял тег, поэтому вечный
+//    0) — НЕ удаляем, а перенастраиваем на condition="outcome_passed",
+//    сохранив id/emoji/color/название: таб наконец начинает показывать
+//    реальные данные вместо ручной разметки, которой не было.
+//  - Догоняем «Отказ»/«Решение»/«Отменённые», если компания сохраняла список
+//    стадий ДО того, как эти три появились в DEFAULT_STAGES.
+// changed вычисляется честным сравнением содержимого (JSON.stringify), а не
+// по длине массива — перенастройка condition длину не меняет, но список всё
+// равно должен уйти на сервер через PATCH (иначе миграция не запишется).
 function migrateInterviewStages(list: Stage[]): { stages: Stage[]; changed: boolean } {
-  const stripped = list.filter(s => !RETIRED_CONDITIONS.includes(s.condition))
-  const withCancelled = stripped.some(s => s.condition === "status_cancelled")
-    ? stripped
-    : [...stripped, CANCELLED_STAGE]
-  return { stages: withCancelled, changed: withCancelled.length !== list.length }
+  const withoutRepeat = list.filter(s => s.condition !== "repeat_interview" && s.name !== "Повторные")
+  const reconfigured = withoutRepeat.map(s =>
+    s.name === "Прошёл" && s.condition === "manual" ? { ...s, condition: "outcome_passed" as StageCondition } : s
+  )
+  // Дедуп: если после перенастройки «Прошёл» на сервере оказалось два
+  // outcome_passed-таба (самодельный + когда-то уже сохранённый дефолтный),
+  // оставляем только первый по порядку.
+  let seenPassed = false
+  const deduped = reconfigured.filter(s => {
+    if (s.condition !== "outcome_passed") return true
+    if (seenPassed) return false
+    seenPassed = true
+    return true
+  })
+  let result = deduped
+  if (!result.some(s => s.condition === "outcome_rejected")) result = [...result, REJECTED_STAGE]
+  if (!result.some(s => s.condition === "stage_decision")) result = [...result, DECISION_STAGE]
+  // «Отменённые» — всегда последний таб. У компаний, сохранивших список ДО
+  // появления «Отказ»/«Решение» (кейс Revoluterra), отменённые лежали в конце
+  // сохранённого массива, и дописанные новые табы встали бы за ними — красный
+  // крестик оказался бы в середине таб-бара. Поэтому не просто добираем, а
+  // переносим существующий (возможно, переименованный HR) в хвост.
+  const existingCancelled = result.find(s => s.condition === "status_cancelled")
+  result = [
+    ...result.filter(s => s.condition !== "status_cancelled"),
+    existingCancelled ?? CANCELLED_STAGE,
+  ]
+  const changed = JSON.stringify(result) !== JSON.stringify(list)
+  return { stages: result, changed }
 }
 
 // Задача 1c (13.07): стадии раньше жили ТОЛЬКО в localStorage браузера
@@ -111,13 +153,15 @@ function loadLocalStagesLegacy(): Stage[] | null {
 }
 
 // Условия, доступные HR при создании/редактировании кастомной стадии.
-// «Повторное интервью»/«Исход: прошёл» (repeat_interview/outcome_passed)
-// НЕ предлагаем — раздел сведён к 5 табам, исход отмечается на карточке
-// (см. миграцию migrateInterviewStages и InterviewOutcomeMenu). Типы условий
-// остаются в lib/interviews/stage-filters.ts для обратной совместимости.
+// «Повторное интервью» (repeat_interview) по-прежнему НЕ предлагаем — концепт
+// выпилен 14.07 (см. миграцию migrateInterviewStages). «Исход: прошёл/отказ»
+// и «Стадия: Решение» (outcome_passed/outcome_rejected/stage_decision),
+// наоборот, ПРЕДЛАГАЕМ с 15.07 — гибридные табы, решение владельца (см.
+// DEFAULT_STAGES).
 const CONDITION_LABELS: Partial<Record<StageCondition, string>> = {
   manual: "Вручную", date_before: "Прошедшие", date_today: "Сегодня", date_after: "Предстоящие",
   status_confirmed: "Статус: Подтверждено", status_pending: "Статус: Ожидает", status_cancelled: "Статус: Отменено",
+  outcome_passed: "Исход: прошёл", outcome_rejected: "Исход: отказ", stage_decision: "Стадия: Решение",
 }
 
 const EMOJI_OPTIONS = ["📅", "🌅", "✅", "❌", "⏳", "🔥", "⭐", "📞", "🎯", "🏆", "🔔", "💼", "🎥", "🤝"]
@@ -419,7 +463,11 @@ function InterviewTagMenu({
 
 // Стадии, к которым HR может двигать кандидата ПОСЛЕ интервью (канон lib/stages.ts,
 // sortOrder > interview). Порядок — как в воронке.
-const NEXT_STAGE_SLUGS: StageSlug[] = ["reference_check", "decision", "offer_sent", "hired"]
+// «Рекомендации» (reference_check) убраны из меню 15.07 по решению владельца —
+// стадия не нужна в рабочем процессе. Из канона lib/stages.ts слаг НЕ удаляем:
+// на нём стоят живые кандидаты, он используется в блоках конструктора воронки
+// и кронах. Здесь только перестаём предлагать переход туда.
+const NEXT_STAGE_SLUGS: StageSlug[] = ["decision", "offer_sent", "hired"]
 
 // Порядковый номер стадии в каноне (для гарда «не откатывать назад»). Легаси/
 // неизвестные слаги (talent_pool и т.п.) → -1 (в гарде форвард-переходов не участвуют).
@@ -521,7 +569,10 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   // потому что эффект загрузки company-level настроек чуть ниже пишет в них
   // через setStages при первом рендере.
   const [stages, setStages] = useState<Stage[]>(DEFAULT_STAGES)
-  const [activeStage, setActiveStage] = useState<string>("all")
+  // Таб по умолчанию — «Сегодня» (решение владельца 15.07, было "all"). Если
+  // у компании кастомный набор без стадии "today" — currentStage ниже падает
+  // на stages[0], фоллбэк не ломается.
+  const [activeStage, setActiveStage] = useState<string>("today")
   // Длительность по виду интервью из настроек компании (звонок/онлайн/офис).
   const [methodDurations, setMethodDurations] = useState<Record<string, number>>({})
   // 1a/1c: ручные назначения кастомного тега на интервью — persist на сервере
@@ -1147,14 +1198,20 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
 
   // п.2: интервью-список для вида «Список» = реальные события + виртуальные
   // «Интервью проведено (по стадии)» для кандидатов final_decision/decision/hired
-  // без ПРОШЕДШЕГО события type=interview. Виртуальная карта датируется «сейчас»,
+  // без ПРОШЕДШЕГО события type=interview. Виртуальная карта датируется «вчера»,
   // чтобы попадать в «Прошедшие» (date_before) и не путаться с «Предстоящими».
+  // 15.07: раньше бралось "сейчас минус секунда". С тех пор как «Сегодня» стало
+  // ВЕСЬ день целиком (см. lib/interviews/stage-filters.ts date_today), такая
+  // дата всплывала бы в «Сегодня» — а виртуальной карте там не место: она не
+  // привязана к реальному сегодняшнему времени, это лишь отметка «интервью
+  // было, судя по стадии». Сутки назад — гарантированно мимо «Сегодня», при
+  // этом в «Прошедшие» она попадает как и прежде.
   const interviewsForList = useMemo(() => {
     if (passedByStageCandidates.length === 0) return visibleInterviews
     const candidateIdsWithPastEvent = new Set(
       visibleInterviews.filter(iv => iv.candidateId && iv.date < new Date()).map(iv => iv.candidateId as string),
     )
-    const virtualNow = new Date(Date.now() - 1000) // на секунду в прошлом — гарантированно "до сегодня"
+    const virtualNow = new Date(Date.now() - 24 * 3600 * 1000) // сутки назад — гарантированно "не сегодня"
     const virtuals: Interview[] = passedByStageCandidates
       .filter(c => !candidateIdsWithPastEvent.has(c.id))
       .map(c => ({
@@ -1175,24 +1232,32 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   // видит лишний UI на каждой карточке.
   const manualStages = useMemo(() => stages.filter(s => s.condition === "manual"), [stages])
   const hasOutcomeStage = useMemo(() => stages.some(s => s.condition === "outcome_passed"), [stages])
+  // "stage_decision" (гибридные табы 15.07) фильтрует по стадии кандидата в
+  // воронке — stage-filters.ts называет это поле candidateStage (модуль не
+  // завязан на конкретную форму Interview), здесь просто прокидываем уже
+  // имеющееся Interview.stage под этим именем.
+  const interviewsForFilter = useMemo(
+    () => interviewsForList.map(iv => ({ ...iv, candidateStage: iv.stage })),
+    [interviewsForList],
+  )
   const filtered = useMemo(() => {
     if (activeStage === "all") return [...interviewsForList].sort((a, b) => a.date.getTime() - b.date.getTime())
     if (!currentStage) return []
-    const result = filterByStageCondition(interviewsForList, currentStage.condition, {
+    const result = filterByStageCondition(interviewsForFilter, currentStage.condition, {
       manualIds: new Set(manualAssignments[currentStage.id] ?? []),
     })
     return result.sort((a, b) => currentStage.condition === "date_before" ? b.date.getTime() - a.date.getTime() : a.date.getTime() - b.date.getTime())
-  }, [activeStage, currentStage, interviewsForList, manualAssignments])
+  }, [activeStage, currentStage, interviewsForList, interviewsForFilter, manualAssignments])
 
   const stageCounts = useMemo(() => {
     const m: Record<string, number> = {}
     stages.forEach(s => {
-      m[s.id] = filterByStageCondition(interviewsForList, s.condition, {
+      m[s.id] = filterByStageCondition(interviewsForFilter, s.condition, {
         manualIds: new Set(manualAssignments[s.id] ?? []),
       }).length
     })
     return m
-  }, [stages, interviewsForList, manualAssignments])
+  }, [stages, interviewsForFilter, manualAssignments])
 
   const startEdit = (stage: Stage) => {
     setEditingId(stage.id); setEditName(stage.name); setEditEmoji(stage.emoji); setEditColor(stage.color); setEditCondition(stage.condition); setAddMode(false)
@@ -1372,12 +1437,19 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               {view === "list" && (
                 <div className="space-y-3">
                   {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Нет интервью</p>}
-                  {filtered.map(iv => (
+                  {filtered.map(iv => {
+                    // п.7 (15.07, решение владельца): «Сегодня» теперь весь день целиком
+                    // (см. lib/interviews/stage-filters.ts date_today) — идущее/будущее и уже
+                    // завершившееся сегодня оказываются в одном табе. Уже завершившееся
+                    // (endAt < now) помечаем приглушённо, чтобы визуально не путать с
+                    // предстоящим. Только таб «Сегодня» и только вид «Список».
+                    const isEndedToday = activeStage === "today" && !iv.byStageOnly && iv.endAt < new Date()
+                    return (
                     <Card key={iv.id} className={cn("overflow-hidden transition-colors hover:border-primary/40 cursor-pointer", iv.byStageOnly && "border-dashed")} onClick={() => iv.candidateId ? openCandidate(iv.candidateId) : toast.info("Кандидат не привязан к записи")}>
                       <CardContent className="p-0">
                         <div className="flex items-stretch">
                           {/* Дата/время */}
-                          <div className="flex flex-col items-center justify-center min-w-[68px] bg-muted/60 py-3 px-3 border-r">
+                          <div className={cn("flex flex-col items-center justify-center min-w-[68px] bg-muted/60 py-3 px-3 border-r", isEndedToday && "opacity-50")}>
                             {iv.byStageOnly ? (
                               <UserCheck className="w-5 h-5 text-muted-foreground" />
                             ) : (
@@ -1397,6 +1469,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                               ) : (
                                 <Badge variant="outline" className={cn("text-[10px]", STATUS_STYLES[iv.status])}>{iv.status}</Badge>
                               )}
+                              {isEndedToday && <Badge variant="outline" className="text-[10px] text-muted-foreground">прошло</Badge>}
                               {iv.stage && <Badge variant="secondary" className="text-[10px] font-normal">{getStageLabel(iv.stage)}</Badge>}
                               {/* Бейдж прогресса демо — как на карточке кандидата (candidate-card.tsx). */}
                               {!iv.byStageOnly && (() => {
@@ -1503,7 +1576,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                  )})}
                 </div>
               )}
 
