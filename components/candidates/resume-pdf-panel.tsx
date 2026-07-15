@@ -117,17 +117,13 @@ export function ResumePdfPanel({ candidateId, candidateName, open, onOpenChange 
           expanded ? "max-w-none sm:max-w-none w-screen" : "sm:max-w-3xl",
         )}
       >
-        {/* Развернуть на весь экран — левее стандартного крестика Radix,
-            визуально копирует ту же кнопку у карточки кандидата. */}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          title={expanded ? "Свернуть панель" : "Развернуть на весь экран"}
-          className="absolute right-12 top-4 z-20 inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        </button>
-
+        {/* Все три кнопки — одним рядом в шапке (правка владельца 15.07).
+            Раньше «развернуть» висела отдельно, абсолютом на right-12, и
+            печать из этого ряда наезжала на неё: ряд заканчивался в 32px от
+            края (mr-8), а кнопка разворота занимала 48-76px — пересечение
+            неизбежно. Порядок — как просил владелец: скачать → печать →
+            развернуть. mr-8 оставляем: это зазор под штатный крестик Radix
+            (absolute right-4), иначе теперь наезжали бы на него. */}
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0 flex-row items-start justify-between gap-4 space-y-0">
           <div className="min-w-0">
             <SheetTitle className="truncate">{candidateName || "Кандидат"}</SheetTitle>
@@ -148,6 +144,14 @@ export function ResumePdfPanel({ candidateId, candidateName, open, onOpenChange 
               className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               <Printer className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              title={expanded ? "Свернуть панель" : "Развернуть на весь экран"}
+              className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
           </div>
         </SheetHeader>
