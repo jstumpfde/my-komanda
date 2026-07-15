@@ -16,10 +16,12 @@
 // 15.07 (гибридные табы, решение владельца): добавлены "outcome_rejected"
 // (тот же interview_decision, но "reject") и "stage_decision" (кандидат СЕЙЧАС
 // стоит на стадии воронки "decision" — lib/stages.ts PLATFORM_STAGES). Заодно
-// в этот же день переработана логика "Сегодня"/"Прошедшие" (см. FilterableInterview
-// и case "date_today"/"date_before" ниже) — раньше уже завершившееся сегодня
-// интервью выпадало из "Сегодня" (Revoluterra: 7 интервью на сегодня, таб
-// показывал 2-3), теперь "Сегодня" = весь день целиком, без дублей в "Прошедшие".
+// в этот же день переработана логика "Сегодня" (см. case "date_today" ниже) —
+// раньше уже завершившееся сегодня интервью выпадало из "Сегодня" (Revoluterra:
+// 7 интервью на сегодня, таб показывал 2-3), теперь "Сегодня" = весь день целиком.
+// "Прошедшие" при этом НАМЕРЕННО включает и сегодняшние завершившиеся (владелец
+// 15.07: «Прошедшие = должно дублироваться прошедшие») — одно интервью видно
+// и в "Сегодня", и в "Прошедшие". Это не баг, дубль сделан осознанно.
 //
 // Юнит-тесты: lib/interviews/stage-filters.test.ts (pnpm exec tsx --test).
 
@@ -57,10 +59,10 @@ export interface FilterableInterview {
   id: string
   candidateId: string | null
   date: Date            // startAt интервью
-  // Конец интервью. Нужен «Прошедшим» (14.07 → переработано 15.07):
-  // «Прошедшие» = endAt < now И это НЕ сегодня (см. case "date_before") —
-  // сегодняшние завершившиеся остаются в «Сегодня», без дублей. Опционален
-  // для обратной совместимости — при отсутствии берётся date.
+  // Конец интервью. Нужен «Прошедшим»: «Прошедшие» = endAt < now, включая
+  // сегодняшние уже завершившиеся (владелец 15.07 — дубль с «Сегодня»
+  // намеренный). Опционален для обратной совместимости — при отсутствии
+  // берётся date.
   endAt?: Date
   status: string
   interviewDecision?: InterviewDecision
@@ -148,11 +150,13 @@ export function filterByStageCondition<T extends FilterableInterview>(
     //                   уже завершившиеся сегодня интервью выпадали из
     //                   «Сегодня» — у Revoluterra было 7 интервью на сегодня,
     //                   таб показывал 2-3). Включает уже завершившиеся.
-    //  • Прошедшие    — интервью ЗАВЕРШИЛОСЬ (endAt < now) И это НЕ сегодня —
-    //                   без дублей с «Сегодня» (то же решение 15.07).
+    //  • Прошедшие    — интервью ЗАВЕРШИЛОСЬ (endAt < now), ВКЛЮЧАЯ сегодняшние
+    //                   завершившиеся: владелец 15.07 «Прошедшие = должно
+    //                   дублироваться прошедшие». Одно интервью намеренно видно
+    //                   и в «Сегодня», и здесь — это не баг.
     case "date_after": return interviews.filter(iv => iv.date > now && iv.status !== CANCELLED_STATUS)
     case "date_today": return interviews.filter(iv => isSameDay(iv.date, now) && iv.status !== CANCELLED_STATUS)
-    case "date_before": return interviews.filter(iv => endOf(iv) < now && !isSameDay(iv.date, now) && iv.status !== CANCELLED_STATUS)
+    case "date_before": return interviews.filter(iv => endOf(iv) < now && iv.status !== CANCELLED_STATUS)
     case "status_confirmed": return interviews.filter(iv => iv.status === "Подтверждено")
     case "status_pending": return interviews.filter(iv => iv.status === "Ожидает")
     case "status_cancelled": return interviews.filter(iv => iv.status === "Отменено" || iv.status === "Не явился")
