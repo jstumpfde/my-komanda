@@ -51,6 +51,7 @@ import {
   Play,
   RotateCcw,
   Pencil,
+  Link as LinkIcon,
   Trash2,
   EyeOff,
   Eye,
@@ -106,6 +107,8 @@ import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
 import { getBlockScore } from "@/lib/demo/block-scores"
+import { buildDemoLinkButtons, type DemoButtonBlock } from "@/lib/demo/demo-quick-links"
+import { linkifyText } from "@/lib/linkify"
 import {
   generateCriteriaFromSpec,
   computeAutoScore,
@@ -1047,6 +1050,27 @@ export function CandidateDrawer({
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
   const hhInputRef = useRef<HTMLTextAreaElement | null>(null)
+  // Быстрая вставка демо-ссылок: демо-блоки вакансии (динамически) + базовый URL.
+  // Единый формат /demo/{длинный token}?block=<id> строит buildDemoLinkButtons.
+  const [demoQuickBlocks, setDemoQuickBlocks] = useState<DemoButtonBlock[]>([])
+  const [demoQuickBaseUrl, setDemoQuickBaseUrl] = useState("")
+  // Вставить фрагмент (ссылку) в поле «Написать кандидату» — в позицию курсора,
+  // иначе в конец. Курсор ставим после вставленного текста.
+  const insertIntoHhDraft = useCallback((snippet: string) => {
+    const el = hhInputRef.current
+    setHhDraft((prev) => {
+      if (!el) return prev ? `${prev.trimEnd()} ${snippet}` : snippet
+      const start = el.selectionStart ?? prev.length
+      const end = el.selectionEnd ?? prev.length
+      const next = prev.slice(0, start) + snippet + prev.slice(end)
+      requestAnimationFrame(() => {
+        el.focus()
+        const pos = start + snippet.length
+        el.setSelectionRange(pos, pos)
+      })
+      return next
+    })
+  }, [])
   // «Изменить» отправленное: hh API НЕ даёт редактировать сообщение —
   // единственный честный способ — отправить поправку вдогонку. Клик по «Изменить»
   // подставляет корректирующий шаблон в поле ввода и ставит фокус; HR дополняет и шлёт.
@@ -1279,6 +1303,30 @@ export function CandidateDrawer({
       })
       .finally(() => setScorecardLoading(false))
   }, [candidate, candidateId])
+
+  // Демо-блоки вакансии для быстрых кнопок «Демо 1»…«Демо N» в чате кандидата.
+  // Тянем при открытии карточки/смене вакансии; порядок и формат — как в диалоге
+  // «Рассылка через hh» (общий источник, единый формат ссылки).
+  useEffect(() => {
+    const vacancyId = candidate?.vacancyId
+    if (!open || !vacancyId) {
+      setDemoQuickBlocks([])
+      setDemoQuickBaseUrl("")
+      return
+    }
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/demo-blocks`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { demoBlocks?: DemoButtonBlock[]; baseUrl?: string } | null) => {
+        if (cancelled) return
+        setDemoQuickBlocks(Array.isArray(data?.demoBlocks) ? data!.demoBlocks : [])
+        setDemoQuickBaseUrl(typeof data?.baseUrl === "string" ? data!.baseUrl : "")
+      })
+      .catch(() => {
+        if (!cancelled) { setDemoQuickBlocks([]); setDemoQuickBaseUrl("") }
+      })
+    return () => { cancelled = true }
+  }, [open, candidate?.vacancyId])
 
   // Автосейв на каждый тап критерия — пересчитывает autoScore на клиенте
   // (для мгновенного отклика UI) И отправляет на сервер (источник правды —
@@ -2722,7 +2770,7 @@ export function CandidateDrawer({
                                             : "bg-muted/60 text-foreground border border-border/40"
                                         )}
                                       >
-                                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                                        <p className="whitespace-pre-wrap break-words">{linkifyText(m.text)}</p>
                                         <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
                                           <span>
                                             {m.createdAt
@@ -2785,6 +2833,29 @@ export function CandidateDrawer({
                       {/* Поле ввода при живом hh, иначе — плашка «не подключён» */}
                       {hhConnected ? (
                       <div className="pt-2 mt-1 border-t border-border/40 space-y-2">
+                        {/* Быстрая вставка персональной демо-ссылки кандидата
+                            (/demo/{длинный token}?block=<id>). Кнопки ДИНАМИЧЕСКИ по
+                            демо-блокам вакансии: одно демо → «Демо», несколько →
+                            «Демо 1»…«Демо N». Серая — если у блока нет контента. */}
+                        {demoQuickBlocks.length > 0 && candidate?.token && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">
+                              <LinkIcon className="w-3 h-3" /> Ссылка:
+                            </span>
+                            {buildDemoLinkButtons(demoQuickBlocks, candidate.token, demoQuickBaseUrl).map((b) => (
+                              <button
+                                key={b.kind}
+                                type="button"
+                                disabled={hhSending || b.disabled}
+                                onClick={() => insertIntoHhDraft(b.url)}
+                                title={b.disabled ? "У этого демо-блока пока нет контента" : `Вставить ссылку: ${b.url}`}
+                                className="text-[10px] px-2 py-0.5 rounded-full border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                {b.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {/* «Поправка»: удалить сообщение в hh нельзя — отправляем корректирующее вдогонку */}
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">

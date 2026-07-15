@@ -17,6 +17,7 @@ import { Loader2, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { linkifyText } from "@/lib/linkify"
 
 interface HhMessage {
   id: string
@@ -148,7 +149,7 @@ export function HhChatThread({ hhResponseId, candidateName, className }: HhChatT
                       : "bg-muted/60 text-foreground border border-border/40",
                   )}
                 >
-                  <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                  <p className="whitespace-pre-wrap break-words">{linkifyText(m.text)}</p>
                   <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
                     <span>
                       {m.createdAt

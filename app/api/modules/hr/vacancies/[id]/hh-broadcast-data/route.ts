@@ -5,6 +5,7 @@ import { DEFAULT_SCHEDULE_INVITE_TEXT } from "@/lib/messaging/schedule-invite"
 import { candidates, vacancies, demos, hhResponses } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getVacancyLifecycle } from "@/lib/vacancies/lifecycle"
+import { getVacancyDemoButtonBlocks } from "@/lib/demo/vacancy-demo-blocks"
 import { deriveCandidateName } from "@/lib/candidate-name"
 import { pickGivenName } from "@/lib/messaging/candidate-name"
 import { getLearnedNamesSet } from "@/lib/messaging/learned-given-names"
@@ -59,6 +60,10 @@ export async function POST(
     const otherVacancies = otherVacRows
       .filter((v) => !!v.hhVacancyId && getVacancyLifecycle(v.status) !== "closed")
       .map((v) => ({ id: v.id, title: v.title, hhVacancyId: v.hhVacancyId as string }))
+
+    // Демо-блоки вакансии для динамических кнопок «Демо 1»…«Демо N» (по sort_order).
+    // Единый формат ссылки строит клиент из длинного token кандидата + block.id.
+    const demoBlocks = await getVacancyDemoButtonBlocks(id)
 
     const body = (await req.json().catch(() => ({}))) as { candidateIds?: unknown }
     const candidateIds = Array.isArray(body.candidateIds)
@@ -180,10 +185,9 @@ export async function POST(
         // (чтобы HR видел, что прикреплено) и используем для обратной подстановки
         // {{test_link}} при сохранении шаблона.
         testLink,
-        // «Демо 2»: кандидату уже открыта 2-я часть демо (override_content_block_id
-        // проставлен) — иначе ссылка ведёт на ту же 1-ю часть, что и «Демо 1»,
-        // и чип нужно дизейблить (Юрий 03.07).
-        hasSecondDemo: !!c.overrideContentBlockId,
+        // ДЛИННЫЙ token кандидата — для персональных демо-ссылок
+        // /demo/{token}?block=<id> (не short_id: тот ловит реферальный bounce).
+        token: c.token as string,
       }
     })
 
@@ -198,7 +202,7 @@ export async function POST(
     // Текст приглашения на интервью для варианта «Интервью» в мастере:
     // настройка вакансии, пусто → платформенный дефолт.
     const scheduleInviteText = (vac.scheduleInviteText ?? "").trim() || DEFAULT_SCHEDULE_INVITE_TEXT
-    return apiSuccess({ items: ordered, vacancyTitle: vac.title, vacancyHhUrl, scheduleInviteText, otherVacancies })
+    return apiSuccess({ items: ordered, vacancyTitle: vac.title, vacancyHhUrl, scheduleInviteText, otherVacancies, demoBlocks, demoBaseUrl: getAppBaseUrl() })
   } catch (err) {
     if (err instanceof Response) return err
     console.error("[hh-broadcast-data]", err)
