@@ -3,23 +3,24 @@
 // Лёгкий индикатор состояния hh-привязки вакансии для бейджа в шапке.
 // НЕ дёргает hh API — читает ТОЛЬКО БД (быстро):
 //   • vacancies.hhVacancyId + vacancies.hhArchived
-//   • follow_up_messages за последние 24ч (канал 'hh'): считаем одним проходом
-//     failed, из них error_message LIKE '%invalid_vacancy%', и успешные sent —
-//     успехи нужны, чтобы отличить «переписка встала» от «пара отказов на фоне
-//     нормальной отправки».
+//   • follow_up_messages за последние 24ч (канал 'hh'): одним проходом считаем
+//     failed, из них invalid_vacancy, и успешные sent — успехи нужны, чтобы
+//     отличить «переписка встала» от «пара отказов на фоне нормальной отправки».
+//     ВАЖНО: кандидаты с АРХИВНОЙ hh-публикации в статистику НЕ попадают вовсе
+//     (см. notOnArchivedBranch ниже) — бейдж про здоровье ЖИВОЙ публикации.
 //
 // Тенант-изоляция: requireCompany() + проверка vacancies.companyId; чужая
 // вакансия → 404 (не 403 — не палим существование).
 //
 // Ответ: { linked, archived, sendFailedRecent, invalidVacancyRecent, sentRecent,
 //          level: 'ok'|'warn'|'error'|'none', message }
-//   level:
+//   level (считается ТОЛЬКО по живой публикации):
 //     none  — hh не привязан (нет hhVacancyId) → бейдж не показываем
-//     error — invalid_vacancy за 24ч И НИ ОДНОГО успешного sent за то же окно
-//             (переписка встала целиком = настоящая авария)
-//     warn  — hhArchived (штатный конец жизни, ~30 дн) ИЛИ invalid_vacancy на
-//             фоне доходящих сообщений ИЛИ обычные failed за 24ч
-//     ok    — привязан, не архив, отправки идут
+//     error — были попытки, но НЕ ушло НИ ОДНОГО сообщения (hh нас не пускает)
+//     warn  — hhArchived (текущая публикация в архиве) ИЛИ доля отказов значима
+//             (>= 3 штук И >= 20% попыток)
+//     ok    — отправки идут; единичные персональные отказы (resume_not_found,
+//             кандидат снёс резюме) — шум, не тревога
 import { NextRequest } from "next/server"
 import { and, eq, gte, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
@@ -70,9 +71,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // follow_up_messages нет vacancy_id → join через candidates.vacancy_id.
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-    // Считаем И неудачи, И успехи за окно одним проходом: сам факт пары
-    // invalid_vacancy ничего не значит, если параллельно сообщения доходят —
-    // красный имеет смысл только когда переписка встала ЦЕЛИКОМ (см. ниже).
+    // СТАРЫЕ ВЕТКИ НЕ УЧИТЫВАЕМ (Юрий 15.07). Вакансию публикуют на hh не один
+    // раз: предыдущая публикация уходит в архив, но её кандидаты продолжают
+    // жить в той же локальной вакансии. hh физически НЕ принимает сообщения в
+    // переписки архивной публикации — отвечает 403 invalid_vacancy. Это не
+    // поломка и кодом не чинится, а работа по той ветке уже закрыта («кому
+    // можно было — уже пригласили»). Поэтому кандидатов, чей hh-отклик
+    // принадлежит АРХИВНОЙ публикации, из статистики бейджа исключаем целиком:
+    // бейдж должен показывать здоровье ЖИВОЙ публикации, а не мёртвой истории.
+    // Живой пример (15.07): по архивной ветке 59 отказов за неделю, по живой —
+    // 3 на 257 доставленных.
+    const notOnArchivedBranch = sql`NOT EXISTS (
+      SELECT 1 FROM hh_responses hr
+      JOIN hh_vacancies hv
+        ON hv.hh_vacancy_id = hr.hh_vacancy_id AND hv.company_id = hr.company_id
+      WHERE hr.local_candidate_id = ${candidates.id} AND hv.status = 'archived'
+    )`
+
+    // Считаем И неудачи, И успехи за окно одним проходом: сам факт отказа
+    // ничего не значит, если параллельно сообщения доходят.
     const [row] = await db
       .select({
         failed: sql<number>`count(*) FILTER (WHERE ${followUpMessages.status} = 'failed')`.mapWith(Number),
@@ -86,6 +103,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           eq(candidates.vacancyId, vacancyId),
           eq(followUpMessages.channel, "hh"),
           gte(followUpMessages.createdAt, since),
+          notOnArchivedBranch,
         ),
       )
 
@@ -95,28 +113,33 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     let level: Level
     let message: string
-    // Красный = «всё встало, иди чини». Два прежних повода были ложными
-    // тревогами (Юрий 15.07):
-    //  • hhArchived: в архив hh уходит ЛЮБАЯ вакансия через ~30 дней — штатный
-    //    конец жизни, не поломка.
-    //  • invalid_vacancy >= 1: пара отказов на фоне сотни дошедших сообщений
-    //    красила вакансию красным на сутки с текстом «сообщения не доходят»,
-    //    хотя они доходят. Красный на каждой второй вакансии = обои, в которых
-    //    теряется настоящая авария.
-    // Теперь красный только когда переписка встала ЦЕЛИКОМ: есть отказы
-    // invalid_vacancy И при этом за окно не ушло НИ ОДНОГО сообщения.
-    if (invalidVacancyRecent > 0 && sentRecent === 0) {
+    // Бейдж отвечает на ОДИН вопрос: «работает ли hh по этой вакансии сейчас».
+    // Он НЕ трекер судьбы отдельных кандидатов. Прежние пороги врали (Юрий,
+    // 15.07, три захода подряд):
+    //  • hhArchived → красный: в архив уходит ЛЮБАЯ вакансия через ~30 дней —
+    //    штатный конец жизни, не поломка.
+    //  • invalid_vacancy >= 1 → красный: 12 отказов при 75 доставленных красили
+    //    вакансию красным с текстом «сообщения не доходят», хотя они доходят.
+    //  • failed >= 1 → жёлтый: ОДИН персональный отказ (resume_not_found —
+    //    кандидат снёс резюме) при 69 доставленных красил вакансию жёлтым.
+    // Красный на каждой второй вакансии = обои, в которых теряется настоящая
+    // авария. Поэтому: единичные персональные отказы — шум, тревога только на
+    // значимой доле или когда не уходит вообще ничего.
+    const attempts = sendFailedRecent + sentRecent
+    const NOISE_MIN_FAILURES = 3   // меньше — статистически неотличимо от шума
+    const NOISE_MIN_SHARE = 0.2    // и при этом заметная доля попыток
+    if (attempts > 0 && sentRecent === 0) {
       level = "error"
-      message = "hh блокирует переписку по вакансии — сообщения не доходят"
+      message = "hh не принимает сообщения по этой вакансии — не доходит ни одно"
     } else if (archived) {
       level = "warn"
       message = "Вакансия в архиве hh — сообщения кандидатам не отправляются"
-    } else if (invalidVacancyRecent > 0) {
+    } else if (
+      sendFailedRecent >= NOISE_MIN_FAILURES &&
+      sendFailedRecent / attempts >= NOISE_MIN_SHARE
+    ) {
       level = "warn"
-      message = `hh отклонил ${invalidVacancyRecent} сообщ. за сутки, остальные доходят (${sentRecent} успешных)`
-    } else if (sendFailedRecent > 0) {
-      level = "warn"
-      message = "hh: часть сообщений не доходит"
+      message = `hh: не доходит ${sendFailedRecent} из ${attempts} сообщений за сутки`
     } else {
       level = "ok"
       message = "hh: активна, всё ок"
