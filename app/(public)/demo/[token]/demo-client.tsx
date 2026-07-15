@@ -114,6 +114,19 @@ function maskBirthDateRu(input: string): string {
   return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
 }
 
+// Применяет маску +7 (XXX) XXX-XX-XX: ведущая 8 → +7, только цифры, макс 11.
+function formatPhoneRu(input: string): string {
+  const digits = input.replace(/\D/g, "").slice(0, 11)
+  if (!digits) return ""
+  const normalized = digits.startsWith("8") ? "7" + digits.slice(1) : digits.startsWith("7") ? digits : "7" + digits
+  const d = normalized.slice(0, 11)
+  if (d.length <= 1) return "+7"
+  if (d.length <= 4) return `+7 (${d.slice(1)}`
+  if (d.length <= 7) return `+7 (${d.slice(1, 4)}) ${d.slice(4)}`
+  if (d.length <= 9) return `+7 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`
+  return `+7 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`
+}
+
 interface DemoData {
   candidateName: string
   vacancyTitle: string
@@ -1630,7 +1643,7 @@ export default function DemoPage() {
                     {fieldPhone.enabled && (
                       <div className="space-y-1">
                         <Label className={labelClass}>Телефон {requiredMark(fieldPhone.required)}</Label>
-                        <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className={inputClass} style={inputStyle} />
+                        <Input value={formPhone} onChange={e => setFormPhone(formatPhoneRu(e.target.value))} placeholder="+7 (999) 123-45-67" inputMode="tel" className={inputClass} style={inputStyle} />
                       </div>
                     )}
                     {fieldTelegram.enabled && (
