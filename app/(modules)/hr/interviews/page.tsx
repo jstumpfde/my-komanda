@@ -119,7 +119,16 @@ function migrateInterviewStages(list: Stage[]): { stages: Stage[]; changed: bool
   let result = deduped
   if (!result.some(s => s.condition === "outcome_rejected")) result = [...result, REJECTED_STAGE]
   if (!result.some(s => s.condition === "stage_decision")) result = [...result, DECISION_STAGE]
-  if (!result.some(s => s.condition === "status_cancelled")) result = [...result, CANCELLED_STAGE]
+  // «Отменённые» — всегда последний таб. У компаний, сохранивших список ДО
+  // появления «Отказ»/«Решение» (кейс Revoluterra), отменённые лежали в конце
+  // сохранённого массива, и дописанные новые табы встали бы за ними — красный
+  // крестик оказался бы в середине таб-бара. Поэтому не просто добираем, а
+  // переносим существующий (возможно, переименованный HR) в хвост.
+  const existingCancelled = result.find(s => s.condition === "status_cancelled")
+  result = [
+    ...result.filter(s => s.condition !== "status_cancelled"),
+    existingCancelled ?? CANCELLED_STAGE,
+  ]
   const changed = JSON.stringify(result) !== JSON.stringify(list)
   return { stages: result, changed }
 }
