@@ -105,6 +105,7 @@ import type { Lesson, Block } from "@/lib/course-types"
 import { AnswersTab } from "./answers-tab"
 import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
+import { ResumePdfPanel } from "./resume-pdf-panel"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
 import { getBlockScore } from "@/lib/demo/block-scores"
 import { buildFunnelLinkButtons, type DemoButtonBlock, type FunnelLinkExtras } from "@/lib/demo/demo-quick-links"
@@ -890,6 +891,10 @@ export function CandidateDrawer({
 }: CandidateDrawerProps) {
   const { user } = useAuth()
   const [sheetExpanded, setSheetExpanded] = useState(false)
+  // Панель просмотра PDF резюме (легаси-кандидаты без hhRawData, см. ветку
+  // ниже) — открывается поверх карточки, а не новой вкладкой (заявка Юрия
+  // 15.07). Кандидатов с hhRawData обслуживает своя копия в HhResumeInfo.
+  const [resumePdfOpen, setResumePdfOpen] = useState(false)
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   // Notes хранятся в demo_progress_json у самого кандидата — отдельный
   // /notes-запрос сделал бы тот же select, поэтому держим notes как локальное
@@ -2378,18 +2383,20 @@ export function CandidateDrawer({
                     что и роут resume-pdf (predeploy-guard 14.07). Кандидатам
                     вовсе без hh-связки (ручные/Avito/рефералы) ничего не
                     рисуем — вечная disabled-кнопка была бы шумом
-                    (minor второго guard-прогона). */}
+                    (minor второго guard-прогона).
+                    15.07: открывается панелью поверх карточки (ResumePdfPanel),
+                    а не новой вкладкой — там же сохранить/распечатать/на весь
+                    экран. */}
                 {!candidate.hhRawData && candidate.hasResumePdf && (
-                  <a
-                    href={`/api/modules/hr/candidates/${candidate.id}/resume-pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Откроется в просмотрщике — сохранить можно оттуда"
+                  <button
+                    type="button"
+                    onClick={() => setResumePdfOpen(true)}
+                    title="Откроется в панели — сохранить и распечатать можно там"
                     className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                   >
                     <FileText className="w-3 h-3" />
                     Открыть PDF
-                  </a>
+                  </button>
                 )}
 
                 {(candidate.source || candidate.referredByShortId) && (
@@ -3981,6 +3988,17 @@ export function CandidateDrawer({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Панель PDF резюме для легаси-ветки без hhRawData (кнопка выше).
+          Кандидатам с hhRawData панель рендерит сам HhResumeInfo. */}
+      {candidate && (
+        <ResumePdfPanel
+          candidateId={candidate.id}
+          candidateName={candidate.name}
+          open={resumePdfOpen}
+          onOpenChange={setResumePdfOpen}
+        />
+      )}
     </Sheet>
   )
 }

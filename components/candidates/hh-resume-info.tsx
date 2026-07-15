@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { extractAllContacts, type ExtractedContact } from "@/lib/hh/extract-resume-fields"
+import { ResumePdfPanel } from "@/components/candidates/resume-pdf-panel"
 
 // ─── Types — описывают только нужные поля сырого hh resume ────────────────────
 //
@@ -557,6 +558,10 @@ function ExperienceCard({ exp }: { exp: HhExperience }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function HhResumeInfo({ rawData, candidateId, hasResumePdf, fallback }: HhResumeInfoProps) {
+  // Панель просмотра PDF резюме — открывается ПОВЕРХ карточки кандидата
+  // (боковой Sheet), больше не новой вкладкой (заявка Юрия 15.07).
+  const [resumePdfOpen, setResumePdfOpen] = useState(false)
+
   const raw = (rawData && typeof rawData === "object" ? rawData : {}) as HhRawData
   // Иногда raw_data — это сам resume (без вложенного ключа resume).
   const resume: HhResume | undefined = raw.resume
@@ -771,18 +776,20 @@ export function HhResumeInfo({ rawData, candidateId, hasResumePdf, fallback }: H
                   кабинету hh. Роут сам резолвит resume_id и токен компании.
                   Гейт — hasResumePdf из API карточки (тот же резолвер, что
                   у роута), НЕ alternate_url: у легаси-кандидатов PDF бывает
-                  доступен и без него. */}
+                  доступен и без него.
+                  15.07: открывается панелью поверх карточки (ResumePdfPanel),
+                  а не новой вкладкой — там же сохранить/распечатать/на весь
+                  экран, ветку «disabled» ниже (нет резюме) НЕ трогаем. */}
               {hasResumePdf && candidateId ? (
-                <a
-                  href={`/api/modules/hr/candidates/${candidateId}/resume-pdf`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Откроется в просмотрщике — сохранить можно оттуда"
+                <button
+                  type="button"
+                  onClick={() => setResumePdfOpen(true)}
+                  title="Откроется в панели — сохранить и распечатать можно там"
                   className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                 >
                   <FileText className="w-3 h-3" />
                   Открыть PDF
-                </a>
+                </button>
               ) : candidateId ? (
                 <span
                   title="У кандидата нет привязки к резюме hh.ru — PDF недоступен"
@@ -1158,6 +1165,14 @@ export function HhResumeInfo({ rawData, candidateId, hasResumePdf, fallback }: H
             </div>
           )}
         </section>
+      )}
+      {hasResumePdf && candidateId && (
+        <ResumePdfPanel
+          candidateId={candidateId}
+          candidateName={fullName || null}
+          open={resumePdfOpen}
+          onOpenChange={setResumePdfOpen}
+        />
       )}
     </div>
   )
