@@ -15,10 +15,16 @@ export async function getValidToken(companyId: string): Promise<{ accessToken: s
 
   if (!integration || !integration.isActive) return null
 
-  // Check if token is still valid (with 5 min buffer)
+  // hh.ru НЕ разрешает рефрешить не-истёкший токен: на refresh живого токена
+  // отвечает 400 invalid_grant "token not expired". Поэтому НИКАКОГО буфера
+  // «за N минут до истечения» — рефрешим строго после факта истечения (как
+  // крон hh-token-refresh: lt(tokenExpiresAt, now)). Ранний рефреш с буфером
+  // 5 мин 14.07 вырубил живой Орлинк: getValidToken полез рефрешить за 4 минуты
+  // до истечения, hh вернул "token not expired", и код ошибочно деактивировал
+  // интеграцию. bufferMs=0 = рефреш ровно на границе истечения.
   const now = new Date()
   const expiresAt = new Date(integration.tokenExpiresAt)
-  const bufferMs = 5 * 60 * 1000
+  const bufferMs = 0
 
   if (expiresAt.getTime() - bufferMs > now.getTime()) {
     return { accessToken: integration.accessToken, integration }
@@ -72,6 +78,15 @@ export async function getValidToken(companyId: string): Promise<{ accessToken: s
     // компании вставал до ручного переподключения.
     const isInvalidGrant = /\b400\b/.test(msg) && /invalid_grant/i.test(msg)
     if (isInvalidGrant) {
+      // hh вернул "token not expired": наш access-токен ЕЩЁ ЖИВ (обычно из-за
+      // рассинхрона часов — мы сочли его истёкшим на мгновение раньше hh, либо
+      // конкурентный тик обновил tokenExpiresAt в БД). Это НЕ мёртвый
+      // refresh_token: ни рефрешить, ни деактивировать НЕЛЬЗЯ. Отдаём текущий
+      // токен, следующий тик повторит рефреш, когда токен реально истечёт.
+      if (/token\s+not\s+expired/i.test(msg)) {
+        console.warn(`[hh-helpers] integration ${integration.id}: hh «token not expired» — токен ещё валиден, отдаём текущий, НЕ деактивируем`)
+        return { accessToken: integration.accessToken, integration }
+      }
       // ГОНКА РЕФРЕША: hh ротирует refresh_token — после первого использования
       // старый становится невалидным. Если cron обрабатывает компании
       // параллельно (Promise.all) и два потока почти одновременно дёрнули
