@@ -89,11 +89,21 @@ async function runOneIteration(): Promise<IterationResult> {
     // Компании с накопленной очередью добираем в проход, даже если живых
     // hh-вакансий у них не осталось — иначе гард архива выше молча заморозил
     // бы их отклики (разбор очереди ниже привязан к компании, но живёт внутри
-    // прохода). Симметрично /api/cron/hh-import.
+    // прохода). Симметрично /api/cron/hh-import — включая ОБЯЗАТЕЛЬНОЕ условие
+    // autoProcessingEnabled=true: снимаем только гард архива, а выключенный
+    // HR-ом тумблер авто-разбора уважаем (находка predeploy-guard 15.07 —
+    // подробное обоснование в /api/cron/hh-import).
     const pendingCompanies = await db
       .select({ companyId: hhResponses.companyId })
       .from(hhResponses)
-      .where(eq(hhResponses.status, "response"))
+      .innerJoin(vacancies, and(
+        eq(vacancies.companyId, hhResponses.companyId),
+        eq(vacancies.hhVacancyId, hhResponses.hhVacancyId),
+      ))
+      .where(and(
+        eq(hhResponses.status, "response"),
+        eq(vacancies.autoProcessingEnabled, true),
+      ))
       .groupBy(hhResponses.companyId)
     for (const { companyId } of pendingCompanies) {
       if (!byCompany.has(companyId)) byCompany.set(companyId, [])
