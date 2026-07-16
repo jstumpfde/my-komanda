@@ -41,27 +41,10 @@ function WhatsAppIcon({ className }: { className?: string }) {
   )
 }
 
-function ViberIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 3.5c-4.7 0-8.5 3-8.5 7.8 0 2.9 1.5 5.3 3.9 6.8-.1.8-.4 2-1 2.9-.1.2.1.4.3.3 1.3-.5 2.5-1.2 3.4-1.8.6.1 1.2.2 1.9.2 4.7 0 8.5-3.4 8.5-8.4s-3.8-7.8-8.5-7.8Z" />
-      <path d="M9 9.4c-.1-.5.2-.9.6-1 .3-.1.7 0 .9.3.3.4.5.9.7 1.4.1.3 0 .6-.2.8l-.4.4c-.1.1-.1.3 0 .4.3.6.8 1.2 1.3 1.7.5.5 1.1 1 1.7 1.3.1.1.3.1.4 0l.4-.4c.2-.2.5-.3.8-.2.5.1 1 .4 1.4.7.3.2.4.6.3.9-.1.4-.5.7-1 .6-2.2-.5-4-2.3-4.5-4.5-.1-.4-.3-.9-.4-1.4Z" />
-      <path d="M12 6.7c2.6 0 4.7 2 4.9 4.6" />
-    </svg>
-  )
-}
+// Viber удалён по решению владельца 16.07 — оставляем WhatsApp/Telegram.
 
 /**
- * Три значка-ссылки (WhatsApp / Telegram / Viber) рядом с номером телефона.
+ * Значки-ссылки (WhatsApp / Telegram) рядом с номером телефона.
  * Ничего не рендерит, если номер после нормализации короче 10 цифр.
  */
 export function PhoneMessengerLinks({ phone, className }: { phone: string; className?: string }) {
@@ -91,16 +74,6 @@ export function PhoneMessengerLinks({ phone, className }: { phone: string; class
         className="text-muted-foreground hover:text-[#229ED9] transition-colors"
       >
         <Send className="w-3.5 h-3.5" />
-      </a>
-      <a
-        href={`viber://chat?number=%2B${digits}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Написать в Viber"
-        onClick={stop}
-        className="text-muted-foreground hover:text-[#7360F2] transition-colors"
-      >
-        <ViberIcon className="w-3.5 h-3.5" />
       </a>
     </span>
   )
