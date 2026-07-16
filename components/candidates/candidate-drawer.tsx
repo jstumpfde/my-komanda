@@ -105,6 +105,7 @@ import type { Lesson, Block } from "@/lib/course-types"
 import { AnswersTab } from "./answers-tab"
 import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
+import { PhoneMessengerLinks } from "./phone-messenger-links"
 import { ResumePdfPanel } from "./resume-pdf-panel"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
 import { getBlockScore } from "@/lib/demo/block-scores"
@@ -350,7 +351,10 @@ function SurveyContactsBlock({ contacts: sc }: { contacts: SurveyContacts }) {
         {fullName && <SurveyRow label="Имя">{fullName}</SurveyRow>}
         {sc.phone && (
           <SurveyRow label="Телефон">
-            <a href={`tel:${sc.phone}`} className="hover:text-primary">{sc.phone}</a>
+            <span className="inline-flex items-center gap-2 flex-wrap">
+              <a href={`tel:${sc.phone}`} className="hover:text-primary">{sc.phone}</a>
+              <PhoneMessengerLinks phone={sc.phone} />
+            </span>
           </SurveyRow>
         )}
         {sc.email && (
@@ -2301,10 +2305,13 @@ export function CandidateDrawer({
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Контакты</h3>
                       <div className="space-y-1.5">
                         {candidate.phone && (
-                          <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                            <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            {candidate.phone}
-                          </a>
+                          <div className="flex items-center gap-2 text-sm flex-wrap">
+                            <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 hover:text-primary transition-colors">
+                              <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              {candidate.phone}
+                            </a>
+                            <PhoneMessengerLinks phone={candidate.phone} />
+                          </div>
                         )}
                         {candidate.email && (
                           <a href={`mailto:${candidate.email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">

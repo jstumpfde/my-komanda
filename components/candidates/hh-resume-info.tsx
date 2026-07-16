@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { extractAllContacts, type ExtractedContact } from "@/lib/hh/extract-resume-fields"
 import { ResumePdfPanel } from "@/components/candidates/resume-pdf-panel"
+import { PhoneMessengerLinks } from "@/components/candidates/phone-messenger-links"
 
 // ─── Types — описывают только нужные поля сырого hh resume ────────────────────
 //
@@ -443,6 +444,7 @@ function iconForContactType(typeId: string): React.ComponentType<{ className?: s
 // под контактом (критично для HR, чтобы не звонили «не туда»).
 function ContactEntryRow({ contact }: { contact: ExtractedContact }) {
   const Icon = iconForContactType(contact.typeId)
+  const isPhone = contact.typeId === "cell" || contact.typeId === "home" || contact.typeId === "work"
   const content = (
     <>
       <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -465,6 +467,8 @@ function ContactEntryRow({ contact }: { contact: ExtractedContact }) {
         ) : (
           <div className="flex items-center gap-2 text-muted-foreground">{content}</div>
         )}
+        {/* Значки мессенджеров по номеру (как на hh.ru) — только для телефонных контактов */}
+        {isPhone && <PhoneMessengerLinks phone={contact.display} />}
         {contact.preferred && (
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-medium px-1.5 py-0 h-4">
             Предпочтительный
@@ -826,13 +830,16 @@ export function HhResumeInfo({ rawData, candidateId, hasResumePdf, fallback }: H
           {/* Fallback на наши поля кандидата — только если hh вообще не отдал
               contact[] (напр. resume-preview из /negotiations). */}
           {fallbackPhone && (
-            <a
-              href={`tel:${fallbackPhone}`}
-              className="flex items-center gap-2 text-sm hover:text-primary transition-colors break-all"
-            >
-              <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              {fallbackPhone}
-            </a>
+            <div className="flex items-center gap-2 text-sm flex-wrap">
+              <a
+                href={`tel:${fallbackPhone}`}
+                className="flex items-center gap-2 hover:text-primary transition-colors break-all"
+              >
+                <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                {fallbackPhone}
+              </a>
+              <PhoneMessengerLinks phone={fallbackPhone} />
+            </div>
           )}
           {fallbackEmail && (
             <a
