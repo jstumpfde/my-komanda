@@ -303,9 +303,10 @@ export default function VacancyPage() {
       if (hd && Array.isArray(hd.brandCompanies)) {
         setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string; description?: string }) => c?.name?.trim()))
       }
-      // B5: колонки списка кандидатов единые для компании
+      // B5: колонки списка кандидатов — company-default для всей компании
+      // (личный override поверх него — состояние personalColumnsOverride, см. ниже).
       if (hd?.candidateColumns && typeof hd.candidateColumns === "object" && Object.keys(hd.candidateColumns).length > 0) {
-        setCardSettingsLocal((prev) => ({ ...prev, ...hd.candidateColumns } as typeof prev))
+        setCompanyColumns(hd.candidateColumns as Record<string, boolean>)
       }
       // Уровень 2: сохраняем company webhook URL для отображения в секции интеграций вакансии
       if (typeof hd?.webhooks?.url === "string") {
@@ -1049,12 +1050,26 @@ export default function VacancyPage() {
       return { ...col, candidates: colCandidates, count: colCandidates.length }
     }))
   }, [apiCandidates])
-  // B5: persistColumns намеренно убран — колонки per-company хранятся
-  // в hiring-defaults, не в user-preferences. setColumns из хука не вызываем.
-  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setListSort: persistListSort } = useUserPreferences()
+  const {
+    prefs: userPrefs, loaded: userPrefsLoaded,
+    setViewMode: persistViewMode, setListSort: persistListSort,
+    setCandidateColumns: persistCandidateColumns,
+  } = useUserPreferences()
   // viewMode объявлен выше (перед useCandidates) для условного отключения запроса.
   const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
-  const [cardSettings, setCardSettingsLocal] = useState(defaultSettings)
+  // B5 (10.06): колонки company-level в hiring-defaults.candidateColumns.
+  // Решение владельца 17.07: тумблеры активны у ВСЕХ ролей (было read-only для
+  // не-директоров) — director/client/platform_admin/admin по-прежнему задают
+  // company-default, остальные роли получили личный override поверх него
+  // (userPrefs.candidateColumns). Базы держим раздельно и мерджим в cardSettings
+  // (см. useMemo ниже), чтобы будущие правки директора по НЕ-тронутым override'ом
+  // ключам всё равно доходили до пользователя.
+  const [companyColumns, setCompanyColumns] = useState<Record<string, boolean>>({})
+  const [personalColumnsOverride, setPersonalColumnsOverride] = useState<Record<string, boolean>>({})
+  const cardSettings = useMemo(
+    () => ({ ...defaultSettings, ...companyColumns, ...personalColumnsOverride }) as CardDisplaySettings,
+    [companyColumns, personalColumnsOverride],
+  )
 
   // ─── При первой загрузке user-prefs — гидратируем UI ─────────────────────
   useEffect(() => {
@@ -1065,8 +1080,9 @@ export default function VacancyPage() {
     // Виды Канбан/Плитки/Воронка — owner-only (Юрий 03.07 оставил под гейтом).
     const canAllViews = isOwnerEmail(user?.email)
     setViewModeLocal((canAllViews ? userPrefs.viewMode : "list") as ViewMode)
-    // B5: колонки теперь per-company (hiring-defaults), не per-user.
-    // userPrefs.columns намеренно НЕ гидратируем в cardSettings.
+    // Личный override колонок гидратируем ВСЕМ ролям (ограничение canAllViews
+    // выше — только про режимы Канбан/Плитки/Воронка, к колонкам не относится).
+    setPersonalColumnsOverride(userPrefs.candidateColumns as Record<string, boolean>)
   }, [userPrefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setViewMode = useCallback((mode: ViewMode) => {
@@ -1075,17 +1091,38 @@ export default function VacancyPage() {
   }, [persistViewMode])
 
   const setCardSettings = useCallback((next: CardDisplaySettings) => {
-    setCardSettingsLocal(next)
-    // B5: колонки per-company — сохраняем в hiring-defaults только если директор/platform_admin.
-    // Остальные HR могут видеть колонки, но менять не могут (гард также на сервере).
     if (["director", "client", "platform_admin", "admin"].includes(role)) {
+      // B5: колонки per-company — сохраняем в hiring-defaults, как раньше.
+      // Плюс чистим личный override (решение 17.07) — иначе старый персональный
+      // override директора маскировал бы новый company-default на его же экране.
+      setCompanyColumns(next as unknown as Record<string, boolean>)
       fetch("/api/modules/hr/company/hiring-defaults", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ candidateColumns: next as unknown as Record<string, boolean> }),
       }).catch(() => {})
+      setPersonalColumnsOverride({})
+      persistCandidateColumns({})
+    } else {
+      // Остальные роли (17.07): личный override поверх company-default.
+      // Сохраняем ТОЛЬКО реально изменившиеся относительно текущего эффективного
+      // вида ключи — иначе полный снэпшот заглушил бы будущие правки директора
+      // по колонкам, которые этот пользователь не трогал. Сравниваем по
+      // видимости (!== false), не по строгому equality — некоторые тумблеры
+      // (см. CardSettings в card-settings.tsx) пишут undefined для «включено».
+      setPersonalColumnsOverride((prevOverride) => {
+        const changed: Record<string, boolean> = {}
+        for (const key of Object.keys(next) as (keyof CardDisplaySettings)[]) {
+          const wasVisible = cardSettings[key] !== false
+          const isVisible = next[key] !== false
+          if (isVisible !== wasVisible) changed[key] = isVisible
+        }
+        const merged = { ...prevOverride, ...changed }
+        persistCandidateColumns(merged)
+        return merged
+      })
     }
-  }, [role])
+  }, [role, cardSettings, persistCandidateColumns])
 // filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)

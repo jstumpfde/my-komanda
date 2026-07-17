@@ -31,6 +31,7 @@ import { StageMessageControl } from "@/components/candidates/stage-message-contr
 import { getStageLabel, ALL_STAGE_SLUGS, PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { useAuth } from "@/lib/auth"
+import { useUserPreferences } from "@/hooks/use-user-preferences"
 
 interface FacetsData {
   cities: { city: string; count: number }[]
@@ -169,10 +170,14 @@ function ColumnToggles({
   settings,
   onSettingsChange,
   onReset,
+  canEditColumns,
 }: {
   settings: CardDisplaySettings
   onSettingsChange: (s: CardDisplaySettings) => void
   onReset: () => void
+  /** Директор/platform_admin меняют company-default; остальные роли — свой
+   *  личный вид (решение владельца 17.07, см. комментарий у setSettings выше). */
+  canEditColumns: boolean
 }) {
   const handleToggle = (key: keyof CardDisplaySettings) => {
     const next = { ...settings, [key]: settings[key] === false ? undefined : false }
@@ -192,6 +197,11 @@ function ColumnToggles({
       </PopoverTrigger>
       <PopoverContent className="w-52 p-3" align="end">
         <div className="space-y-2">
+          {!canEditColumns && (
+            <p className="text-[11px] text-muted-foreground pb-1">
+              Ваш личный вид; общий для компании задаёт директор
+            </p>
+          )}
           {CANDIDATE_COLUMN_TOGGLES.map(({ key, label }) => {
             const checked = settings[key] !== false
             return (
@@ -295,8 +305,68 @@ export default function CandidatesPage() {
   // Выделение (bulk)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  // Настройки колонок
-  const [settings, setSettings] = useState<CardDisplaySettings>(DEFAULT_SETTINGS)
+  // Настройки колонок — та же модель, что и на странице вакансии (17.07,
+  // приведено в соответствие view-settings.tsx/vacancies/[id]/page.tsx):
+  // company-default (hiring-defaults.candidateColumns, задаёт директор) +
+  // личный override (userPrefs.candidateColumns, ОБЩИЙ с страницей вакансии —
+  // это персональная настройка отображения, а не per-вакансийная).
+  const [companyColumns, setCompanyColumns] = useState<Record<string, boolean>>({})
+  const [personalColumnsOverride, setPersonalColumnsOverride] = useState<Record<string, boolean>>({})
+  const {
+    prefs: userPrefs, loaded: userPrefsLoaded,
+    setCandidateColumns: persistCandidateColumns,
+  } = useUserPreferences()
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...companyColumns, ...personalColumnsOverride }) as CardDisplaySettings,
+    [companyColumns, personalColumnsOverride],
+  )
+
+  // Company-default колонок (hiring-defaults) — то же, что и на странице вакансии.
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(j => {
+      const hd = j?.hiringDefaults
+      if (hd?.candidateColumns && typeof hd.candidateColumns === "object" && Object.keys(hd.candidateColumns).length > 0) {
+        setCompanyColumns(hd.candidateColumns as Record<string, boolean>)
+      }
+    }).catch(() => {})
+  }, [])
+
+  // Личный override колонок — гидратируем при загрузке user-prefs (все роли).
+  useEffect(() => {
+    if (!userPrefsLoaded) return
+    setPersonalColumnsOverride(userPrefs.candidateColumns as Record<string, boolean>)
+  }, [userPrefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setSettings = useCallback((next: CardDisplaySettings) => {
+    if (["director", "client", "platform_admin", "admin"].includes(role)) {
+      // Директор/platform_admin — company-default, как в настройках вакансии.
+      // Плюс чистим личный override, чтобы директор видел ровно то, что задал.
+      setCompanyColumns(next as unknown as Record<string, boolean>)
+      fetch("/api/modules/hr/company/hiring-defaults", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateColumns: next as unknown as Record<string, boolean> }),
+      }).catch(() => {})
+      setPersonalColumnsOverride({})
+      persistCandidateColumns({})
+    } else {
+      // Остальные роли — личный override поверх company-default. Сохраняем
+      // только реально изменившиеся ключи (см. комментарий в vacancies/[id]/page.tsx).
+      // Сравниваем по видимости (!== false), а не по строгому equality —
+      // ColumnToggles.handleToggle выше пишет undefined (не true) для «включено».
+      setPersonalColumnsOverride((prevOverride) => {
+        const changed: Record<string, boolean> = {}
+        for (const key of Object.keys(next) as (keyof CardDisplaySettings)[]) {
+          const wasVisible = settings[key] !== false
+          const isVisible = next[key] !== false
+          if (isVisible !== wasVisible) changed[key] = isVisible
+        }
+        const merged = { ...prevOverride, ...changed }
+        persistCandidateColumns(merged)
+        return merged
+      })
+    }
+  }, [role, settings, persistCandidateColumns])
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -775,6 +845,7 @@ export default function CandidatesPage() {
                   settings={settings}
                   onSettingsChange={setSettings}
                   onReset={() => setSettings(DEFAULT_SETTINGS)}
+                  canEditColumns={["director", "client", "platform_admin", "admin"].includes(role)}
                 />
               </div>
             </div>
