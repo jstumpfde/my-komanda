@@ -32,6 +32,6 @@ jobs:
             git pull origin main
             pnpm install --frozen-lockfile
             pnpm build
-            pm2 restart my-komanda
+            pm2 reload my-komanda --update-env
             echo "✅ Deploy completed at $(date)"
           ENDSSH

@@ -1,0 +1,39 @@
+name: CI (unit)
+
+# Быстрый детерминированный барьер на каждый PR: unit-тесты (tsx --test).
+# E2E (Playwright) — отдельный workflow, он бьёт по staging/prod.
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tsx не объявлен в devDependencies, хотя его используют скрипты
+      # test/db:migrate/db:seed (на дев-машине он стоит глобально). Ставим на
+      # время прогона. Удалить этот шаг, когда tsx попадёт в package.json.
+      - name: Provide tsx
+        run: npm i -g tsx@4
+
+      - name: Run unit tests
+        run: pnpm test
