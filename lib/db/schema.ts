@@ -3714,3 +3714,34 @@ export const flightDeals = pgTable("flight_deals", {
 ])
 export type FlightDeal    = typeof flightDeals.$inferSelect
 export type NewFlightDeal = typeof flightDeals.$inferInsert
+
+// Бизнес-ассистент → Авиабилеты → «Отслеживать цену»: сохранённый поиск
+// (маршрут+даты+класс+фильтры), который крон /api/cron/flight-price-watch
+// периодически перепрогоняет через ту же поисковую логику, что и ручной
+// поиск. Per-tenant + per-user (список "Мои отслеживания" — личный).
+// Миграция 0233.
+export interface FlightWatchFilters { [k: string]: unknown }
+export const flightPriceWatches = pgTable("flight_price_watches", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId:          uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  originIata:      text("origin_iata").notNull(),
+  destinationIata: text("destination_iata").notNull(),
+  dateMode:        text("date_mode").notNull().default("exact"),  // exact | range
+  departDate:      text("depart_date").notNull(),                  // YYYY-MM-DD
+  departDateTo:    text("depart_date_to"),                         // YYYY-MM-DD, режим диапазона
+  tripClass:       text("trip_class").notNull().default("economy"),
+  filtersJson:     jsonb("filters_json").$type<FlightWatchFilters>(),
+  targetPriceRub:  integer("target_price_rub"),                    // nullable — «уведомить при цене ниже X»
+  lastPriceRub:    integer("last_price_rub"),
+  lastCheckedAt:   timestamp("last_checked_at", { withTimezone: true }),
+  bestPriceRub:    integer("best_price_rub"),
+  bestPriceAt:     timestamp("best_price_at", { withTimezone: true }),
+  active:          boolean("active").notNull().default(true),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("flight_price_watches_company_idx").on(t.companyId),
+  index("flight_price_watches_active_idx").on(t.active),
+])
+export type FlightPriceWatch    = typeof flightPriceWatches.$inferSelect
+export type NewFlightPriceWatch = typeof flightPriceWatches.$inferInsert
