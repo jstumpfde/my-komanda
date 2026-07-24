@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireCompany } from "@/lib/api-helpers"
-import { searchTravelpayouts } from "@/lib/business-assistant/flights/travelpayouts"
-import { searchKiwiCombos } from "@/lib/business-assistant/flights/kiwi"
-import { applyFlightFilters, parseTimeOfDay } from "@/lib/business-assistant/flights/filters"
-import { buildDateList } from "@/lib/business-assistant/flights/date-utils"
+import { parseTimeOfDay } from "@/lib/business-assistant/flights/filters"
+import { runFlightSearch } from "@/lib/business-assistant/flights/run-search"
+import { resolveDateRange } from "@/lib/business-assistant/flights/date-utils"
 import type {
   BaggageFilter,
   FlightFilters,
@@ -37,21 +36,8 @@ export async function GET(req: NextRequest) {
   }
 
   const dateMode = sp.get("dateMode") === "range" ? "range" : "exact"
-
-  // Диапазон = явные departDateFrom/departDateTo ИЛИ точная дата ±N дней
-  // (flexDays) без явного "до" — оба сценария сводятся к одному окну дат.
-  let departDateFrom = departDate
-  let departDateTo = sp.get("departDateTo") ?? undefined
   const flexDays = Number(sp.get("flexDays") ?? "0")
-  if (dateMode === "range" && !departDateTo && flexDays > 0) {
-    const base = new Date(`${departDate}T00:00:00Z`)
-    const from = new Date(base)
-    from.setUTCDate(from.getUTCDate() - flexDays)
-    const to = new Date(base)
-    to.setUTCDate(to.getUTCDate() + flexDays)
-    departDateFrom = from.toISOString().slice(0, 10)
-    departDateTo = to.toISOString().slice(0, 10)
-  }
+  const resolved = resolveDateRange(dateMode, departDate, sp.get("departDateTo") ?? undefined, flexDays)
 
   const rawTripClass = sp.get("tripClass")
   const tripClass: TripClass = VALID_TRIP_CLASS.includes(rawTripClass as TripClass)
@@ -61,8 +47,8 @@ export async function GET(req: NextRequest) {
   const params: FlightSearchParams = {
     originIata: originIata.toUpperCase(),
     destinationIata: destinationIata.toUpperCase(),
-    departDate: dateMode === "range" ? departDateFrom : departDate,
-    departDateTo: dateMode === "range" ? departDateTo : undefined,
+    departDate: resolved.departDate,
+    departDateTo: resolved.departDateTo,
     returnDate: sp.get("returnDate") ?? undefined,
     adults: Number(sp.get("adults") ?? "1"),
     tripClass,
@@ -82,15 +68,7 @@ export async function GET(req: NextRequest) {
     hideUnknownBaggage: sp.get("hideUnknownBaggage") === "1",
   }
 
-  const [directRaw, comboRaw] = await Promise.all([
-    searchTravelpayouts(params),
-    searchKiwiCombos(params),
-  ])
+  const result = await runFlightSearch(params, filters)
 
-  const direct = applyFlightFilters(directRaw, filters)
-  const combo = applyFlightFilters(comboRaw, filters)
-  const airlines = [...new Set([...directRaw, ...comboRaw].map((o) => o.airlineLabel))].sort()
-  const datesSearched = buildDateList(params.departDate, params.departDateTo)
-
-  return NextResponse.json({ direct, combo, airlines, datesSearched })
+  return NextResponse.json(result)
 }
