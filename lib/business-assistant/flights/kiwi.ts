@@ -1,4 +1,6 @@
-import type { FlightOffer, FlightSearchParams } from "./types"
+import type { BaggageAllowance, FlightOffer, FlightSearchParams } from "./types"
+import { buildDateList, seedHash } from "./date-utils"
+import { mockBaggage, worstOfSegments } from "./baggage"
 
 function toKiwiDate(iso: string): string {
   const [year, month, day] = iso.split("-")
@@ -27,35 +29,80 @@ function buildKiwiDeepUrl(params: FlightSearchParams): string {
   return `https://www.kiwi.com/deep?${query.toString()}`
 }
 
-function mockOffers(params: FlightSearchParams): FlightOffer[] {
-  const deepLink = buildClickTrackedDeepLink(buildKiwiDeepUrl(params))
+// Мок-комбо на конкретную дату — псевдослучайная, но воспроизводимая
+// вариация цены/экономии/часа вылета, чтобы диапазон дат выглядел живым
+// без реального ключа KIWI_TEQUILA_API_KEY.
+function mockOffers(params: FlightSearchParams, date: string): FlightOffer[] {
+  const deepLink = buildClickTrackedDeepLink(buildKiwiDeepUrl({ ...params, departDate: date }))
+  const cabinClass = params.tripClass ?? "economy"
+  const seed = seedHash(`${params.originIata}${params.destinationIata}${date}kiwi`)
+  const factor = 0.8 + ((seed % 100) / 100) * 0.6 // 0.8..1.4
+  const basePrice = cabinClass === "business" ? 55000 : 18900
+  const price = Math.round(basePrice * factor)
+  const savings = Math.round(price * (0.2 + ((seed % 30) / 100))) // 20-49% экономии
+  const hour = seedHash(`${date}kiwihour`) % 24
+  // Combo = минимум 2 перелёта (через Стамбул) — багаж считаем по худшему
+  // сегменту, как в реальном комбинировании разных перевозчиков.
+  const legBaggage = worstOfSegments([
+    mockBaggage(`${params.originIata}-leg1-${date}`, cabinClass),
+    mockBaggage(`${params.destinationIata}-leg2-${date}`, cabinClass),
+  ])
   return [
     {
-      id: `kiwi-mock-${params.originIata}-${params.destinationIata}-0`,
+      id: `kiwi-mock-${params.originIata}-${params.destinationIata}-${date}-0`,
       kind: "combo" as const,
-      priceRub: 18900,
+      priceRub: price,
       airlineLabel: "Turkish Airlines + AirAsia (через Стамбул)",
       transfers: 2,
-      durationMinutes: 620,
-      savingsRub: 7300,
+      durationMinutes: 560 + (seed % 180),
+      savingsRub: savings,
       deepLink,
+      departDate: date,
+      departHour: hour,
+      cabinClass,
+      baggage: legBaggage,
     },
   ]
 }
 
 interface TequilaRow {
-  price: number; deep_link?: string; route: { airline: string }[]
+  price: number
+  deep_link?: string
+  route: { airline: string }[]
+  local_departure?: string
+  baglimit?: { hand_weight?: number; hold_weight?: number }
+}
+
+// Tequila отдаёт единый baglimit на весь итинерарий (не по каждому плечу
+// отдельно) — по сути это уже "худшее из перелётов маршрута", как и
+// требуется для combo: Kiwi сама схлопывает к общему знаменателю между
+// разными перевозчиками.
+function baggageFromTequilaRow(row: TequilaRow): BaggageAllowance {
+  const bl = row.baglimit
+  if (!bl || (bl.hand_weight == null && bl.hold_weight == null)) {
+    return { handLuggage: null, checkedBaggage: null, unknown: true }
+  }
+  return {
+    handLuggage: bl.hand_weight ? { pieces: 1, weightKg: bl.hand_weight } : null,
+    checkedBaggage: bl.hold_weight ? { pieces: 1, weightKg: bl.hold_weight } : null,
+    unknown: false,
+    worstSegmentNote: row.route.length > 1 ? "по худшему из перелётов маршрута" : undefined,
+  }
 }
 
 async function fetchRealOffers(params: FlightSearchParams, apiKey: string): Promise<FlightOffer[]> {
+  const dateFrom = params.departDate
+  const dateTo = params.departDateTo ?? params.departDate
+  const cabinClass = params.tripClass ?? "economy"
   const query = new URLSearchParams({
     fly_from: params.originIata,
     fly_to: params.destinationIata,
-    date_from: toKiwiDate(params.departDate),
-    date_to: toKiwiDate(params.departDate),
+    date_from: toKiwiDate(dateFrom),
+    date_to: toKiwiDate(dateTo), // Kiwi Tequila нативно поддерживает диапазон — без перебора
     adults: String(params.adults),
     curr: "RUB",
-    limit: "10",
+    limit: "20",
+    selected_cabins: cabinClass === "business" ? "C" : "M",
   })
   const res = await fetch(`https://api.tequila.kiwi.com/v2/search?${query.toString()}`, {
     headers: { apikey: apiKey },
@@ -65,21 +112,34 @@ async function fetchRealOffers(params: FlightSearchParams, apiKey: string): Prom
 
   return body.data
     .filter((row) => row.route.length > 1)
-    .map((row, i) => ({
-      id: `kiwi-${params.originIata}-${params.destinationIata}-${i}`,
-      kind: "combo" as const,
-      priceRub: Math.round(row.price),
-      airlineLabel: [...new Set(row.route.map((leg) => leg.airline))].join(" + "),
-      transfers: row.route.length - 1,
-      durationMinutes: null,
-      deepLink: row.deep_link
-        ? buildClickTrackedDeepLink(row.deep_link)
-        : buildClickTrackedDeepLink(buildKiwiDeepUrl(params)),
-    }))
+    .map((row, i) => {
+      const depDate = row.local_departure ? row.local_departure.slice(0, 10) : dateFrom
+      const depHour = row.local_departure ? new Date(row.local_departure).getUTCHours() : 12
+      return {
+        id: `kiwi-${params.originIata}-${params.destinationIata}-${depDate}-${i}`,
+        kind: "combo" as const,
+        priceRub: Math.round(row.price),
+        airlineLabel: [...new Set(row.route.map((leg) => leg.airline))].join(" + "),
+        transfers: row.route.length - 1,
+        durationMinutes: null,
+        deepLink: row.deep_link
+          ? buildClickTrackedDeepLink(row.deep_link)
+          : buildClickTrackedDeepLink(buildKiwiDeepUrl(params)),
+        departDate: depDate,
+        departHour: depHour,
+        cabinClass,
+        baggage: baggageFromTequilaRow(row),
+      }
+    })
 }
 
 export async function searchKiwiCombos(params: FlightSearchParams): Promise<FlightOffer[]> {
   const apiKey = process.env.KIWI_TEQUILA_API_KEY
-  const offers = apiKey ? await fetchRealOffers(params, apiKey) : mockOffers(params)
+  if (apiKey) {
+    const offers = await fetchRealOffers(params, apiKey)
+    return [...offers].sort((a, b) => a.priceRub - b.priceRub)
+  }
+  const dates = buildDateList(params.departDate, params.departDateTo)
+  const offers = dates.flatMap((date) => mockOffers(params, date))
   return [...offers].sort((a, b) => a.priceRub - b.priceRub)
 }
