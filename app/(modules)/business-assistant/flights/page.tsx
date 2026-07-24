@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
@@ -18,7 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2, Plane, TrendingDown, Flame, ExternalLink, RefreshCw } from "lucide-react"
+import {
+  Loader2, Plane, TrendingDown, TrendingUp, Minus, Flame, ExternalLink, RefreshCw,
+  Bell, BellRing, Trash2, Compass,
+} from "lucide-react"
 
 type DateMode = "exact" | "range"
 type TripClass = "economy" | "business"
@@ -73,6 +77,39 @@ interface TelegramDeal {
   createdAt: string
 }
 
+interface PriceWatch {
+  id: string
+  originIata: string
+  destinationIata: string
+  dateMode: DateMode
+  departDate: string
+  departDateTo: string | null
+  tripClass: TripClass
+  targetPriceRub: number | null
+  lastPriceRub: number | null
+  lastCheckedAt: string | null
+  bestPriceRub: number | null
+  bestPriceAt: string | null
+  active: boolean
+  createdAt: string
+}
+
+type BuyVerdict = "buy_now" | "can_wait" | "watch"
+
+interface BuyTimingResult {
+  verdict: BuyVerdict
+  verdictLabel: string
+  reasons: string[]
+  cheapestDatesNearby: { date: string; price: number }[]
+  approximate: boolean
+}
+
+const VERDICT_VARIANT: Record<BuyVerdict, "default" | "secondary" | "outline"> = {
+  buy_now: "default",
+  can_wait: "secondary",
+  watch: "outline",
+}
+
 const TIME_OF_DAY_OPTIONS: { value: TimeOfDay; label: string }[] = [
   { value: "morning", label: "Утро (06–12)" },
   { value: "day", label: "День (12–18)" },
@@ -113,6 +150,16 @@ export default function FlightsSearchPage() {
   const [dealsLoading, setDealsLoading] = useState(false)
   const [dealsError, setDealsError] = useState<string | null>(null)
 
+  // Отслеживание цены
+  const [watches, setWatches] = useState<PriceWatch[]>([])
+  const [watchesLoading, setWatchesLoading] = useState(false)
+  const [trackSaving, setTrackSaving] = useState(false)
+  const [trackError, setTrackError] = useState<string | null>(null)
+
+  // Когда покупать
+  const [buyTiming, setBuyTiming] = useState<BuyTimingResult | null>(null)
+  const [buyTimingLoading, setBuyTimingLoading] = useState(false)
+
   async function loadDeals(force = false) {
     setDealsLoading(true)
     setDealsError(null)
@@ -131,8 +178,23 @@ export default function FlightsSearchPage() {
     }
   }
 
+  async function loadWatches() {
+    setWatchesLoading(true)
+    try {
+      const res = await fetch("/api/modules/business-assistant/flights/watches")
+      if (!res.ok) throw new Error("Не удалось загрузить отслеживания")
+      const data = (await res.json()) as { watches: PriceWatch[] }
+      setWatches(data.watches)
+    } catch {
+      // тихо — блок необязателен для остального функционала страницы
+    } finally {
+      setWatchesLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadDeals()
+    loadWatches()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -188,10 +250,106 @@ export default function FlightsSearchPage() {
       setAvailableAirlines(data.airlines)
       setDatesSearched(data.datesSearched)
       setSearched(true)
+
+      // «Когда покупать» имеет смысл только для точной даты вылета.
+      if (dateMode === "exact") {
+        loadBuyTiming(departDate)
+      } else {
+        setBuyTiming(null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка поиска")
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadBuyTiming(date: string) {
+    if (!origin || !destination || !date) return
+    setBuyTimingLoading(true)
+    try {
+      const query = new URLSearchParams({
+        origin: origin.toUpperCase(),
+        destination: destination.toUpperCase(),
+        departDate: date,
+        tripClass,
+      })
+      const res = await fetch(`/api/modules/business-assistant/flights/buy-timing?${query.toString()}`)
+      if (!res.ok) throw new Error()
+      const data = (await res.json()) as BuyTimingResult
+      setBuyTiming(data)
+    } catch {
+      setBuyTiming(null)
+    } finally {
+      setBuyTimingLoading(false)
+    }
+  }
+
+  function pickCheaperDate(date: string) {
+    setDateMode("exact")
+    setDepartDate(date)
+    // Небольшая задержка, чтобы state успел примениться перед повторным поиском.
+    setTimeout(() => handleSearch(), 0)
+  }
+
+  async function handleTrackSearch() {
+    if (!origin || !destination || !departDate) {
+      setTrackError("Заполните откуда, куда и дату вылета")
+      return
+    }
+    setTrackError(null)
+    setTrackSaving(true)
+    try {
+      const res = await fetch("/api/modules/business-assistant/flights/watches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          originIata: origin.toUpperCase(),
+          destinationIata: destination.toUpperCase(),
+          dateMode,
+          departDate,
+          departDateTo: dateMode === "range" ? (departDateTo || undefined) : undefined,
+          tripClass,
+          filters: {
+            maxPriceRub: maxPrice ? Number(maxPrice) : undefined,
+            timeOfDay: timeOfDay.length > 0 ? timeOfDay : undefined,
+            stops,
+            airlines: selectedAirlines.length > 0 ? selectedAirlines : undefined,
+            sortBy,
+            baggage,
+            minBaggageWeightKg: baggage === "checked" && minBaggageWeightKg ? Number(minBaggageWeightKg) : undefined,
+            hideUnknownBaggage,
+          },
+        }),
+      })
+      if (!res.ok) throw new Error("Не удалось сохранить отслеживание")
+      await loadWatches()
+    } catch (e) {
+      setTrackError(e instanceof Error ? e.message : "Ошибка сохранения")
+    } finally {
+      setTrackSaving(false)
+    }
+  }
+
+  async function toggleWatchActive(watch: PriceWatch) {
+    setWatches((prev) => prev.map((w) => (w.id === watch.id ? { ...w, active: !w.active } : w)))
+    try {
+      await fetch(`/api/modules/business-assistant/flights/watches/${watch.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !watch.active }),
+      })
+    } catch {
+      loadWatches() // откат к серверному состоянию при ошибке
+    }
+  }
+
+  async function deleteWatch(id: string) {
+    setWatches((prev) => prev.filter((w) => w.id !== id))
+    try {
+      await fetch(`/api/modules/business-assistant/flights/watches/${id}`, { method: "DELETE" })
+    } catch {
+      loadWatches()
     }
   }
 
@@ -267,9 +425,12 @@ export default function FlightsSearchPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-end">
-                    <Button onClick={handleSearch} disabled={loading} className="w-full">
+                  <div className="flex items-end gap-2">
+                    <Button onClick={handleSearch} disabled={loading} className="flex-1">
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Найти"}
+                    </Button>
+                    <Button onClick={handleTrackSearch} disabled={trackSaving} variant="outline" title="Отслеживать цену">
+                      {trackSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
                     </Button>
                   </div>
                 </div>
@@ -316,15 +477,39 @@ export default function FlightsSearchPage() {
                       Гибкие даты — точная дата «от» ±3 дня (без даты «до»)
                     </Label>
                   </div>
-                  <Button onClick={handleSearch} disabled={loading}>
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Найти по диапазону"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button onClick={handleSearch} disabled={loading}>
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Найти по диапазону"}
+                    </Button>
+                    <Button onClick={handleTrackSearch} disabled={trackSaving} variant="outline" title="Отслеживать цену">
+                      {trackSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+                    </Button>
+                  </div>
                 </div>
               )}
 
               {error && <p className="text-sm text-destructive">{error}</p>}
+              {trackError && <p className="text-sm text-destructive">{trackError}</p>}
             </CardContent>
           </Card>
+
+          {(watchesLoading || watches.length > 0) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BellRing className="w-4 h-4" /> Мои отслеживания
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {watchesLoading && watches.length === 0 && (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+                {watches.map((watch) => (
+                  <WatchRow key={watch.id} watch={watch} onToggle={toggleWatchActive} onDelete={deleteWatch} />
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {searched && (
             <Card>
@@ -479,6 +664,56 @@ export default function FlightsSearchPage() {
             </Card>
           )}
 
+          {searched && dateMode === "exact" && (buyTimingLoading || buyTiming) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Compass className="w-4 h-4" /> Когда покупать
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {buyTimingLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                {!buyTimingLoading && buyTiming && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={VERDICT_VARIANT[buyTiming.verdict]} className="text-sm">
+                        {buyTiming.verdictLabel}
+                      </Badge>
+                      {buyTiming.approximate && (
+                        <span className="text-xs text-muted-foreground">оценка приблизительная</span>
+                      )}
+                    </div>
+                    <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                      {buyTiming.reasons.map((reason, i) => (
+                        <li key={i}>{reason}</li>
+                      ))}
+                    </ul>
+                    {buyTiming.cheapestDatesNearby.length > 0 && (
+                      <div>
+                        <div className="text-xs font-medium mb-1">Соседние даты дешевле:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {buyTiming.cheapestDatesNearby.map((d) => (
+                            <button
+                              key={d.date}
+                              onClick={() => pickCheaperDate(d.date)}
+                              className="text-xs rounded-md border border-border/60 px-2 py-1 hover:bg-accent transition-colors"
+                            >
+                              {d.date} · {d.price.toLocaleString("ru-RU")} ₽
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <Button onClick={handleTrackSearch} disabled={trackSaving} variant="outline" size="sm">
+                      {trackSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4 mr-1" />}
+                      Отслеживать
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base flex items-center gap-2">
@@ -568,6 +803,63 @@ function OfferRow({ offer, showDate }: { offer: FlightOffer; showDate: boolean }
           <a href={offer.deepLink} target="_blank" rel="noopener noreferrer">
             Купить
           </a>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function WatchRow({
+  watch,
+  onToggle,
+  onDelete,
+}: {
+  watch: PriceWatch
+  onToggle: (w: PriceWatch) => void
+  onDelete: (id: string) => void
+}) {
+  const dates =
+    watch.dateMode === "range" && watch.departDateTo
+      ? `${watch.departDate} — ${watch.departDateTo}`
+      : watch.departDate
+
+  const trend =
+    watch.lastPriceRub != null && watch.bestPriceRub != null
+      ? watch.lastPriceRub > watch.bestPriceRub
+        ? "up"
+        : watch.lastPriceRub < watch.bestPriceRub
+          ? "down"
+          : "flat"
+      : null
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
+      <div className="min-w-0">
+        <div className="font-medium text-sm">
+          {watch.originIata} → {watch.destinationIata}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {dates} · {watch.tripClass === "business" ? "бизнес" : "эконом"}
+          {watch.targetPriceRub != null && ` · цель ${watch.targetPriceRub.toLocaleString("ru-RU")} ₽`}
+        </div>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="text-right text-sm">
+          <div className="flex items-center gap-1 justify-end">
+            {trend === "up" && <TrendingUp className="w-3 h-3 text-destructive" />}
+            {trend === "down" && <TrendingDown className="w-3 h-3 text-emerald-600" />}
+            {trend === "flat" && <Minus className="w-3 h-3 text-muted-foreground" />}
+            <span className="font-semibold">
+              {watch.lastPriceRub != null ? `${watch.lastPriceRub.toLocaleString("ru-RU")} ₽` : "ещё не проверено"}
+            </span>
+          </div>
+          {watch.bestPriceRub != null && (
+            <div className="text-xs text-muted-foreground">лучшая: {watch.bestPriceRub.toLocaleString("ru-RU")} ₽</div>
+          )}
+        </div>
+        <Switch checked={watch.active} onCheckedChange={() => onToggle(watch)} />
+        <Button variant="ghost" size="icon" onClick={() => onDelete(watch.id)} title="Удалить">
+          <Trash2 className="w-4 h-4" />
         </Button>
       </div>
     </div>
