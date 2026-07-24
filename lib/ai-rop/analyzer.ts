@@ -202,10 +202,21 @@ function userPrompt(args: {
   checklist: ChecklistItem[] | null
   context: DealContext | null
   interactionType?: "call" | "chat" | "email" | "meeting"
+  triageKind?: "manager_written" | "inbound_no_manager" | "dialogue"
   glossary?: string | null
 }) {
   const { transcript, checklist, context } = args
   const itype = args.interactionType ?? "call"
+
+  // Позиция автора текста по триажу (только text-only; direction в CRM ненадёжен).
+  // inbound_no_manager с высокой уверенностью сюда не доходит (гейт в pipeline),
+  // но на случай низкой уверенности предупреждаем модель и о нём.
+  const roleBlock =
+    args.triageKind === "manager_written"
+      ? `ВАЖНО про роли: этот текст целиком написан НАШИМ менеджером (исходящее письмо/сообщение клиенту, ответа клиента здесь нет). Оценивай КАЧЕСТВО ТЕКСТА МЕНЕДЖЕРА: структуру, персонализацию, выгоды, CTA. Не выдумывай реакцию клиента.\n\n`
+      : args.triageKind === "inbound_no_manager"
+        ? `ВАЖНО про роли: этот текст, вероятно, ВХОДЯЩЕЕ сообщение от внешнего отправителя (клиент или сторонняя рассылка) — наш менеджер в нём не писал. НЕ оценивай его как работу менеджера, manager_score оставь низко-нейтральным, coaching_tips — пустой массив, в summary честно опиши, что это входящее без участия менеджера.\n\n`
+        : ""
 
   const glossaryText = (args.glossary ?? "").trim()
   const glossaryBlock = glossaryText
@@ -249,7 +260,7 @@ ${context.recentComments.map((c) => `  • ${c.createdAt}: ${c.text.slice(0, 300
 `
     : "Контекст сделки/лида не получен."
 
-  return `${glossaryBlock}Тип взаимодействия: ${labels.noun}. ${labels.diarization}.
+  return `${glossaryBlock}${roleBlock}Тип взаимодействия: ${labels.noun}. ${labels.diarization}.
 
 ${contextBlock}
 
@@ -272,6 +283,8 @@ export async function analyzeCall(args: {
   companyId?: string // §4.4 для бюджет-гарда + логирования
   callId?: string // rop_calls.id, для usage_events.call_id
   interactionType?: "call" | "chat" | "email" | "meeting"
+  /** Вердикт триажа text-only (text-triage.ts) — от чьего лица написан текст. */
+  triageKind?: "manager_written" | "inbound_no_manager" | "dialogue"
   /** Per-company переопределение модели (rop_settings.analysisModel). */
   modelOverride?: string | null
   /** Глоссарий названий компании (rop_settings.glossary). */

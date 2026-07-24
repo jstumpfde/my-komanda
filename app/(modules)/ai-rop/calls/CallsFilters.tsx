@@ -118,6 +118,7 @@ export function CallsFilters({ managers }: { managers?: ManagerOption[] }) {
             <SelectItem value="done">Готово</SelectItem>
             <SelectItem value="pending">В очереди</SelectItem>
             <SelectItem value="no_recording">Без записи</SelectItem>
+            <SelectItem value="skipped_inbound">Входящее без менеджера</SelectItem>
             <SelectItem value="failed">Ошибка</SelectItem>
           </SelectContent>
         </Select>

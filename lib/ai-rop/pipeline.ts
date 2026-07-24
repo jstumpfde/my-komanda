@@ -23,6 +23,7 @@ import {
 import { sendCallToBitrix, type AnalysisForCrm, type CallForCrm } from "./bitrix-write"
 import { transcribeFile } from "./transcribe"
 import { analyzeCall, type CallAnalysis } from "./analyzer"
+import { triageTextInteraction, type TextTriageKind } from "./text-triage"
 import { detectProduct, type ProductCandidate } from "./product-detector"
 import { detectDiscrepancies } from "./discrepancy-detector"
 import { createReminderFromAnalysis } from "./reminders"
@@ -203,6 +204,33 @@ export async function processCall(callId: string, companyId: string, opts?: { sc
     }
   }
 
+  // ── Триаж text-only: чужие входящие (спам/КП третьих сторон) не анализируем ──
+  // Bitrix DIRECTION у email ненадёжен (исходящие письма компании тоже приходят
+  // как direction=in), поэтому решает контент: дешёвый fast-вызов до полного
+  // анализа. Fail-open внутри triageTextInteraction — при ошибке идём дальше.
+  let triageKind: TextTriageKind = "dialogue"
+  if (isTextOnly && interactionType !== "meeting") {
+    const triage = await triageTextInteraction({
+      text: t.text,
+      interactionType,
+      glossary: settingsRow.glossary ?? null,
+      companyId,
+      callId,
+      modelOverride: settingsRow.analysisModel ?? undefined,
+    })
+    triageKind = triage.kind
+    if (triage.kind === "inbound_no_manager" && triage.confidence >= 0.7) {
+      await upsertTranscript(callId, { text: t.text, segmentsJson: t.segments, dialogueJson: [], language: t.language, model: t.model })
+      await setCallStatus(callId, "skipped_inbound")
+      await db
+        .update(ropCalls)
+        .set({ error: `Входящее без участия менеджера — анализ пропущен (${triage.reason || "триаж"})` })
+        .where(eq(ropCalls.id, callId))
+      console.log(`[ai-rop/pipeline] #${callId} (${interactionType}): триаж inbound_no_manager (${triage.confidence.toFixed(2)}) — полный анализ пропущен`)
+      return
+    }
+  }
+
   // 3. Контекст сделки/лида.
   await setCallStatus(callId, "analyzing")
   const context: DealContext | null = client
@@ -270,6 +298,7 @@ export async function processCall(callId: string, companyId: string, opts?: { sc
     companyId,
     callId,
     interactionType,
+    triageKind,
     modelOverride,
     glossary: settingsRow.glossary ?? null,
   })

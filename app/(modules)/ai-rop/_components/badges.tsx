@@ -46,6 +46,7 @@ const STATUS_LABELS: Record<string, string> = {
   failed: "Ошибка",
   no_recording: "Без записи",
   budget_exceeded: "Бюджет исчерпан",
+  skipped_inbound: "Входящее без менеджера",
 }
 const IN_PROGRESS = new Set(["downloading", "transcribing", "analyzing", "syncing"])
 
@@ -57,7 +58,7 @@ export function CallStatusBadge({ value }: { value: string }) {
   if (value === "failed" || value === "budget_exceeded") {
     return <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400">{label}</Badge>
   }
-  if (value === "no_recording") {
+  if (value === "no_recording" || value === "skipped_inbound") {
     return <Badge variant="outline" className="text-muted-foreground">{label}</Badge>
   }
   if (value === "pending" || IN_PROGRESS.has(value)) {
