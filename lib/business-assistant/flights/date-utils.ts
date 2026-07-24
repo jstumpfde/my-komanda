@@ -36,6 +36,26 @@ export function buildDateList(fromISO: string, toISO?: string): string[] {
   return [...dates]
 }
 
+/** Резолвит режим "точная дата ±N дней" в явный диапазон departDate/departDateTo.
+ *  Используется и ручным поиском (route), и созданием отслеживания (watches) —
+ *  чтобы сохранённый watch хранил уже готовый диапазон, а не flexDays. */
+export function resolveDateRange(
+  dateMode: "exact" | "range",
+  departDate: string,
+  departDateTo: string | undefined,
+  flexDays: number,
+): { departDate: string; departDateTo: string | undefined } {
+  if (dateMode !== "range" || departDateTo || !flexDays || flexDays <= 0) {
+    return { departDate, departDateTo: dateMode === "range" ? departDateTo : undefined }
+  }
+  const base = new Date(`${departDate}T00:00:00Z`)
+  const from = new Date(base)
+  from.setUTCDate(from.getUTCDate() - flexDays)
+  const to = new Date(base)
+  to.setUTCDate(to.getUTCDate() + flexDays)
+  return { departDate: from.toISOString().slice(0, 10), departDateTo: to.toISOString().slice(0, 10) }
+}
+
 /** Простой детерминированный хэш строки — для псевдослучайных, но
  *  воспроизводимых вариаций мок-цен/времени по датам (живой вид UI без
  *  реального провайдера, но без дребезга между рендерами одного и того же
