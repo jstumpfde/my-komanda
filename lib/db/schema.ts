@@ -3693,3 +3693,24 @@ export const outreachIntegrations = pgTable("outreach_integrations", {
 })
 export type OutreachIntegration    = typeof outreachIntegrations.$inferSelect
 export type NewOutreachIntegration = typeof outreachIntegrations.$inferInsert
+
+// Бизнес-ассистент → Авиабилеты: лента находок из Telegram-каналов со
+// сливами дешёвых билетов. Платформенная таблица (БЕЗ company_id) — источник
+// публичный, не данные конкретного клиента. Наполняется кроном
+// flight-deals-ingest (см. отдельный план про Telegram-userbot). Миграция 0232.
+export const flightDeals = pgTable("flight_deals", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  routeFrom:        text("route_from").notNull(),
+  routeTo:          text("route_to").notNull(),
+  priceRub:         integer("price_rub").notNull(),
+  sourceChannel:    text("source_channel").notNull(),
+  sourceMessageUrl: text("source_message_url").notNull().unique(),
+  rawText:          text("raw_text").notNull(),
+  aiExtractedJson:  jsonb("ai_extracted_json"),
+  validUntil:       timestamp("valid_until", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("flight_deals_created_idx").on(t.createdAt),
+])
+export type FlightDeal    = typeof flightDeals.$inferSelect
+export type NewFlightDeal = typeof flightDeals.$inferInsert
