@@ -264,6 +264,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     basePath: '/business-assistant',
     menuItems: [
       { label: 'Авиабилеты', href: '/business-assistant/flights', icon: 'Plane' },
+      { label: 'Отслеживания', href: '/business-assistant/flights/watches', icon: 'Bell' },
       { label: 'Отели', href: '/business-assistant/hotels', icon: 'BedDouble' },
     ],
   },

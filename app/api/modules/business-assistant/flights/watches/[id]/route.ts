@@ -3,11 +3,16 @@ import { requireCompany } from "@/lib/api-helpers"
 import { db } from "@/lib/db"
 import { flightPriceWatches } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
+import { isValidTelegramChatId } from "@/lib/business-assistant/flights/watch-notify"
+import type { TripClass } from "@/lib/business-assistant/flights/types"
 
 type Ctx = { params: Promise<{ id: string }> }
 
-// PATCH — переключить active / изменить targetPriceRub. Только владелец
-// внутри своей компании (tenant + owner isolation).
+const VALID_TRIP_CLASS: TripClass[] = ["economy", "business"]
+
+// PATCH — редактирование отслеживания целиком (форма "Новое отслеживание"
+// переиспользуется и для правки) или частично (переключить active, задать
+// targetPriceRub). Только владелец внутри своей компании (tenant + owner).
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   let user
   try {
@@ -22,6 +27,25 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (typeof body.active === "boolean") updates.active = body.active
   if (body.targetPriceRub === null || typeof body.targetPriceRub === "number") {
     updates.targetPriceRub = body.targetPriceRub
+  }
+  if (typeof body.originIata === "string" && body.originIata.trim()) {
+    updates.originIata = body.originIata.trim().toUpperCase()
+  }
+  if (typeof body.destinationIata === "string" && body.destinationIata.trim()) {
+    updates.destinationIata = body.destinationIata.trim().toUpperCase()
+  }
+  if (body.dateMode === "exact" || body.dateMode === "range") updates.dateMode = body.dateMode
+  if (typeof body.departDate === "string" && body.departDate) updates.departDate = body.departDate
+  if (body.departDateTo === null || typeof body.departDateTo === "string") updates.departDateTo = body.departDateTo || null
+  if (VALID_TRIP_CLASS.includes(body.tripClass as TripClass)) updates.tripClass = body.tripClass
+  if (body.filters && typeof body.filters === "object") updates.filtersJson = body.filters
+  if (typeof body.notifyTelegram === "boolean") updates.notifyTelegram = body.notifyTelegram
+  if (body.telegramChatId === null || typeof body.telegramChatId === "string") {
+    const chatId = (body.telegramChatId ?? "").trim() || null
+    if (chatId && !isValidTelegramChatId(chatId)) {
+      return NextResponse.json({ error: "Некорректный chat ID Telegram" }, { status: 400 })
+    }
+    updates.telegramChatId = chatId
   }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "Нечего обновлять" }, { status: 400 })

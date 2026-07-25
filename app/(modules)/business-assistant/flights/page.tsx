@@ -20,8 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog"
+import Link from "next/link"
+import {
   Loader2, Plane, TrendingDown, TrendingUp, Minus, Flame, ExternalLink, RefreshCw,
-  Bell, BellRing, Trash2, Compass,
+  Bell, BellRing, Trash2, Compass, Send, Settings2,
 } from "lucide-react"
 
 type DateMode = "exact" | "range"
@@ -155,6 +159,13 @@ export default function FlightsSearchPage() {
   const [watchesLoading, setWatchesLoading] = useState(false)
   const [trackSaving, setTrackSaving] = useState(false)
   const [trackError, setTrackError] = useState<string | null>(null)
+  const [telegramConfigured, setTelegramConfigured] = useState(false)
+  const [trackDialogOpen, setTrackDialogOpen] = useState(false)
+  const [trackTargetPrice, setTrackTargetPrice] = useState("")
+  const [trackNotifyTelegram, setTrackNotifyTelegram] = useState(false)
+  const [trackChatId, setTrackChatId] = useState("")
+  const [trackTestSending, setTrackTestSending] = useState(false)
+  const [trackTestResult, setTrackTestResult] = useState<string | null>(null)
 
   // Когда покупать
   const [buyTiming, setBuyTiming] = useState<BuyTimingResult | null>(null)
@@ -183,8 +194,9 @@ export default function FlightsSearchPage() {
     try {
       const res = await fetch("/api/modules/business-assistant/flights/watches")
       if (!res.ok) throw new Error("Не удалось загрузить отслеживания")
-      const data = (await res.json()) as { watches: PriceWatch[] }
+      const data = (await res.json()) as { watches: PriceWatch[]; telegramConfigured: boolean }
       setWatches(data.watches)
+      setTelegramConfigured(data.telegramConfigured)
     } catch {
       // тихо — блок необязателен для остального функционала страницы
     } finally {
@@ -292,9 +304,47 @@ export default function FlightsSearchPage() {
     setTimeout(() => handleSearch(), 0)
   }
 
-  async function handleTrackSearch() {
+  function openTrackDialog() {
     if (!origin || !destination || !departDate) {
       setTrackError("Заполните откуда, куда и дату вылета")
+      return
+    }
+    setTrackError(null)
+    setTrackTargetPrice("")
+    setTrackNotifyTelegram(false)
+    setTrackChatId("")
+    setTrackTestResult(null)
+    setTrackDialogOpen(true)
+  }
+
+  async function handleTestTelegram() {
+    setTrackTestResult(null)
+    if (!trackChatId.trim()) {
+      setTrackTestResult("Укажите chat ID")
+      return
+    }
+    setTrackTestSending(true)
+    try {
+      const res = await fetch("/api/modules/business-assistant/flights/watches/test-telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: trackChatId.trim() }),
+      })
+      const data = (await res.json()) as { ok: boolean; reason?: string }
+      if (data.ok) setTrackTestResult("Отправлено — проверьте Telegram")
+      else if (data.reason === "not_configured") setTrackTestResult("Telegram-бот не настроен на сервере")
+      else if (data.reason === "invalid_chat_id") setTrackTestResult("Некорректный chat ID")
+      else setTrackTestResult("Не доставлено — проверьте chat ID (боту нужно сначала написать /start)")
+    } catch {
+      setTrackTestResult("Ошибка отправки")
+    } finally {
+      setTrackTestSending(false)
+    }
+  }
+
+  async function confirmTrackSearch() {
+    if (trackNotifyTelegram && trackChatId.trim() && !/^-?\d+$/.test(trackChatId.trim())) {
+      setTrackError("Chat ID Telegram должен быть числом")
       return
     }
     setTrackError(null)
@@ -320,9 +370,16 @@ export default function FlightsSearchPage() {
             minBaggageWeightKg: baggage === "checked" && minBaggageWeightKg ? Number(minBaggageWeightKg) : undefined,
             hideUnknownBaggage,
           },
+          targetPriceRub: trackTargetPrice ? Number(trackTargetPrice) : null,
+          notifyTelegram: trackNotifyTelegram,
+          telegramChatId: trackNotifyTelegram ? trackChatId.trim() || null : null,
         }),
       })
-      if (!res.ok) throw new Error("Не удалось сохранить отслеживание")
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Не удалось сохранить отслеживание")
+      }
+      setTrackDialogOpen(false)
       await loadWatches()
     } catch (e) {
       setTrackError(e instanceof Error ? e.message : "Ошибка сохранения")
@@ -367,9 +424,16 @@ export default function FlightsSearchPage() {
       <SidebarInset>
         <DashboardHeader />
         <div className="p-6 space-y-6 max-w-5xl mx-auto w-full">
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Plane className="w-6 h-6" /> Авиабилеты
-          </h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold flex items-center gap-2">
+              <Plane className="w-6 h-6" /> Авиабилеты
+            </h1>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/business-assistant/flights/watches">
+                <Settings2 className="w-4 h-4 mr-1" /> Отслеживания
+              </Link>
+            </Button>
+          </div>
 
           <Card>
             <CardHeader>
@@ -429,7 +493,7 @@ export default function FlightsSearchPage() {
                     <Button onClick={handleSearch} disabled={loading} className="flex-1">
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Найти"}
                     </Button>
-                    <Button onClick={handleTrackSearch} disabled={trackSaving} variant="outline" title="Отслеживать цену">
+                    <Button onClick={openTrackDialog} disabled={trackSaving} variant="outline" title="Отслеживать цену">
                       {trackSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
                     </Button>
                   </div>
@@ -481,7 +545,7 @@ export default function FlightsSearchPage() {
                     <Button onClick={handleSearch} disabled={loading}>
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Найти по диапазону"}
                     </Button>
-                    <Button onClick={handleTrackSearch} disabled={trackSaving} variant="outline" title="Отслеживать цену">
+                    <Button onClick={openTrackDialog} disabled={trackSaving} variant="outline" title="Отслеживать цену">
                       {trackSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
                     </Button>
                   </div>
@@ -704,7 +768,7 @@ export default function FlightsSearchPage() {
                         </div>
                       </div>
                     )}
-                    <Button onClick={handleTrackSearch} disabled={trackSaving} variant="outline" size="sm">
+                    <Button onClick={openTrackDialog} disabled={trackSaving} variant="outline" size="sm">
                       {trackSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4 mr-1" />}
                       Отслеживать
                     </Button>
@@ -765,6 +829,73 @@ export default function FlightsSearchPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Dialog open={trackDialogOpen} onOpenChange={setTrackDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Отслеживать цену</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="trackTargetPrice">Целевая цена, ₽ (необязательно)</Label>
+                <Input
+                  id="trackTargetPrice"
+                  type="number"
+                  placeholder="Уведомить, когда цена ниже..."
+                  value={trackTargetPrice}
+                  onChange={(e) => setTrackTargetPrice(e.target.value)}
+                />
+              </div>
+              <div className="rounded-lg border border-border/60 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="font-medium">Уведомлять в Telegram</Label>
+                  <Switch checked={trackNotifyTelegram} onCheckedChange={setTrackNotifyTelegram} />
+                </div>
+                {trackNotifyTelegram && (
+                  <>
+                    {!telegramConfigured && (
+                      <p className="text-xs text-amber-600">Telegram-бот не настроен на сервере — уведомления не будут отправлены.</p>
+                    )}
+                    <div>
+                      <Label htmlFor="trackChatId">Chat ID</Label>
+                      <Input
+                        id="trackChatId"
+                        placeholder="Например, 123456789"
+                        value={trackChatId}
+                        onChange={(e) => setTrackChatId(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Chat ID вашего диалога с ботом компании — напишите боту /start и возьмите ID.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleTestTelegram}
+                        disabled={trackTestSending || !trackChatId.trim()}
+                      >
+                        {trackTestSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+                        Отправить тест
+                      </Button>
+                      {trackTestResult && <span className="text-xs text-muted-foreground">{trackTestResult}</span>}
+                    </div>
+                  </>
+                )}
+              </div>
+              {trackError && <p className="text-sm text-destructive">{trackError}</p>}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTrackDialogOpen(false)} disabled={trackSaving}>
+                Отмена
+              </Button>
+              <Button onClick={confirmTrackSearch} disabled={trackSaving}>
+                {trackSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Сохранить"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </SidebarInset>
     </SidebarProvider>
   )

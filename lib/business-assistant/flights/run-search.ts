@@ -6,7 +6,7 @@ import { searchTravelpayouts } from "./travelpayouts"
 import { searchKiwiCombos } from "./kiwi"
 import { applyFlightFilters } from "./filters"
 import { buildDateList } from "./date-utils"
-import type { FlightFilters, FlightSearchParams, FlightSearchResult } from "./types"
+import type { FlightFilters, FlightOffer, FlightSearchParams, FlightSearchResult } from "./types"
 
 export async function runFlightSearch(
   params: FlightSearchParams,
@@ -25,10 +25,17 @@ export async function runFlightSearch(
   return { direct, combo, airlines, datesSearched }
 }
 
+/** Самое дешёвое предложение среди прямых и составных маршрутов — целиком
+ *  (нужен deepLink для ссылки "Купить" в Telegram-уведомлении). null, если
+ *  предложений нет. */
+export function cheapestOffer(result: FlightSearchResult): FlightOffer | null {
+  const all = [...result.direct, ...result.combo]
+  if (all.length === 0) return null
+  return all.reduce((best, o) => (o.priceRub < best.priceRub ? o : best))
+}
+
 /** Минимальная цена среди всех найденных предложений (прямых и составных) —
  *  «текущая цена» для отслеживания. null, если предложений нет. */
 export function cheapestPrice(result: FlightSearchResult): number | null {
-  const all = [...result.direct, ...result.combo]
-  if (all.length === 0) return null
-  return Math.min(...all.map((o) => o.priceRub))
+  return cheapestOffer(result)?.priceRub ?? null
 }

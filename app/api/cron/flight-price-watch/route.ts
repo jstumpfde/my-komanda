@@ -1,23 +1,23 @@
 // Крон «Отслеживать цену» (Бизнес-ассистент → Авиабилеты): для каждого
-// активного flight_price_watches прогоняет тот же поиск, что и ручной поиск
-// (runFlightSearch — переиспользуется, не дублируется), обновляет
-// last/best price и создаёт уведомление при достижении целевой цены или
-// падении >=15% от последней проверки.
+// активного flight_price_watches вызывает checkSingleWatch (общая логика с
+// кнопкой «Проверить сейчас» на странице /business-assistant/flights/watches
+// — не дублируется). Уведомление в колокольчик + опционально в Telegram при
+// достижении целевой цены или падении >=15% от последней проверки.
 //
 // Расписание на сервере (раз в 6 часов):
 //   0 4,10,16,22 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
 //     https://company24.pro/api/cron/flight-price-watch >> /var/log/flight-price-watch.log 2>&1
 //
-// Cooldown 6 часов — защита от дублей при ручных перезапусках.
+// Cooldown 6 часов между запусками крона — защита от дублей при ручных
+// перезапусках (отдельно от 6ч дедупа одного и того же уведомления внутри
+// checkSingleWatch).
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { cronRuns, flightPriceWatches, notifications } from "@/lib/db/schema"
+import { cronRuns, flightPriceWatches } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { checkCronAuth } from "@/lib/cron/auth"
 import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
-import { runFlightSearch, cheapestPrice } from "@/lib/business-assistant/flights/run-search"
-import { shouldNotifyPriceDrop, buildPriceDropNotification } from "@/lib/business-assistant/flights/watch-notify"
-import type { FlightFilters, FlightSearchParams, TripClass } from "@/lib/business-assistant/flights/types"
+import { checkSingleWatch } from "@/lib/business-assistant/flights/check-watch"
 
 const CRON_NAME = "flight-price-watch"
 const MIN_INTERVAL_MS = 6 * 60 * 60_000
@@ -49,85 +49,24 @@ async function handle(req: NextRequest) {
   const run = await startCronRun(CRON_NAME)
   let checked = 0
   let notified = 0
+  let telegramSent = 0
   let errors = 0
 
   try {
     for (const watch of watches) {
       try {
-        const params: FlightSearchParams = {
-          originIata:      watch.originIata,
-          destinationIata: watch.destinationIata,
-          departDate:      watch.departDate,
-          departDateTo:    watch.departDateTo ?? undefined,
-          adults:          1,
-          tripClass:       (watch.tripClass as TripClass) ?? "economy",
-        }
-        const filters = (watch.filtersJson as FlightFilters | null) ?? undefined
-        const result = await runFlightSearch(params, filters)
-        const newPrice = cheapestPrice(result)
+        const result = await checkSingleWatch(watch)
         checked++
-        if (newPrice === null) continue // ничего не нашли в этот раз — не считаем ошибкой
-
-        const notify = shouldNotifyPriceDrop(
-          { targetPriceRub: watch.targetPriceRub, lastPriceRub: watch.lastPriceRub },
-          newPrice,
-        )
-
-        const now = new Date()
-        const isNewBest = watch.bestPriceRub == null || newPrice < watch.bestPriceRub
-        await db
-          .update(flightPriceWatches)
-          .set({
-            lastPriceRub:  newPrice,
-            lastCheckedAt: now,
-            bestPriceRub:  isNewBest ? newPrice : watch.bestPriceRub,
-            bestPriceAt:   isNewBest ? now : watch.bestPriceAt,
-          })
-          .where(eq(flightPriceWatches.id, watch.id))
-
-        if (notify) {
-          // Не дублируем — если за последние 6ч уже было уведомление по этому watch, пропускаем.
-          const [existing] = await db
-            .select({ createdAt: notifications.createdAt })
-            .from(notifications)
-            .where(
-              and(
-                eq(notifications.type, "flight_price_drop"),
-                eq(notifications.sourceId, watch.id),
-              ),
-            )
-            .orderBy(desc(notifications.createdAt))
-            .limit(1)
-
-          const isRecent = existing?.createdAt && Date.now() - new Date(existing.createdAt).getTime() < MIN_INTERVAL_MS
-
-          if (!isRecent) {
-            const { title, body } = buildPriceDropNotification(
-              { ...watch, targetPriceRub: watch.targetPriceRub, lastPriceRub: watch.lastPriceRub },
-              newPrice,
-            )
-            await db.insert(notifications).values({
-              tenantId:   watch.companyId,
-              userId:     watch.userId,
-              type:       "flight_price_drop",
-              title,
-              body,
-              severity:   "success",
-              sourceType: "flight_price_watch",
-              sourceId:   watch.id,
-              href:       "/business-assistant/flights",
-            })
-            notified++
-          }
-        }
+        if (result.notified) notified++
+        if (result.telegramSent) telegramSent++
       } catch (err) {
         console.error(`[${CRON_NAME}] watch ${watch.id}:`, err)
         errors++
       }
     }
 
-    await finishCronRun(run.id, "ok", { watchesTotal: watches.length, checked, notified, errors })
-    return NextResponse.json({ ok: true, watchesTotal: watches.length, checked, notified, errors })
+    await finishCronRun(run.id, "ok", { watchesTotal: watches.length, checked, notified, telegramSent, errors })
+    return NextResponse.json({ ok: true, watchesTotal: watches.length, checked, notified, telegramSent, errors })
   } catch (err) {
     await finishCronRun(run.id, "error", null, String(err))
     throw err

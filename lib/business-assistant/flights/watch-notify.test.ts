@@ -1,6 +1,11 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { shouldNotifyPriceDrop, buildPriceDropNotification } from "./watch-notify"
+import {
+  shouldNotifyPriceDrop,
+  buildPriceDropNotification,
+  buildTelegramMessage,
+  isValidTelegramChatId,
+} from "./watch-notify"
 
 test("уведомляет, когда цена достигла targetPriceRub", () => {
   assert.equal(shouldNotifyPriceDrop({ targetPriceRub: 5000, lastPriceRub: 8000 }, 4900), true)
@@ -37,4 +42,38 @@ test("buildPriceDropNotification: текст на русском — паден�
   )
   assert.ok(title.includes("MOW → AER"))
   assert.ok(body.includes("−20%"))
+})
+
+test("buildTelegramMessage: HTML, жирный заголовок, маршрут+дата, рейс, багаж, ссылка «Купить на Aviasales»", () => {
+  const text = buildTelegramMessage(
+    { originIata: "MOW", destinationIata: "LED", targetPriceRub: 5000, lastPriceRub: 8000 },
+    4900,
+    {
+      departDate: "2026-08-30",
+      airlineLabel: "Аэрофлот",
+      baggage: { handLuggage: { pieces: 1, weightKg: 8 }, checkedBaggage: { pieces: 1, weightKg: 23 }, unknown: false },
+      deepLink: "https://search.aviasales.com/flights/?origin_iata=MOW&destination_iata=LED",
+    },
+  )
+  assert.ok(text.includes("<b>"))
+  assert.ok(text.includes("MOW → LED, 2026-08-30"))
+  assert.ok(text.includes("Аэрофлот"))
+  assert.ok(text.includes("Багаж: 1×23 кг"))
+  assert.ok(text.includes('<a href="https://search.aviasales.com'))
+  assert.ok(text.includes("Купить на Aviasales"))
+})
+
+test("buildTelegramMessage: без деталей рейса — работает без ссылки/багажа", () => {
+  const text = buildTelegramMessage({ originIata: "MOW", destinationIata: "AER", targetPriceRub: null, lastPriceRub: 10000 }, 8000)
+  assert.ok(text.includes("MOW → AER"))
+  assert.ok(!text.includes("Купить"))
+})
+
+test("isValidTelegramChatId: числовой ID валиден, отрицательный (группы) валиден, мусор — нет", () => {
+  assert.equal(isValidTelegramChatId("8032840032"), true)
+  assert.equal(isValidTelegramChatId("-1001234567890"), true)
+  assert.equal(isValidTelegramChatId(" 12345 "), true)
+  assert.equal(isValidTelegramChatId(""), false)
+  assert.equal(isValidTelegramChatId("@username"), false)
+  assert.equal(isValidTelegramChatId("abc123"), false)
 })

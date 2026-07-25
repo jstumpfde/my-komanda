@@ -3738,6 +3738,10 @@ export const flightPriceWatches = pgTable("flight_price_watches", {
   bestPriceRub:    integer("best_price_rub"),
   bestPriceAt:     timestamp("best_price_at", { withTimezone: true }),
   active:          boolean("active").notNull().default(true),
+  // Telegram-уведомление в личный чат (в дополнение к колокольчику) —
+  // chatId пользователь берёт сам, написав /start боту компании. Миграция 0234.
+  notifyTelegram:  boolean("notify_telegram").notNull().default(false),
+  telegramChatId:  text("telegram_chat_id"),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("flight_price_watches_company_idx").on(t.companyId),
