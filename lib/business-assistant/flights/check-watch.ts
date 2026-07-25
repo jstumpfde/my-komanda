@@ -3,7 +3,7 @@
 // «Проверить сейчас» на странице /business-assistant/flights/watches
 // (проверяет один, по требованию пользователя). Не дублировать между ними.
 import { db } from "@/lib/db"
-import { notifications, type FlightPriceWatch } from "@/lib/db/schema"
+import { notifications, userTelegramLinks, type FlightPriceWatch } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
 import { runFlightSearch, cheapestOffer } from "./run-search"
 import { shouldNotifyPriceDrop, buildPriceDropNotification, buildTelegramMessage } from "./watch-notify"
@@ -77,14 +77,28 @@ export async function checkSingleWatch(watch: FlightPriceWatch): Promise<CheckWa
   })
 
   let telegramSent: boolean | null = null
-  if (watch.notifyTelegram && watch.telegramChatId) {
-    const text = buildTelegramMessage(
-      { originIata: watch.originIata, destinationIata: watch.destinationIata, targetPriceRub: watch.targetPriceRub, lastPriceRub: watch.lastPriceRub },
-      newPrice,
-      { departDate: bestOffer.departDate, airlineLabel: bestOffer.airlineLabel, baggage: bestOffer.baggage, deepLink: bestOffer.deepLink },
-    )
-    telegramSent = await sendTelegramAlert(watch.telegramChatId, text)
+  if (watch.notifyTelegram) {
+    // telegramChatId — ручной override; без него берём chatId из привязки
+    // пользователя к боту @TiketCompany24bot (user_telegram_links).
+    const chatId = watch.telegramChatId ?? (await resolveLinkedChatId(watch.userId))
+    if (chatId) {
+      const text = buildTelegramMessage(
+        { originIata: watch.originIata, destinationIata: watch.destinationIata, targetPriceRub: watch.targetPriceRub, lastPriceRub: watch.lastPriceRub },
+        newPrice,
+        { departDate: bestOffer.departDate, airlineLabel: bestOffer.airlineLabel, baggage: bestOffer.baggage, deepLink: bestOffer.deepLink },
+      )
+      telegramSent = await sendTelegramAlert(chatId, text)
+    }
   }
 
   return { newPriceRub: newPrice, notified: true, telegramSent }
+}
+
+async function resolveLinkedChatId(userId: string): Promise<string | null> {
+  const [link] = await db
+    .select({ chatId: userTelegramLinks.chatId })
+    .from(userTelegramLinks)
+    .where(eq(userTelegramLinks.userId, userId))
+    .limit(1)
+  return link?.chatId ?? null
 }

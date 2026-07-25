@@ -3749,3 +3749,23 @@ export const flightPriceWatches = pgTable("flight_price_watches", {
 ])
 export type FlightPriceWatch    = typeof flightPriceWatches.$inferSelect
 export type NewFlightPriceWatch = typeof flightPriceWatches.$inferInsert
+
+// Привязка пользователя платформы к личному чату двустороннего Telegram-бота
+// @TiketCompany24bot (Авиабилеты). Один пользователь — одна привязка.
+// linkToken — одноразовая ссылка t.me/TiketCompany24bot?start=<token>,
+// chatId заполняется при /start <token> в вебхуке бота. Миграция 0235.
+export const userTelegramLinks = pgTable("user_telegram_links", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  userId:     uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  chatId:     text("chat_id"),                 // null, пока не привязан
+  linkToken:  text("link_token").notNull(),
+  linkedAt:   timestamp("linked_at", { withTimezone: true }),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("user_telegram_links_user_idx").on(t.userId),
+  uniqueIndex("user_telegram_links_chat_id_idx").on(t.chatId),
+  uniqueIndex("user_telegram_links_token_idx").on(t.linkToken),
+])
+export type UserTelegramLink    = typeof userTelegramLinks.$inferSelect
+export type NewUserTelegramLink = typeof userTelegramLinks.$inferInsert

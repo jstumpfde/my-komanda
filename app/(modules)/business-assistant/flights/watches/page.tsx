@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { Loader2, Bell, TrendingUp, TrendingDown, Minus, Trash2, Pencil, RefreshCw, Plane } from "lucide-react"
+import { Loader2, Bell, TrendingUp, TrendingDown, Minus, Trash2, Pencil, RefreshCw, Plane, Send, CheckCircle2 } from "lucide-react"
 import {
   FlightWatchForm, EMPTY_WATCH_FORM, toApiFilters, fromWatch,
   type WatchFormValues,
@@ -91,6 +91,9 @@ export default function FlightWatchesPage() {
   const [editingWatch, setEditingWatch] = useState<PriceWatch | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const [checkResult, setCheckResult] = useState<Record<string, string>>({})
+  const [botLinked, setBotLinked] = useState(false)
+  const [botDeepLink, setBotDeepLink] = useState<string | null>(null)
+  const [botLinking, setBotLinking] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -104,8 +107,34 @@ export default function FlightWatchesPage() {
     }
   }
 
+  async function loadBotLink() {
+    try {
+      const res = await fetch("/api/modules/business-assistant/flights/telegram-link")
+      const data = (await res.json()) as { linked: boolean }
+      setBotLinked(data.linked)
+    } catch {
+      // тихо — блок необязателен
+    }
+  }
+
+  async function generateBotLink() {
+    setBotLinking(true)
+    try {
+      const res = await fetch("/api/modules/business-assistant/flights/telegram-link", { method: "POST" })
+      const data = (await res.json()) as { linked: boolean; deepLink: string | null }
+      if (data.linked) {
+        setBotLinked(true)
+      } else {
+        setBotDeepLink(data.deepLink)
+      }
+    } finally {
+      setBotLinking(false)
+    }
+  }
+
   useEffect(() => {
     load()
+    loadBotLink()
   }, [])
 
   async function handleCreate(values: WatchFormValues) {
@@ -181,6 +210,36 @@ export default function FlightWatchesPage() {
               </Link>
             </Button>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Send className="w-4 h-4" /> Telegram-бот @TiketCompany24bot
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {botLinked ? (
+                <p className="text-sm text-emerald-600 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> Бот привязан — команды /поиск, /следить, /мои доступны в чате.
+                </p>
+              ) : botDeepLink ? (
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-foreground">Откройте ссылку в Telegram и нажмите «Запустить» — бот привяжет чат автоматически:</p>
+                  <a href={botDeepLink} target="_blank" rel="noreferrer" className="text-primary underline break-all">{botDeepLink}</a>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Привяжите личный чат с ботом, чтобы искать и отслеживать билеты прямо из Telegram, без указания chat ID вручную.
+                  </p>
+                  <Button size="sm" variant="outline" onClick={generateBotLink} disabled={botLinking}>
+                    {botLinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+                    Привязать Telegram
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
