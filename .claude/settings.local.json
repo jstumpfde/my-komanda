@@ -74,7 +74,8 @@
       "mcp__playwright__browser_file_upload",
       "mcp__claude-in-chrome__read_console_messages",
       "mcp__claude-in-chrome__tabs_create_mcp",
-      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__list_repos"
+      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__list_repos",
+      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__add_repo"
     ]
   }
 }
