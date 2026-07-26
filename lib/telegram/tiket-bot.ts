@@ -12,7 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { userTelegramLinks, flightPriceWatches, type FlightPriceWatch } from "@/lib/db/schema"
+import { userTelegramLinks, flightPriceWatches, users, type FlightPriceWatch } from "@/lib/db/schema"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { runFlightSearch } from "@/lib/business-assistant/flights/run-search"
@@ -233,6 +233,11 @@ function formatOffer(o: FlightOffer): string {
   return lines.join("\n")
 }
 
+/** true, если среди предложений есть хотя бы один прямой рейс (transfers === 0). */
+export function hasDirectOffer(offers: FlightOffer[]): boolean {
+  return offers.some((o) => o.transfers === 0)
+}
+
 export async function runSearchAndFormat(cmd: ParsedSearchCommand): Promise<string> {
   const params: FlightSearchParams = {
     originIata: cmd.originIata,
@@ -243,12 +248,15 @@ export async function runSearchAndFormat(cmd: ParsedSearchCommand): Promise<stri
     tripClass: "economy" as TripClass,
   }
   const result = await runFlightSearch(params, { sortBy: "price" })
-  const all = [...result.direct, ...result.combo].sort((a, b) => a.priceRub - b.priceRub).slice(0, 5)
-  if (all.length === 0) {
+  const combined = [...result.direct, ...result.combo]
+  if (combined.length === 0) {
     return `По маршруту ${cmd.originIata} → ${cmd.destinationIata} на ${cmd.dateFrom}${cmd.dateTo ? `–${cmd.dateTo}` : ""} ничего не нашлось. Попробуйте другие даты.`
   }
+  const noDirect = !hasDirectOffer(combined)
+  const all = combined.sort((a, b) => a.priceRub - b.priceRub).slice(0, 5)
+  const noDirectNote = noDirect ? "Прямых рейсов нет, показываю с пересадками:\n\n" : ""
   const header = `✈️ <b>${cmd.originIata} → ${cmd.destinationIata}</b>, ${cmd.dateFrom}${cmd.dateTo ? `–${cmd.dateTo}` : ""} — топ-${all.length}:\n`
-  return header + "\n\n" + all.map(formatOffer).join("\n\n")
+  return noDirectNote + header + "\n\n" + all.map(formatOffer).join("\n\n")
 }
 
 // ─── Создание watch из команды /следить ────────────────────────────────────
@@ -338,6 +346,11 @@ export function resetRateLimitForTests(): void {
 }
 
 // ─── AI-разбор свободного текста (Haiku) ───────────────────────────────────
+//
+// AI-разбор — ВСЕГДА первый шаг для любого некомандного текста, на любом
+// языке. Словарь CITY_IATA — только быстрый путь для команд /поиск и
+// /следить (когда пользователь уже пишет IATA-код или знакомое название);
+// свободный текст он НЕ фильтрует и не блокирует до AI-вызова.
 
 export interface AiParsedQuery {
   originIata: string | null
@@ -347,16 +360,34 @@ export interface AiParsedQuery {
   maxPriceRub: number | null
 }
 
-const AI_PARSE_SYSTEM = `Ты — парсер запросов на поиск авиабилетов на русском языке.
+export type AiParseOutcome =
+  | { status: "ok"; data: AiParsedQuery }
+  | { status: "not_about_flights" }
+  | { status: "error" }
+
+const AI_PARSE_SYSTEM = `Ты — парсер запросов на поиск авиабилетов. Пользователь пишет на ЛЮБОМ языке, любыми сокращениями, с опечатками, в любом порядке слов (например: "Из Мюнхен в Москву 2.08.2026", "Mun - Mos 02.08.26", "Откуда Mun - куда Mos 02.08.26").
 Сегодня ${new Date().toISOString().slice(0, 10)}.
+
 Верни ТОЛЬКО валидный JSON без markdown-обёртки:
-{ "originIata": "IATA-код или null", "destinationIata": "IATA-код или null", "dateFrom": "YYYY-MM-DD или null", "dateTo": "YYYY-MM-DD или null (если диапазон/выходные)", "maxPriceRub": число или null }
-Если город не назван явно — origin оставь null (не выдумывай). Для дат вида "на выходных" возьми ближайшую субботу-воскресенье. Используй IATA крупных аэропортов РФ и популярных направлений (Москва=MOW, Санкт-Петербург=LED, Сочи=AER и т.д.).
+{
+  "originIata": "IATA-код города вылета (3 буквы) или null",
+  "destinationIata": "IATA-код города назначения (3 буквы) или null",
+  "dateFrom": "YYYY-MM-DD или null",
+  "dateTo": "YYYY-MM-DD или null (диапазон/выходные/гибкие даты)",
+  "maxPriceRub": число в рублях или null,
+  "notAboutFlights": true или false
+}
+
+Правила:
+- Определяй IATA-код города САМ по любому упоминанию: полное название на любом языке, разговорное сокращение (Mun/Мюнхен→MUC, Mos/Мск→MOW, Питер→LED), код аэропорта, опечатка. Не проси уточнить код — угадывай по контексту.
+- Если один из городов вообще не упомянут (ни явно, ни намёком) — оставь его null, не выдумывай.
+- Даты в любом формате: "2.08.2026", "02.08.26", "2 августа", "завтра", "на выходные" (ближайшие сб-вс), "через неделю" — переведи в YYYY-MM-DD. Год без указания — ближайший будущий.
+- "notAboutFlights": true — ТОЛЬКО если сообщение точно не о поиске/бронировании авиабилетов (нет городов, дат, цены, слов про полёт/командировку/билет). Если есть хоть какой-то намёк на перелёт — false, даже если данных мало.
 ` + AI_SAFETY_PROMPT
 
-export async function aiParseFreeText(text: string): Promise<AiParsedQuery | null> {
+export async function aiParseFreeText(text: string): Promise<AiParseOutcome> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return null
+  if (!apiKey) return { status: "error" }
   try {
     const client = new Anthropic({ baseURL: getClaudeApiUrl() })
     const response = await client.messages.create({
@@ -367,20 +398,103 @@ export async function aiParseFreeText(text: string): Promise<AiParsedQuery | nul
       messages: [{ role: "user", content: text.slice(0, 500) }],
     })
     const content = response.content[0]
-    if (content.type !== "text") return null
+    if (content.type !== "text") return { status: "error" }
     const stripped = content.text.trim().replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "")
-    const parsed = JSON.parse(stripped) as Partial<AiParsedQuery>
+    const parsed = JSON.parse(stripped) as Partial<AiParsedQuery> & { notAboutFlights?: boolean }
+    if (parsed.notAboutFlights === true) return { status: "not_about_flights" }
     return {
-      originIata: parsed.originIata ?? null,
-      destinationIata: parsed.destinationIata ?? null,
-      dateFrom: parsed.dateFrom ?? null,
-      dateTo: parsed.dateTo ?? null,
-      maxPriceRub: parsed.maxPriceRub ?? null,
+      status: "ok",
+      data: {
+        originIata: parsed.originIata ?? null,
+        destinationIata: parsed.destinationIata ?? null,
+        dateFrom: parsed.dateFrom ?? null,
+        dateTo: parsed.dateTo ?? null,
+        maxPriceRub: parsed.maxPriceRub ?? null,
+      },
     }
   } catch (err) {
     console.warn("[tiket-bot] AI parse failed:", err instanceof Error ? err.message : err)
+    return { status: "error" }
+  }
+}
+
+// ─── Валидация дат из AI-разбора ────────────────────────────────────────────
+
+/** Дата в будущем (либо сегодня) и не дальше года вперёд — иначе AI, скорее
+ *  всего, ошибся (например, вернул прошедший год). */
+export function isValidFutureDate(iso: string | null | undefined): iso is string {
+  if (!iso) return false
+  const d = new Date(`${iso}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return false
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const maxDate = new Date(today)
+  maxDate.setUTCFullYear(maxDate.getUTCFullYear() + 1)
+  return d >= today && d <= maxDate
+}
+
+// ─── Короткий диалоговый контекст (частичный запрос на chatId, TTL 10 мин) ─
+// Позволяет уточнять недостающие поля в несколько сообщений подряд, вместо
+// "не понял" с каждой новой репликой.
+
+export interface PendingQuery {
+  originIata:      string | null
+  destinationIata: string | null
+  dateFrom:        string | null
+  dateTo:          string | null
+  maxPriceRub:     number | null
+}
+
+interface PendingEntry extends PendingQuery {
+  expiresAt: number
+}
+
+const PENDING_TTL_MS = 10 * 60_000
+const pendingQueries = new Map<string, PendingEntry>()
+
+export function getPendingQuery(chatId: string, now = Date.now()): PendingQuery | null {
+  const p = pendingQueries.get(chatId)
+  if (!p) return null
+  if (now > p.expiresAt) {
+    pendingQueries.delete(chatId)
     return null
   }
+  return p
+}
+
+export function setPendingQuery(chatId: string, data: PendingQuery, now = Date.now()): void {
+  pendingQueries.set(chatId, { ...data, expiresAt: now + PENDING_TTL_MS })
+}
+
+export function clearPendingQuery(chatId: string): void {
+  pendingQueries.delete(chatId)
+}
+
+/** Только для тестов — сбрасывает диалоговый контекст. */
+export function resetPendingForTests(): void {
+  pendingQueries.clear()
+}
+
+/** Объединяет новый AI-разбор с накопленным контекстом чата — новые
+ *  непустые поля перекрывают старые, недостающие берутся из pending. */
+export function mergePendingQuery(pending: PendingQuery | null, incoming: AiParsedQuery): PendingQuery {
+  return {
+    originIata:      incoming.originIata ?? pending?.originIata ?? null,
+    destinationIata: incoming.destinationIata ?? pending?.destinationIata ?? null,
+    dateFrom:        isValidFutureDate(incoming.dateFrom) ? incoming.dateFrom : (pending?.dateFrom ?? null),
+    dateTo:          incoming.dateTo ?? pending?.dateTo ?? null,
+    maxPriceRub:     incoming.maxPriceRub ?? pending?.maxPriceRub ?? null,
+  }
+}
+
+/** Что не хватает для запуска поиска, человеческим языком по-русски. */
+export function missingFieldsPrompt(p: PendingQuery): string {
+  const route = p.originIata && p.destinationIata ? `${p.originIata}→${p.destinationIata}` : null
+  if (route && !p.dateFrom) return `Куда лететь понял: ${route}. На какую дату?`
+  if (!p.originIata && !p.destinationIata) return `Не понял маршрут. Откуда и куда лететь?`
+  if (!p.originIata) return `Куда лететь — понял (${p.destinationIata}). А откуда вылет?`
+  if (!p.destinationIata) return `Откуда лететь — понял (${p.originIata}). А куда?`
+  return `Уточните, пожалуйста: город вылета, город назначения и дату.`
 }
 
 // ─── Тексты ─────────────────────────────────────────────────────────────────
@@ -474,7 +588,27 @@ export async function handleTiketBotUpdate(update: TgUpdate): Promise<void> {
   }
 }
 
+async function fetchUserFirstName(userId: string): Promise<string | null> {
+  const [u] = await db
+    .select({ firstName: users.firstName, name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+  if (!u) return null
+  return u.firstName || u.name?.split(" ")[0] || null
+}
+
 async function handleStart(chatId: string, text: string): Promise<void> {
+  // Повторный /start уже привязанного чата — не "привяжите чат", а честный
+  // статус (баг из фидбэка: раньше отвечали START_NO_TOKEN_TEXT, даже если
+  // чат давно связан).
+  const existingLink = await findLinkByChatId(chatId)
+  if (existingLink) {
+    const name = await fetchUserFirstName(existingLink.userId)
+    await tgSend(chatId, `Чат уже привязан${name ? `, ${name}` : ""}. Пишите запрос или /help.`)
+    return
+  }
+
   const token = text.slice("/start".length).trim()
   if (!token) {
     await tgSend(chatId, START_NO_TOKEN_TEXT)
@@ -541,24 +675,53 @@ async function handleStopCommand(chatId: string, userId: string): Promise<void> 
 }
 
 async function handleFreeText(chatId: string, userId: string, companyId: string, text: string): Promise<void> {
-  const parsed = await aiParseFreeText(text)
-  if (!parsed || !parsed.originIata || !parsed.destinationIata || !parsed.dateFrom) {
-    await tgSend(chatId, "Не понял запрос. Используйте /поиск ОТКУДА КУДА ДАТА или /help.")
+  // AI-разбор — ВСЕГДА первый шаг для некомандного текста (никакого
+  // предварительного гейта по словарю городов).
+  const outcome = await aiParseFreeText(text)
+
+  if (outcome.status === "error") {
+    // Технический сбой AI-вызова (сеть/квота/прокси) — честно об этом
+    // говорим, а не притворяемся, что "не поняли" запрос.
+    await tgSend(chatId, "AI-разбор временно недоступен, используйте /поиск ОТКУДА КУДА ДАТА.")
     return
   }
+
+  const pendingBefore = getPendingQuery(chatId)
+
+  if (outcome.status === "not_about_flights") {
+    if (!pendingBefore) {
+      await tgSend(chatId, "Не понял запрос про авиабилеты. Используйте /поиск ОТКУДА КУДА ДАТА или /help.")
+      return
+    }
+    // Есть незавершённый диалог — просим уточнить именно то, чего не хватает,
+    // не сбрасывая уже понятое.
+    await tgSend(chatId, missingFieldsPrompt(pendingBefore))
+    return
+  }
+
+  const merged = mergePendingQuery(pendingBefore, outcome.data)
+
+  if (!merged.originIata || !merged.destinationIata || !merged.dateFrom) {
+    setPendingQuery(chatId, merged)
+    await tgSend(chatId, missingFieldsPrompt(merged))
+    return
+  }
+
+  clearPendingQuery(chatId)
   const cmd: ParsedWatchCommand = {
-    originIata: parsed.originIata,
-    destinationIata: parsed.destinationIata,
-    dateFrom: parsed.dateFrom,
-    dateTo: parsed.dateTo ?? undefined,
-    maxPriceRub: parsed.maxPriceRub ?? undefined,
+    originIata: merged.originIata,
+    destinationIata: merged.destinationIata,
+    dateFrom: merged.dateFrom,
+    dateTo: merged.dateTo ?? undefined,
+    maxPriceRub: merged.maxPriceRub ?? undefined,
   }
   await tgSend(chatId, "Ищу…")
   const reply = await runSearchAndFormat(cmd)
   await tgSend(chatId, reply)
-  if (parsed.maxPriceRub) {
+  if (merged.maxPriceRub) {
+    const maxPriceRub = merged.maxPriceRub
     void createWatchFromCommand(userId, companyId, chatId, cmd).then((w) => {
-      void tgSend(chatId, `Заодно поставил слежение до ${parsed.maxPriceRub!.toLocaleString("ru-RU")} ₽ (${w.originIata} → ${w.destinationIata}) — отключить: /мои`)
+      void tgSend(chatId, `Заодно поставил слежение до ${maxPriceRub.toLocaleString("ru-RU")} ₽ (${w.originIata} → ${w.destinationIata}) — отключить: /мои`)
     })
   }
 }

@@ -3,7 +3,9 @@
 // гейт непривязанных чатов и анти-спам используют реальное локальное соединение).
 import { test, after } from "node:test"
 import assert from "node:assert/strict"
-import { pgClient } from "@/lib/db"
+import { eq } from "drizzle-orm"
+import { db, pgClient } from "@/lib/db"
+import { users, userTelegramLinks } from "@/lib/db/schema"
 import {
   parseSearchCommand,
   parseWatchCommand,
@@ -12,9 +14,15 @@ import {
   checkRateLimit,
   resetRateLimitForTests,
   handleTiketBotUpdate,
+  hasDirectOffer,
+  isValidFutureDate,
+  mergePendingQuery,
+  missingFieldsPrompt,
+  resetPendingForTests,
   NOT_LINKED_TEXT,
   HELP_TEXT,
 } from "./tiket-bot"
+import type { FlightOffer } from "@/lib/business-assistant/flights/types"
 
 // ─── resolveCityToIata ──────────────────────────────────────────────────────
 
@@ -187,6 +195,119 @@ test("HELP_TEXT содержит все команды", () => {
   for (const cmd of ["/поиск", "/следить", "/мои", "/стоп", "/help"]) {
     assert.ok(HELP_TEXT.includes(cmd), `HELP_TEXT должен упоминать ${cmd}`)
   }
+})
+
+// ─── isValidFutureDate ──────────────────────────────────────────────────────
+
+test("isValidFutureDate: сегодня и в пределах года — валидны", () => {
+  const today = new Date().toISOString().slice(0, 10)
+  assert.equal(isValidFutureDate(today), true)
+  const inSixMonths = new Date()
+  inSixMonths.setUTCMonth(inSixMonths.getUTCMonth() + 6)
+  assert.equal(isValidFutureDate(inSixMonths.toISOString().slice(0, 10)), true)
+})
+
+test("isValidFutureDate: прошлое, мусор, дальше года — невалидны", () => {
+  assert.equal(isValidFutureDate("2020-01-01"), false)
+  assert.equal(isValidFutureDate("не дата"), false)
+  assert.equal(isValidFutureDate(null), false)
+  assert.equal(isValidFutureDate(undefined), false)
+  const farFuture = new Date()
+  farFuture.setUTCFullYear(farFuture.getUTCFullYear() + 3)
+  assert.equal(isValidFutureDate(farFuture.toISOString().slice(0, 10)), false)
+})
+
+// ─── mergePendingQuery / missingFieldsPrompt (многошаговый диалог) ────────
+
+test("mergePendingQuery: новые поля перекрывают старые, недостающие берутся из pending", () => {
+  const pending = { originIata: "MUC", destinationIata: null, dateFrom: null, dateTo: null, maxPriceRub: null }
+  const incoming = { originIata: null, destinationIata: "MOW", dateFrom: "2026-08-02", dateTo: null, maxPriceRub: null }
+  const merged = mergePendingQuery(pending, incoming)
+  assert.deepEqual(merged, { originIata: "MUC", destinationIata: "MOW", dateFrom: "2026-08-02", dateTo: null, maxPriceRub: null })
+})
+
+test("mergePendingQuery: без pending — просто данные AI", () => {
+  const incoming = { originIata: "MUC", destinationIata: "MOW", dateFrom: "2026-08-02", dateTo: null, maxPriceRub: null }
+  assert.deepEqual(mergePendingQuery(null, incoming), incoming)
+})
+
+test("missingFieldsPrompt: не хватает только даты — переспрашивает дату, помня маршрут", () => {
+  const msg = missingFieldsPrompt({ originIata: "MUC", destinationIata: "MOW", dateFrom: null, dateTo: null, maxPriceRub: null })
+  assert.ok(msg.includes("MUC"))
+  assert.ok(msg.includes("MOW"))
+  assert.ok(msg.includes("дат"))
+})
+
+test("missingFieldsPrompt: не хватает всего — просит маршрут", () => {
+  const msg = missingFieldsPrompt({ originIata: null, destinationIata: null, dateFrom: null, dateTo: null, maxPriceRub: null })
+  assert.ok(msg.toLowerCase().includes("маршрут"))
+})
+
+// ─── hasDirectOffer (для "Прямых рейсов нет, показываю с пересадками") ────
+
+function offer(transfers: number): FlightOffer {
+  return {
+    id: `t-${transfers}`, kind: transfers === 0 ? "direct" : "combo", priceRub: 10000,
+    airlineLabel: "Test", transfers, durationMinutes: 300, deepLink: "",
+    departDate: "2026-08-02", departHour: 10, cabinClass: "economy",
+    baggage: { handLuggage: null, checkedBaggage: null, unknown: true },
+  }
+}
+
+test("hasDirectOffer: true, если есть предложение с 0 пересадками", () => {
+  assert.equal(hasDirectOffer([offer(2), offer(0), offer(1)]), true)
+})
+
+test("hasDirectOffer: false, если у всех есть пересадки (напр. MUC→MOW)", () => {
+  assert.equal(hasDirectOffer([offer(1), offer(2)]), false)
+})
+
+test("hasDirectOffer: false для пустого списка", () => {
+  assert.equal(hasDirectOffer([]), false)
+})
+
+// ─── Повторный /start уже привязанного чата (реальная БД) ─────────────────
+
+test("handleTiketBotUpdate: повторный /start привязанного чата — 'уже привязан', не 'привяжите'", async () => {
+  resetRateLimitForTests()
+  resetPendingForTests()
+
+  const [anyUser] = await db.select({ id: users.id, companyId: users.companyId }).from(users).limit(1)
+  assert.ok(anyUser?.companyId, "в локальной БД должен быть хотя бы один пользователь с companyId для теста")
+
+  const testChatId = "7770001"
+  // Подчистим возможный хвост от прошлого прогона теста и создадим привязанный link.
+  await db.delete(userTelegramLinks).where(eq(userTelegramLinks.chatId, testChatId))
+  await db.insert(userTelegramLinks).values({
+    userId: anyUser.id,
+    companyId: anyUser.companyId!,
+    chatId: testChatId,
+    linkToken: `test-token-${testChatId}`,
+    linkedAt: new Date(),
+  })
+
+  const originalFetch = global.fetch
+  const calls: { url: string; body: unknown }[] = []
+  global.fetch = (async (url: string, init?: RequestInit) => {
+    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null })
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 })
+  }) as typeof fetch
+
+  try {
+    await handleTiketBotUpdate({
+      update_id: 3,
+      message: { message_id: 3, chat: { id: Number(testChatId), type: "private" }, text: "/start" },
+    })
+  } finally {
+    global.fetch = originalFetch
+    await db.delete(userTelegramLinks).where(eq(userTelegramLinks.chatId, testChatId))
+  }
+
+  const sendCalls = calls.filter((c) => c.url.includes("/sendMessage"))
+  assert.equal(sendCalls.length, 1)
+  const replyText = (sendCalls[0].body as { text: string }).text
+  assert.ok(replyText.includes("уже привязан"), `ожидали "уже привязан", получили: ${replyText}`)
+  assert.ok(!replyText.includes("привяжите"), `не должно просить привязать заново: ${replyText}`)
 })
 
 // Закрываем пул соединений — иначе node:test не завершает процесс сам.
