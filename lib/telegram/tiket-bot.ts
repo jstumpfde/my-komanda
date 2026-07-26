@@ -18,6 +18,7 @@ import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { runFlightSearch } from "@/lib/business-assistant/flights/run-search"
 import { formatBaggageLabel } from "@/lib/business-assistant/flights/baggage"
 import type { FlightOffer, FlightSearchParams, TripClass } from "@/lib/business-assistant/flights/types"
+import { CITY_ALIASES, resolveCityExact, parseFreeTextRuleBased, type RuleParsedQuery } from "./free-text-parser"
 
 export const TIKET_BOT_USERNAME = "TiketCompany24bot"
 
@@ -88,51 +89,17 @@ export async function tgAnswerCallback(callbackQueryId: string, text?: string): 
   }
 }
 
-// ─── IATA-словарь крупных городов РФ (для команд и AI-разбора) ────────────
+// ─── IATA-словарь городов (для команд /поиск, /следить) ────────────────────
+// Единый источник — lib/telegram/free-text-parser.ts (CITY_ALIASES, ~150
+// записей РФ+СНГ+Европа/Азия/курорты), НЕ дублируем здесь. Команды используют
+// строгое точное сопоставление (resolveCityExact) — без угадывания по
+// префиксу/падежным окончаниям, которое нужно только для свободного текста.
 
-export const CITY_IATA: Record<string, string> = {
-  "москва": "MOW", "мск": "MOW", "moscow": "MOW",
-  "санкт-петербург": "LED", "спб": "LED", "питер": "LED", "petersburg": "LED",
-  "сочи": "AER", "адлер": "AER",
-  "казань": "KZN",
-  "екатеринбург": "SVX", "екб": "SVX",
-  "новосибирск": "OVB",
-  "краснодар": "KRR",
-  "калининград": "KGD",
-  "уфа": "UFA",
-  "самара": "KUF",
-  "ростов": "ROV", "ростов-на-дону": "ROV",
-  "красноярск": "KJA",
-  "пермь": "PEE",
-  "воронеж": "VOZ",
-  "минеральные воды": "MRV", "минводы": "MRV",
-  "тюмень": "TJM",
-  "иркутск": "IKT",
-  "владивосток": "VVO",
-  "омск": "OMS",
-  "нижний новгород": "GOJ", "нижний": "GOJ",
-  "волгоград": "VOG",
-  "анапа": "AAQ",
-  "geneva": "GVA", "женева": "GVA",
-  "дубай": "DXB", "dubai": "DXB",
-  "стамбул": "IST", "istanbul": "IST",
-  "ереван": "EVN",
-  "тбилиси": "TBS",
-  "баку": "GYD",
-  "алматы": "ALA",
-  "ташкент": "TAS",
-  "бангкок": "BKK", "пхукет": "HKT",
-}
+export const CITY_IATA = CITY_ALIASES
 
 /** Резолвит "MOW" / "москва" / "Москва" → IATA-код (3 заглавные буквы) или null. */
 export function resolveCityToIata(raw: string): string | null {
-  const s = raw.trim()
-  if (/^[A-Za-z]{3}$/.test(s)) {
-    return s.toUpperCase()
-  }
-  const lower = s.toLowerCase()
-  if (CITY_IATA[lower]) return CITY_IATA[lower]
-  return null
+  return resolveCityExact(raw)
 }
 
 // ─── Разбор дат из команд (DD.MM[.YYYY] или DD.MM-DD.MM) ──────────────────
@@ -487,12 +454,13 @@ export function mergePendingQuery(pending: PendingQuery | null, incoming: AiPars
   }
 }
 
-/** Что не хватает для запуска поиска, человеческим языком по-русски. */
+/** Что не хватает для запуска поиска, человеческим языком по-русски.
+ *  Если не назван город вылета — подсказываем дефолт MOW (Москва). */
 export function missingFieldsPrompt(p: PendingQuery): string {
   const route = p.originIata && p.destinationIata ? `${p.originIata}→${p.destinationIata}` : null
   if (route && !p.dateFrom) return `Куда лететь понял: ${route}. На какую дату?`
   if (!p.originIata && !p.destinationIata) return `Не понял маршрут. Откуда и куда лететь?`
-  if (!p.originIata) return `Куда лететь — понял (${p.destinationIata}). А откуда вылет?`
+  if (!p.originIata) return `Куда лететь — понял (${p.destinationIata}). А откуда вылет? (если из Москвы — просто напишите «Москва»)`
   if (!p.destinationIata) return `Откуда лететь — понял (${p.originIata}). А куда?`
   return `Уточните, пожалуйста: город вылета, город назначения и дату.`
 }
@@ -674,32 +642,24 @@ async function handleStopCommand(chatId: string, userId: string): Promise<void> 
   await tgSend(chatId, "🔕 Telegram-уведомления отключены для всех ваших отслеживаний. Колокольчик на сайте продолжит работать.")
 }
 
-async function handleFreeText(chatId: string, userId: string, companyId: string, text: string): Promise<void> {
-  // AI-разбор — ВСЕГДА первый шаг для некомандного текста (никакого
-  // предварительного гейта по словарю городов).
-  const outcome = await aiParseFreeText(text)
+/** true, если разбор (AI или rule-based) даёт хоть какой-то полезный сигнал —
+ *  стоит его использовать вместо честного "AI недоступен"/"не понял". */
+function hasUsefulSignal(q: RuleParsedQuery): boolean {
+  return Boolean(q.originIata || q.destinationIata || q.dateFrom || q.maxPriceRub)
+}
 
-  if (outcome.status === "error") {
-    // Технический сбой AI-вызова (сеть/квота/прокси) — честно об этом
-    // говорим, а не притворяемся, что "не поняли" запрос.
-    await tgSend(chatId, "AI-разбор временно недоступен, используйте /поиск ОТКУДА КУДА ДАТА.")
-    return
-  }
-
-  const pendingBefore = getPendingQuery(chatId)
-
-  if (outcome.status === "not_about_flights") {
-    if (!pendingBefore) {
-      await tgSend(chatId, "Не понял запрос про авиабилеты. Используйте /поиск ОТКУДА КУДА ДАТА или /help.")
-      return
-    }
-    // Есть незавершённый диалог — просим уточнить именно то, чего не хватает,
-    // не сбрасывая уже понятое.
-    await tgSend(chatId, missingFieldsPrompt(pendingBefore))
-    return
-  }
-
-  const merged = mergePendingQuery(pendingBefore, outcome.data)
+/** Общий "финиш" для свободного текста — что для AI-пути, что для
+ *  rule-based: объединяет с диалоговым контекстом, при неполном запросе
+ *  переспрашивает недостающее, при полном — ищет и (если задан бюджет)
+ *  заодно ставит слежение. */
+async function proceedWithParsedQuery(
+  chatId: string,
+  userId: string,
+  companyId: string,
+  incoming: RuleParsedQuery,
+  pendingBefore: PendingQuery | null,
+): Promise<void> {
+  const merged = mergePendingQuery(pendingBefore, incoming)
 
   if (!merged.originIata || !merged.destinationIata || !merged.dateFrom) {
     setPendingQuery(chatId, merged)
@@ -724,6 +684,59 @@ async function handleFreeText(chatId: string, userId: string, companyId: string,
       void tgSend(chatId, `Заодно поставил слежение до ${maxPriceRub.toLocaleString("ru-RU")} ₽ (${w.originIata} → ${w.destinationIata}) — отключить: /мои`)
     })
   }
+}
+
+// Свободный текст: AI остаётся первичным парсером, НО:
+//  - если rule-based фолбэк УВЕРЕННО распознал маршрут+дату — используем его
+//    сразу, не тратя AI-вызов (быстрый путь);
+//  - если AI недоступен технически (status: "error") ИЛИ считает, что текст
+//    не про билеты, а rule-based нашёл хоть что-то полезное — используем
+//    rule-based результат;
+//  - сообщение "AI-разбор временно недоступен" показываем ТОЛЬКО если и
+//    rule-based не смог ничего извлечь (пользователь не должен замечать
+//    отсутствие AI, пока квота не восстановлена).
+async function handleFreeText(chatId: string, userId: string, companyId: string, text: string): Promise<void> {
+  const pendingBefore = getPendingQuery(chatId)
+  const ruleResult = parseFreeTextRuleBased(text)
+
+  if (ruleResult.status === "ambiguous") {
+    await tgSend(chatId, ruleResult.message)
+    return
+  }
+
+  if (ruleResult.status === "ok" && ruleResult.confident) {
+    await proceedWithParsedQuery(chatId, userId, companyId, ruleResult.data, pendingBefore)
+    return
+  }
+
+  const outcome = await aiParseFreeText(text)
+
+  if (outcome.status === "ok") {
+    await proceedWithParsedQuery(chatId, userId, companyId, outcome.data, pendingBefore)
+    return
+  }
+
+  // AI посчитал, что это не про билеты, ИЛИ AI технически недоступен —
+  // в обоих случаях пробуем rule-based результат (если он что-то нашёл)
+  // прежде, чем сдаваться.
+  if (ruleResult.status === "ok" && hasUsefulSignal(ruleResult.data)) {
+    await proceedWithParsedQuery(chatId, userId, companyId, ruleResult.data, pendingBefore)
+    return
+  }
+
+  if (pendingBefore) {
+    await tgSend(chatId, missingFieldsPrompt(pendingBefore))
+    return
+  }
+
+  if (outcome.status === "not_about_flights") {
+    await tgSend(chatId, "Не понял запрос про авиабилеты. Используйте /поиск ОТКУДА КУДА ДАТА или /help.")
+    return
+  }
+
+  // outcome.status === "error" и rule-based тоже не справился — честно
+  // говорим о технической недоступности (не "не понял").
+  await tgSend(chatId, "AI-разбор временно недоступен, используйте /поиск ОТКУДА КУДА ДАТА.")
 }
 
 async function handleCallbackQuery(cq: NonNullable<TgUpdate["callback_query"]>): Promise<void> {
