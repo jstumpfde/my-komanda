@@ -87,6 +87,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" suppressHydrationWarning>
+      <head>
+        {/* Travelpayouts Drive — верификация площадки и партнёрский трекер
+            (модуль «Мой ассистент → Авиабилеты»). Сниппет из кабинета TP. */}
+        <script
+          data-noptimize="1"
+          data-cfasync="false"
+          data-wpfc-render="false"
+          data-no-defer="1"
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){var s=document.createElement('script');s.async=1;s.src='https://tpembars.com/NTU1NTMw.js?t=555530';document.head.appendChild(s);})();",
+          }}
+        />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>
           {children}
