@@ -223,10 +223,11 @@ export async function runSearchAndFormat(cmd: ParsedSearchCommand): Promise<stri
   const all = combined.sort((a, b) => a.priceRub - b.priceRub).slice(0, 5)
   const noDirectNote = noDirect ? "Прямых рейсов нет, показываю с пересадками:\n\n" : ""
   const header = `✈️ <b>${cmd.originIata} → ${cmd.destinationIata}</b>, ${cmd.dateFrom}${cmd.dateTo ? `–${cmd.dateTo}` : ""} — топ-${all.length}:\n`
-  const demoNote =
-    !process.env.TRAVELPAYOUTS_API_TOKEN && !process.env.KIWI_TEQUILA_API_KEY
-      ? "\n\n<i>Демо-данные: партнёрские ключи ещё не подключены, цены тестовые.</i>"
-      : ""
+  // Kiwi ещё не подключен (нет ключа) — combo не участвует в демо-плашке:
+  // работаем только на Travelpayouts, пока Юрий не выдаст KIWI_TEQUILA_API_KEY.
+  const demoNote = !process.env.TRAVELPAYOUTS_API_TOKEN
+    ? "\n\n<i>Демо-данные: партнёрский ключ ещё не подключён, цены тестовые.</i>"
+    : ""
   return noDirectNote + header + "\n\n" + all.map(formatOffer).join("\n\n") + demoNote
 }
 

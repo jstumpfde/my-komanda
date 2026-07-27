@@ -78,3 +78,30 @@ test("несколько постов в одном документе парс�
   assert.equal(deals[0].priceRub, 15000)
   assert.equal(deals[1].priceRub, 8000)
 })
+
+test("распознаёт цену в евро (€49) — конвертирует по фиксированному курсу-константе", () => {
+  const html = makePostHtml("eurotest/1", "2026-07-22T10:00:00+00:00", "Москва — Париж от €49 в одну сторону")
+  const deals = parseTelegramChannelHtml(html, "eurotest")
+  assert.equal(deals.length, 1)
+  assert.equal(deals[0].priceRub, 4900) // 49 * EUR_TO_RUB_RATE (100)
+  assert.equal(deals[0].routeFrom, "Москва")
+  assert.equal(deals[0].routeTo, "Париж")
+})
+
+test("распознаёт цену в долларах ($120) — конвертирует по фиксированному курсу-константе", () => {
+  const html = makePostHtml("usdtest/1", "2026-07-22T10:00:00+00:00", "Из Москвы в Нью-Йорк за $120")
+  const deals = parseTelegramChannelHtml(html, "usdtest")
+  assert.equal(deals.length, 1)
+  assert.equal(deals[0].priceRub, 10800) // 120 * USD_TO_RUB_RATE (90)
+})
+
+test("при наличии и ₽, и € в одном посте — приоритет у рублёвой цены (не конвертируем зря)", () => {
+  const html = makePostHtml(
+    "mixed/1",
+    "2026-07-22T10:00:00+00:00",
+    "Тарифы разные: у нас 5000₽, у партнёра в Европе от €49",
+  )
+  const deals = parseTelegramChannelHtml(html, "mixed")
+  assert.equal(deals.length, 1)
+  assert.equal(deals[0].priceRub, 5000)
+})

@@ -704,8 +704,8 @@ export default function FlightsSearchPage() {
 
           {searched && demoData && (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Демо-данные: партнёрские ключи ещё не подключены, цены и рейсы — тестовые.
-              Реальные предложения появятся после подключения Travelpayouts/Kiwi.
+              Демо-данные: партнёрский ключ Travelpayouts ещё не подключён, цены и рейсы — тестовые.
+              Реальные предложения появятся после подключения Travelpayouts.
             </div>
           )}
 

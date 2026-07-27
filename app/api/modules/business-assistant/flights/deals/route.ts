@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams
   const page = Math.max(1, Number(sp.get("page") ?? "1"))
-  const pageSize = 20
+  const pageSize = 30 // с расширением списка каналов (Группа TG-каналов, 27.07) — не даём ленте расплываться
   const direction = sp.get("direction")?.trim() // фильтр по направлению — "Москва", "Дубай" и т.п.
   const force = sp.get("force") === "1"
 
