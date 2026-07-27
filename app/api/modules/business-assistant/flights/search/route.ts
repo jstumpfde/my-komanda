@@ -70,5 +70,9 @@ export async function GET(req: NextRequest) {
 
   const result = await runFlightSearch(params, filters)
 
-  return NextResponse.json(result)
+  // Пока партнёрские ключи не подключены, провайдеры отдают мок — честно
+  // помечаем ответ, чтобы UI показал плашку «демо-данные».
+  const demoData = !process.env.TRAVELPAYOUTS_API_TOKEN && !process.env.KIWI_TEQUILA_API_KEY
+
+  return NextResponse.json({ ...result, demoData })
 }

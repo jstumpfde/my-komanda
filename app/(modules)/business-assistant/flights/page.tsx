@@ -147,6 +147,7 @@ export default function FlightsSearchPage() {
   const [direct, setDirect] = useState<FlightOffer[]>([])
   const [combo, setCombo] = useState<FlightOffer[]>([])
   const [datesSearched, setDatesSearched] = useState<string[]>([])
+  const [demoData, setDemoData] = useState(false)
   const [searched, setSearched] = useState(false)
 
   // Выбросы цен из Telegram
@@ -256,11 +257,13 @@ export default function FlightsSearchPage() {
         combo: FlightOffer[]
         airlines: string[]
         datesSearched: string[]
+        demoData?: boolean
       }
       setDirect(data.direct)
       setCombo(data.combo)
       setAvailableAirlines(data.airlines)
       setDatesSearched(data.datesSearched)
+      setDemoData(Boolean(data.demoData))
       setSearched(true)
 
       // «Когда покупать» имеет смысл только для точной даты вылета.
@@ -699,6 +702,13 @@ export default function FlightsSearchPage() {
             </p>
           )}
 
+          {searched && demoData && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Демо-данные: партнёрские ключи ещё не подключены, цены и рейсы — тестовые.
+              Реальные предложения появятся после подключения Travelpayouts/Kiwi.
+            </div>
+          )}
+
           {searched && (
             <Card>
               <CardHeader>
@@ -726,6 +736,12 @@ export default function FlightsSearchPage() {
                 ))}
               </CardContent>
             </Card>
+          )}
+
+          {searched && (direct.length > 0 || combo.length > 0) && (
+            <p className="text-[11px] text-muted-foreground">
+              Бронирование и оплата — на сайте партнёра (Aviasales/Kiwi), кнопка «Купить» открывает его в новой вкладке.
+            </p>
           )}
 
           {searched && dateMode === "exact" && (buyTimingLoading || buyTiming) && (

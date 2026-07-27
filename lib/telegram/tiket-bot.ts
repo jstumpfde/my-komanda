@@ -223,7 +223,11 @@ export async function runSearchAndFormat(cmd: ParsedSearchCommand): Promise<stri
   const all = combined.sort((a, b) => a.priceRub - b.priceRub).slice(0, 5)
   const noDirectNote = noDirect ? "Прямых рейсов нет, показываю с пересадками:\n\n" : ""
   const header = `✈️ <b>${cmd.originIata} → ${cmd.destinationIata}</b>, ${cmd.dateFrom}${cmd.dateTo ? `–${cmd.dateTo}` : ""} — топ-${all.length}:\n`
-  return noDirectNote + header + "\n\n" + all.map(formatOffer).join("\n\n")
+  const demoNote =
+    !process.env.TRAVELPAYOUTS_API_TOKEN && !process.env.KIWI_TEQUILA_API_KEY
+      ? "\n\n<i>Демо-данные: партнёрские ключи ещё не подключены, цены тестовые.</i>"
+      : ""
+  return noDirectNote + header + "\n\n" + all.map(formatOffer).join("\n\n") + demoNote
 }
 
 // ─── Создание watch из команды /следить ────────────────────────────────────
@@ -267,13 +271,15 @@ export async function linkChatByToken(chatId: string, token: string): Promise<Li
   const [link] = await db
     .select()
     .from(userTelegramLinks)
-    .where(eq(userTelegramLinks.linkToken, token))
+    // одноразовость: токен валиден только пока запись не привязана; после
+    // привязки токен ротируется, поэтому утёкшая старая ссылка мертва
+    .where(and(eq(userTelegramLinks.linkToken, token), isNull(userTelegramLinks.chatId)))
     .limit(1)
   if (!link) return { ok: false }
 
   await db
     .update(userTelegramLinks)
-    .set({ chatId, linkedAt: new Date() })
+    .set({ chatId, linkedAt: new Date(), linkToken: crypto.randomUUID() })
     .where(eq(userTelegramLinks.id, link.id))
 
   return { ok: true, companyId: link.companyId, userId: link.userId }
