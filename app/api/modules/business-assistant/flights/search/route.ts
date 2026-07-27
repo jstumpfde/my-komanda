@@ -70,9 +70,10 @@ export async function GET(req: NextRequest) {
 
   const result = await runFlightSearch(params, filters)
 
-  // Пока партнёрские ключи не подключены, провайдеры отдают мок — честно
-  // помечаем ответ, чтобы UI показал плашку «демо-данные».
-  const demoData = !process.env.TRAVELPAYOUTS_API_TOKEN && !process.env.KIWI_TEQUILA_API_KEY
+  // Работаем только на Travelpayouts (решение Юрия) — Kiwi/combo не участвует
+  // в демо-плашке: пока нет KIWI_TEQUILA_API_KEY, combo вообще не генерится
+  // (см. searchKiwiCombos), так что демо-статус зависит только от TP-токена.
+  const demoData = !process.env.TRAVELPAYOUTS_API_TOKEN
 
   return NextResponse.json({ ...result, demoData })
 }

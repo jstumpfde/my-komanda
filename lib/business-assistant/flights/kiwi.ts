@@ -1,6 +1,4 @@
 import type { BaggageAllowance, FlightOffer, FlightSearchParams } from "./types"
-import { buildDateList, seedHash } from "./date-utils"
-import { mockBaggage, worstOfSegments } from "./baggage"
 
 function toKiwiDate(iso: string): string {
   const [year, month, day] = iso.split("-")
@@ -27,42 +25,6 @@ function buildKiwiDeepUrl(params: FlightSearchParams): string {
   })
   if (params.returnDate) query.set("return", params.returnDate)
   return `https://www.kiwi.com/deep?${query.toString()}`
-}
-
-// Мок-комбо на конкретную дату — псевдослучайная, но воспроизводимая
-// вариация цены/экономии/часа вылета, чтобы диапазон дат выглядел живым
-// без реального ключа KIWI_TEQUILA_API_KEY.
-function mockOffers(params: FlightSearchParams, date: string): FlightOffer[] {
-  const deepLink = buildClickTrackedDeepLink(buildKiwiDeepUrl({ ...params, departDate: date }))
-  const cabinClass = params.tripClass ?? "economy"
-  const seed = seedHash(`${params.originIata}${params.destinationIata}${date}kiwi`)
-  const factor = 0.8 + ((seed % 100) / 100) * 0.6 // 0.8..1.4
-  const basePrice = cabinClass === "business" ? 55000 : 18900
-  const price = Math.round(basePrice * factor)
-  const savings = Math.round(price * (0.2 + ((seed % 30) / 100))) // 20-49% экономии
-  const hour = seedHash(`${date}kiwihour`) % 24
-  // Combo = минимум 2 перелёта (через Стамбул) — багаж считаем по худшему
-  // сегменту, как в реальном комбинировании разных перевозчиков.
-  const legBaggage = worstOfSegments([
-    mockBaggage(`${params.originIata}-leg1-${date}`, cabinClass),
-    mockBaggage(`${params.destinationIata}-leg2-${date}`, cabinClass),
-  ])
-  return [
-    {
-      id: `kiwi-mock-${params.originIata}-${params.destinationIata}-${date}-0`,
-      kind: "combo" as const,
-      priceRub: price,
-      airlineLabel: "Turkish Airlines + AirAsia (через Стамбул)",
-      transfers: 2,
-      durationMinutes: 560 + (seed % 180),
-      savingsRub: savings,
-      deepLink,
-      departDate: date,
-      departHour: hour,
-      cabinClass,
-      baggage: legBaggage,
-    },
-  ]
 }
 
 interface TequilaRow {
@@ -133,13 +95,13 @@ async function fetchRealOffers(params: FlightSearchParams, apiKey: string): Prom
     })
 }
 
+// Решение Юрия (27.07): пока нет ключа Kiwi — работаем только на
+// Travelpayouts. Блок «Составные маршруты» combo-предложений НЕ мокаем и НЕ
+// показываем вовсе (страница/бот скрывают блок при пустом массиве) — раньше
+// мок генерился всегда и создавал видимость рабочего Kiwi-источника.
 export async function searchKiwiCombos(params: FlightSearchParams): Promise<FlightOffer[]> {
   const apiKey = process.env.KIWI_TEQUILA_API_KEY
-  if (apiKey) {
-    const offers = await fetchRealOffers(params, apiKey)
-    return [...offers].sort((a, b) => a.priceRub - b.priceRub)
-  }
-  const dates = buildDateList(params.departDate, params.departDateTo)
-  const offers = dates.flatMap((date) => mockOffers(params, date))
+  if (!apiKey) return []
+  const offers = await fetchRealOffers(params, apiKey)
   return [...offers].sort((a, b) => a.priceRub - b.priceRub)
 }

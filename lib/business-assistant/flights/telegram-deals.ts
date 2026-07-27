@@ -7,11 +7,22 @@
 // Список каналов — временный хардкод. Позже станет настройкой платформенного
 // админа (аналог PLATFORM_ADMIN_EMAILS/SETTINGS_MIGRATIONS — управляемый
 // список источников, а не вшитый в код).
+//
+// Отбор 27.07: живьём проверены ~24 кандидата (curl t.me/s/{ch} + прогон
+// через parseTelegramChannelHtml). Порог отбора — жив + аудитория ≥10k +
+// ≥40% постов последней страницы с распознанной ценой. Прошли (аудитория и
+// доля цены — на дату проверки 27.07.2026):
 export const FLIGHT_DEAL_CHANNELS = [
-  "travelradar",
-  "piratesru",
-  "nachemodanah",
-  "travel100500miles",
+  "travelradar",         // 248K подписчиков, 70% постов с ценой
+  "piratesru",           // 157K, 100%
+  "nachemodanah",        // 67.6K, 100%
+  "travel100500miles",   // 54.4K, 85%
+  "vandroukiru",         // 402K, 79% — «Способы путешествовать почти бесплатно»
+  "chartergorit",        // 22.8K, 85% — «Чартер горит!»
+  "trvlclick",           // 186K, 100% — «Трэвел Клик»
+  "travelbelka",         // 70.8K, 67% — Travelbelka.ru
+  "toursmsk",            // 28.8K, 90% — «Дешёвые и горящие туры из Москвы»
+  "triptodreamru",       // 104K, 100% — TripToDream
 ] as const
 
 export type FlightDealChannel = (typeof FLIGHT_DEAL_CHANNELS)[number]
@@ -28,6 +39,18 @@ export interface ParsedTelegramDeal {
 
 const PRICE_RE = /(\d{1,3}(?:[.,\s]\d{3})+|\d{4,7})\s*(?:₽|руб\.?|RUB|рублей)/iu
 const PRICE_THOUSANDS_RE = /(\d+(?:[.,]\d+)?)\s*тыс\.?\s*руб/iu
+
+// Ни один из 10 отобранных 27.07 каналов не постит в € или $ (проверено на
+// живых постах) — но некоторые кандидаты-аутсайдеры (мониторинг чартеров в
+// Европу) иногда так делают, поэтому парсер готов к этому заранее. Курс —
+// фиксированная константа (НЕ живой курс ЦБ, обновлять руками при сильном
+// расхождении); лучше грубая рублёвая оценка для сортировки/фильтра по цене,
+// чем полное исключение поста — rawText внизу карточки всё равно показывает
+// исходную сумму в валюте поста.
+const EUR_TO_RUB_RATE = 100
+const USD_TO_RUB_RATE = 90
+const PRICE_EUR_RE = /(?:€\s?(\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d+)?))|(?:(\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d+)?)\s?€)/u
+const PRICE_USD_RE = /(?:\$\s?(\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d+)?))|(?:(\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d+)?)\s?\$)/u
 
 // "...из Города в Город..." — самая частая формулировка направления в этих
 // каналах. Ленивое сканирование между городами пропускает списки через
@@ -66,6 +89,22 @@ function parsePriceRub(text: string): number | null {
   if (m2 && m2.index !== undefined) {
     const n = Math.round(parseFloat(m2[1].replace(",", ".")) * 1000)
     if (Number.isFinite(n) && n > 0) candidates.push({ idx: m2.index, value: n })
+  }
+  // € / $ — только если в посте вообще нет рублёвой цены (candidates пуст):
+  // если пост уже содержит ₽/руб, доверяем ей, а не грубой конвертации.
+  if (candidates.length === 0) {
+    const m3 = text.match(PRICE_EUR_RE)
+    if (m3 && m3.index !== undefined) {
+      const raw = (m3[1] ?? m3[2] ?? "").replace(/[.,\s]/g, "")
+      const n = Number(raw)
+      if (Number.isFinite(n) && n > 0) candidates.push({ idx: m3.index, value: Math.round(n * EUR_TO_RUB_RATE) })
+    }
+    const m4 = text.match(PRICE_USD_RE)
+    if (m4 && m4.index !== undefined) {
+      const raw = (m4[1] ?? m4[2] ?? "").replace(/[.,\s]/g, "")
+      const n = Number(raw)
+      if (Number.isFinite(n) && n > 0) candidates.push({ idx: m4.index, value: Math.round(n * USD_TO_RUB_RATE) })
+    }
   }
   if (candidates.length === 0) return null
   candidates.sort((a, b) => a.idx - b.idx)
