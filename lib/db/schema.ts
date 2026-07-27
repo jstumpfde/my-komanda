@@ -4871,3 +4871,78 @@ export const bigLifeCovers = pgTable("big_life_covers", {
 ])
 export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
 export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
+// Бизнес-ассистент → Авиабилеты: лента находок из Telegram-каналов со
+// сливами дешёвых билетов. Платформенная таблица (БЕЗ company_id) — источник
+// публичный, не данные конкретного клиента. Наполняется кроном
+// flight-deals-ingest (см. отдельный план про Telegram-userbot). Миграция 0232.
+export const flightDeals = pgTable("flight_deals", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  routeFrom:        text("route_from").notNull(),
+  routeTo:          text("route_to").notNull(),
+  priceRub:         integer("price_rub").notNull(),
+  sourceChannel:    text("source_channel").notNull(),
+  sourceMessageUrl: text("source_message_url").notNull().unique(),
+  rawText:          text("raw_text").notNull(),
+  aiExtractedJson:  jsonb("ai_extracted_json"),
+  validUntil:       timestamp("valid_until", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("flight_deals_created_idx").on(t.createdAt),
+])
+export type FlightDeal    = typeof flightDeals.$inferSelect
+export type NewFlightDeal = typeof flightDeals.$inferInsert
+
+// Бизнес-ассистент → Авиабилеты → «Отслеживать цену»: сохранённый поиск
+// (маршрут+даты+класс+фильтры), который крон /api/cron/flight-price-watch
+// периодически перепрогоняет через ту же поисковую логику, что и ручной
+// поиск. Per-tenant + per-user (список "Мои отслеживания" — личный).
+// Миграция 0233.
+export interface FlightWatchFilters { [k: string]: unknown }
+export const flightPriceWatches = pgTable("flight_price_watches", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId:          uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  originIata:      text("origin_iata").notNull(),
+  destinationIata: text("destination_iata").notNull(),
+  dateMode:        text("date_mode").notNull().default("exact"),  // exact | range
+  departDate:      text("depart_date").notNull(),                  // YYYY-MM-DD
+  departDateTo:    text("depart_date_to"),                         // YYYY-MM-DD, режим диапазона
+  tripClass:       text("trip_class").notNull().default("economy"),
+  filtersJson:     jsonb("filters_json").$type<FlightWatchFilters>(),
+  targetPriceRub:  integer("target_price_rub"),                    // nullable — «уведомить при цене ниже X»
+  lastPriceRub:    integer("last_price_rub"),
+  lastCheckedAt:   timestamp("last_checked_at", { withTimezone: true }),
+  bestPriceRub:    integer("best_price_rub"),
+  bestPriceAt:     timestamp("best_price_at", { withTimezone: true }),
+  active:          boolean("active").notNull().default(true),
+  // Telegram-уведомление в личный чат (в дополнение к колокольчику) —
+  // chatId пользователь берёт сам, написав /start боту компании. Миграция 0234.
+  notifyTelegram:  boolean("notify_telegram").notNull().default(false),
+  telegramChatId:  text("telegram_chat_id"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("flight_price_watches_company_idx").on(t.companyId),
+  index("flight_price_watches_active_idx").on(t.active),
+])
+export type FlightPriceWatch    = typeof flightPriceWatches.$inferSelect
+export type NewFlightPriceWatch = typeof flightPriceWatches.$inferInsert
+
+// Привязка пользователя платформы к личному чату двустороннего Telegram-бота
+// @TiketCompany24bot (Авиабилеты). Один пользователь — одна привязка.
+// linkToken — одноразовая ссылка t.me/TiketCompany24bot?start=<token>,
+// chatId заполняется при /start <token> в вебхуке бота. Миграция 0235.
+export const userTelegramLinks = pgTable("user_telegram_links", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  userId:     uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  chatId:     text("chat_id"),                 // null, пока не привязан
+  linkToken:  text("link_token").notNull(),
+  linkedAt:   timestamp("linked_at", { withTimezone: true }),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("user_telegram_links_user_idx").on(t.userId),
+  uniqueIndex("user_telegram_links_chat_id_idx").on(t.chatId),
+  uniqueIndex("user_telegram_links_token_idx").on(t.linkToken),
+])
+export type UserTelegramLink    = typeof userTelegramLinks.$inferSelect
+export type NewUserTelegramLink = typeof userTelegramLinks.$inferInsert

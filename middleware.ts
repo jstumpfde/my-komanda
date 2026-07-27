@@ -108,6 +108,10 @@ const PUBLIC_PREFIXES = [
   // пользователем (не Telegram), но живёт в middleware-исключении по тому же
   // префиксу неймспейса; требует requireAuth() внутри самого роута.
   "/api/telegram/manager-bot/link-code",
+  // Webhook платформенного бота @TiketCompany24bot (Бизнес-ассистент →
+  // Авиабилеты): приходит от серверов Telegram (без сессии), роут сам
+  // проверяет ?secret= (TELEGRAM_TIKET_WEBHOOK_SECRET).
+  "/api/telegram/tiket-bot/webhook",
   // Webhook Авито: приходит от серверов Авито (без сессии), роут сам проверяет
   // AVITO_WEBHOOK_SECRET. Без этого Авито-серверы получали бы 302 на /login.
   "/api/webhooks/avito",
