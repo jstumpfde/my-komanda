@@ -262,6 +262,8 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     menuItems: [
       { label: 'Объекты',    href: '/pricing',          icon: 'Building2' },
       { label: 'Настройки',  href: '/pricing/settings', icon: 'Settings' },
+    ],
+  },
   business_assistant: {
     id: 'business_assistant',
     name: 'Мой ассистент',
