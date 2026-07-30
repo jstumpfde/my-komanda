@@ -96,6 +96,12 @@ export async function PUT(
     if (body.autoRejectEnabled !== undefined) {
       settings.autoRejectEnabled = body.autoRejectEnabled === true
     }
+    // Пилот «агента коммуникаций» (Юрий 10.07): тумблер AI-переписывания
+    // текста дожимов под контекст кандидата. По умолчанию выкл — см.
+    // lib/comms-agent/adapt-followup-message.ts.
+    if (body.dozhimAgentEnabled !== undefined) {
+      settings.dozhimAgentEnabled = body.dozhimAgentEnabled === true
+    }
     if (body.inviteMessage !== undefined) {
       const text = typeof body.inviteMessage === "string" ? body.inviteMessage.slice(0, 2000) : ""
       // P0-43: первое сообщение должно содержать плейсхолдер ссылки на демо.
@@ -123,6 +129,12 @@ export async function PUT(
     if (body.interviewCancelledMessage !== undefined) {
       settings.interviewCancelledMessage = typeof body.interviewCancelledMessage === "string"
         ? body.interviewCancelledMessage.slice(0, 2000)
+        : undefined
+    }
+    // 11.07: шаблон «менеджер перенёс интервью — новое время + перезапись».
+    if (body.interviewRescheduledMessage !== undefined) {
+      settings.interviewRescheduledMessage = typeof body.interviewRescheduledMessage === "string"
+        ? body.interviewRescheduledMessage.slice(0, 2000)
         : undefined
     }
     // Юрий 10.07: шаблон авто-уведомления при вставке/смене ссылки на встречу.

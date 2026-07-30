@@ -62,10 +62,10 @@ export async function adaptFollowupMessage(params: AdaptFollowupParams): Promise
   }
 
   const BRANCH_LABELS: Record<string, string> = {
-    not_opened:           "кандидат ещё не открывал демо",
-    opened_not_finished:  "кандидат открыл демо, но не дошёл до конца",
-    test_not_opened:      "кандидат не начал тест",
-    test_not_finished:    "кандидат начал тест, но не завершил",
+    not_opened:                "кандидат ещё не открывал демо",
+    opened_not_finished:       "кандидат открыл демо, но не дошёл до конца",
+    test_not_opened:           "кандидат не начал тест",
+    test_opened_not_submitted: "кандидат начал тест, но не завершил",
   }
   const branchLabel = BRANCH_LABELS[branch] ?? branch
 

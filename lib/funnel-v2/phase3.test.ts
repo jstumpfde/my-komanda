@@ -28,6 +28,7 @@ const ACTION_TO_LEGACY: Record<string, string | null> = {
   test:             "test_task_sent",
   task:             "test_task_sent",
   interview:        "interview",
+  decision:         "decision",
   offer:            "final_decision",
   hired:            "hired",
   security_check:   "interview",
@@ -49,6 +50,10 @@ test("маппинг action→legacy: task → test_task_sent (как test)", ()
 
 test("маппинг action→legacy: interview → interview", () => {
   assert.equal(ACTION_TO_LEGACY["interview"], "interview")
+})
+
+test("маппинг action→legacy: decision → decision", () => {
+  assert.equal(ACTION_TO_LEGACY["decision"], "decision")
 })
 
 test("маппинг action→legacy: offer → final_decision", () => {

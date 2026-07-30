@@ -22,7 +22,7 @@ import { vacancies, companies } from "@/lib/db/schema"
 import type { VacancyAiProcessSettings } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { getStageHhAction, parsePipeline } from "@/lib/stages"
-import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE, DEFAULT_INTERVIEW_CANCELLED_MESSAGE } from "@/lib/hh/default-messages"
+import { DEFAULT_REJECT_MESSAGE, DEFAULT_INVITE_MESSAGE, DEFAULT_INTERVIEW_CANCELLED_MESSAGE, DEFAULT_INTERVIEW_RESCHEDULED_MESSAGE } from "@/lib/hh/default-messages"
 import { DEFAULT_SCHEDULE_INVITE_TEXT } from "@/lib/messaging/schedule-invite"
 
 export async function GET(req: NextRequest) {
@@ -81,6 +81,20 @@ export async function GET(req: NextRequest) {
         channel:    "hh",
         text:       tpl,
         note:       "Отправляется в hh-чат сразу при отмене интервью. Переменные: {{name}}, {{vacancy}}, {{schedule_link}}.",
+      })
+    }
+
+    // ── Виртуальная «стадия»: менеджер перенёс интервью (drag времени/дня) —
+    // кандидату уходит новое время + ссылка перезаписаться. 11.07.
+    // {{new_date}}/{{new_time}}/{{schedule_link}} подставляются на отправке
+    // (reschedule-and-notify) из фактического startAt события.
+    if (stage === "interview_rescheduled") {
+      const tpl = settings.interviewRescheduledMessage?.trim() || DEFAULT_INTERVIEW_RESCHEDULED_MESSAGE
+      return apiSuccess({
+        hasMessage: true,
+        channel:    "hh",
+        text:       tpl,
+        note:       "Отправляется в hh-чат сразу при переносе интервью. Переменные: {{name}}, {{vacancy}}, {{new_date}}, {{new_time}}, {{schedule_link}}.",
       })
     }
 

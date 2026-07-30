@@ -46,6 +46,10 @@ const PUBLIC_PREFIXES = [
   "/join/",
   "/invite/",           // публичная страница принятия инвайта по токен-ссылке
                         // (рассчитана на неавторизованного пользователя)
+  "/api/invites/register", // регистрация по инвайт-токену — вызывается ДО появления
+                        // сессии (у приглашённого ещё нет аккаунта), иначе middleware
+                        // отдаёт 302 на /login. Роут сам валидирует токен + rate-limit.
+                        // Общий /api/auth/register остаётся закрытым (403).
   "/api/auth",          // sign-in/out + forgot-password/reset-password
   "/api/cron/",         // cron-эндпоинты — защищены X-Cron-Secret в самом роуте,
                         // а не сессией NextAuth.

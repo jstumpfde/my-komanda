@@ -22,13 +22,18 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { PlaceholderBadges } from "@/components/ui/placeholder-badges"
+import { renderTemplate } from "@/lib/template-renderer"
 
 export interface EditableMessagePreviewProps {
   /** Текущий текст шаблона (с плейсхолдерами {{…}}). */
   text: string
   /** Колбэк изменения текста (разовое переопределение для этого кандидата). */
   onChange: (next: string) => void
-  /** Значения плейсхолдеров для рендера превью ({ name, vacancy, schedule_link, … }). */
+  /**
+   * Значения плейсхолдеров для рендера превью. Ключи — ТОЛЬКО canonical-имена
+   * из ALIASES lib/template-renderer (name, vacancy, schedule_link, …):
+   * произвольный ключ вне ALIASES движок не подставит.
+   */
   vars: Record<string, string>
   /** Токены БЕЗ обёрток {{ }} для кликабельных бейджей. По умолчанию — ключи vars. */
   placeholders?: string[]
@@ -45,13 +50,6 @@ export interface EditableMessagePreviewProps {
   rows?: number
 }
 
-// Подставляет {{key}} → vars[key]. Неизвестные плейсхолдеры оставляет как есть.
-export function renderPreview(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (m, key: string) =>
-    Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : m,
-  )
-}
-
 export function EditableMessagePreview({
   text,
   onChange,
@@ -66,7 +64,10 @@ export function EditableMessagePreview({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const preview = useMemo(() => renderPreview(text, vars), [text, vars])
+  // Превью — тем же движком, что и реальная отправка (cron follow-up и др.):
+  // кириллические алиасы ({{Имя}}, {{компания}}) и legacy-скобки {key}/[key].
+  // НЕ заменять локальной регуляркой — \w не матчит кириллицу.
+  const preview = useMemo(() => renderTemplate(text, vars), [text, vars])
   const badgeTokens = placeholders ?? Object.keys(vars)
 
   const handleSave = async () => {

@@ -16,6 +16,7 @@ import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 import { renderButtonIcon } from "@/lib/button-icons"
 import { estimateDemoDuration } from "@/lib/demo/estimate-duration"
+import { renderDemoVars, buildDemoVarsMap } from "@/lib/demo-vars"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,9 @@ interface DemoData {
   vacancyTitle: string
   companyName: string
   companyLogo: string | null
+  // 152-ФЗ: subdomain компании → чекбокс согласия ссылается на ЕЁ политику
+  // (/politicahr2026?company=<subdomain>); нет subdomain — центральная политика.
+  companySubdomain?: string | null
   brandPrimaryColor: string
   brandBgColor: string
   brandTextColor: string
@@ -125,6 +129,15 @@ interface DemoData {
   salaryMax: number | null
   city: string | null
   format: string | null
+  // Источники «настоящих» переменных демо (см. buildDemoVarsMap):
+  // {{график}}, {{офис}}, {{отрасль}}, {{сотрудников}}, {{лет_на_рынке}},
+  // {{руководитель}}. Отдаёт /api/public/demo/[token] из vacancies/companies.
+  schedule: string | null
+  officeAddress: string | null
+  industry: string | null
+  employeeCount: number | null
+  foundedYear: number | null
+  director: string | null
   lessons: Lesson[]
   progress: {
     schemaVersion?: number
@@ -232,17 +245,12 @@ function pluralizeSteps(n: number): string {
 
 // ─── Variable replacement ────────────────────────────────────────────────────
 
+// Подстановка — через общий lib/demo-vars.ts: локальная регулярка с `\w` не
+// матчила кириллицу, и «{{город}}»/«{{имя}}» уходили кандидату сырыми скобками.
+// Карта переменных (вкл. производную «в_городе») строится в buildDemoVarsMap —
+// DemoData структурно совместим с DemoVarsSource.
 function replaceVars(text: string, data: DemoData): string {
-  const firstName = data.candidateName?.split(" ")[0] || data.candidateName
-  const map: Record<string, string> = {
-    "имя": firstName || "",
-    "компания": data.companyName || "",
-    "должность": data.vacancyTitle || "",
-    "зарплата_от": data.salaryMin ? data.salaryMin.toLocaleString("ru-RU") : "",
-    "зарплата_до": data.salaryMax ? data.salaryMax.toLocaleString("ru-RU") : "",
-    "город": data.city || "",
-  }
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => map[key] ?? `{{${key}}}`)
+  return renderDemoVars(text, buildDemoVarsMap(data))
 }
 
 // ─── Group blocks by lesson for single-page rendering ────────────────────────
@@ -1330,6 +1338,9 @@ export default function DemoPage() {
           phone:     fieldPhone.enabled ? formPhone.trim() : "",
           birthDate: fieldBirth.enabled && isValidBirthDateRu(formBirth) ? ruBirthToIso(formBirth) : undefined,
           city:      fieldCity.enabled  ? (formCity.trim() || undefined) : undefined,
+          // 152-ФЗ: чекбокс согласия — не только гейт кнопки; сервер фиксирует
+          // факт в candidates.consent_at (+ редакция политики).
+          consent:   formConsent,
           anketa: {
             telegram:             fieldTelegram.enabled ? (formTelegram.trim() || undefined) : undefined,
             experienceSummary:    formExperience.trim() || undefined,
@@ -1666,7 +1677,7 @@ export default function DemoPage() {
                 style={{ accentColor: brandColor }}
               />
               <span>
-                Я согласен на обработку персональных данных в соответствии с <a href="/politicahr2026" target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
+                Я согласен на обработку персональных данных в соответствии с <a href={data.companySubdomain ? `/politicahr2026?company=${encodeURIComponent(data.companySubdomain)}` : "/politicahr2026"} target="_blank" className="underline hover:opacity-80">ФЗ-152</a>. Данные используются только для целей найма.
               </span>
             </label>
 

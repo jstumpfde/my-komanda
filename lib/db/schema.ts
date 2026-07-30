@@ -1299,6 +1299,9 @@ export interface VacancyAiProcessSettings {
   // Юрий 10.07: текст, который уходит кандидату, когда менеджер отменяет
   // назначенное интервью (не отказ — приглашение перезаписаться на новое время).
   interviewCancelledMessage?: string
+  // 11.07: текст при переносе интервью менеджером (drag времени/дня) —
+  // {{name}}/{{vacancy}}/{{new_date}}/{{new_time}}/{{schedule_link}}.
+  interviewRescheduledMessage?: string
   // Юрий 10.07: текст при вставке/смене ссылки на встречу (Zoom и т.п.) —
   // {{name}}/{{vacancy}}/{{meeting_link}}/{{contacts}}.
   meetingLinkMessage?: string
@@ -1669,6 +1672,17 @@ export const candidates = pgTable("candidates", {
   // /niches/filledAt). Отдельно от anketa_answers — там массив демо-блоков.
   // Не перезаписывает основные поля name/phone/email/city/birth_date.
   surveyResponses: jsonb("survey_responses"),
+  // 152-ФЗ (0275): согласие кандидата на обработку ПД — чекбокс в публичной
+  // анкете демо (ссылка на /politicahr2026). Связка per-tenant «оператор =
+  // компания-наниматель / субъект = кандидат», поэтому НЕ пишется в
+  // платформенный consent_log (см. комментарий там); паттерн —
+  // landing_leads.consent_at. NULL = согласие не фиксировалось (hh-импорт:
+  // правовое основание — согласие кандидата на стороне hh.ru; либо анкета
+  // заполнена до ввода поля). Первое согласие не перезаписывается повторными.
+  consentAt: timestamp("consent_at", { withTimezone: true }),
+  // Редакция политики на момент согласия: дата legal_documents('privacy_policy')
+  // .updated_at, напр. "2026-07-04", либо "default", если документ не заведён.
+  consentDocVersion: text("consent_doc_version"),
   aiScore: integer("ai_score"),
   aiSummary: text("ai_summary"),
   aiDetails: jsonb("ai_details"), // [{question, score, comment}]
@@ -3508,6 +3522,13 @@ export const followUpMessages = pgTable("follow_up_messages", {
   status:       text("status").notNull().default("pending"), // 'pending' | 'sent' | 'failed' | 'cancelled'
   // Ветка дожима: 'not_opened' (А) | 'opened_not_finished' (Б).
   branch:       text("branch").notNull().default("not_opened"),
+  // drizzle/0276 — production-след агента коммуникаций (Фаза 1 «единого
+  // центра коммуникаций», 11.07). sentText — реально ушедший кандидату текст
+  // (literal ИЛИ AI-адаптированный), messageText остаётся шаблоном ДО рендера.
+  // aiAdapted — true, если текст этого касания переписан comms-agent'ом
+  // (lib/comms-agent/adapt-followup-message.ts, adapted.safe===true).
+  sentText:     text("sent_text"),
+  aiAdapted:    boolean("ai_adapted").notNull().default(false),
   errorMessage: text("error_message"),
   // Д0 цепочки — исходная точка отсчёта расписания касаний. Обычно
   // совпадает с negotiation.created_at hh-отклика. scheduled_at от
@@ -4298,6 +4319,11 @@ export type NewTelegramDmLead = typeof telegramDmLeads.$inferInsert
 // при будущих правках текста можно было доказать, на какую именно редакцию
 // было дано согласие. details — свободный jsonb (напр. выбранные категории
 // cookie: {analytics: true, marketing: false}).
+// ГРАНИЦА (0275): сюда пишутся ТОЛЬКО согласия, данные Company24.pro как
+// оператору ПД (регистрация, партнёрка, лиды лендинга/портфолио). Согласия
+// кандидатов из анкеты демо — другая связка (оператор = компания-наниматель),
+// они живут per-tenant в candidates.consent_at и в этот журнал/счётчик
+// /admin/platform → «Согласия» попадать не должны.
 export const consentLog = pgTable("consent_log", {
   id:              uuid("id").primaryKey().defaultRandom(),
   userId:          uuid("user_id").references(() => users.id, { onDelete: "set null" }),

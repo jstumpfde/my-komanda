@@ -16,6 +16,7 @@ export type StageActionType =
   | "test"             // тест-вопросы
   | "task"             // тест-задание
   | "interview"        // встреча: телефон / zoom / офис
+  | "decision"         // финальное решение по кандидату (перед оффером)
   | "offer"            // оффер + подпись
   | "security_check"   // СБ-проверка (Dadata)
   | "reference_check"  // реф-чек у прошлого работодателя
@@ -27,6 +28,7 @@ export const STAGE_ACTIONS: Array<{ type: StageActionType; label: string; icon: 
   { type: "test",             label: "Тест-вопросы",     icon: "list-check",     desc: "вопросы + AI-проверка" },
   { type: "task",             label: "Тест-задание",     icon: "clipboard-check",desc: "задание → ответ → проверка" },
   { type: "interview",        label: "Интервью",         icon: "calendar",       desc: "телефон / Zoom / офис" },
+  { type: "decision",         label: "Решение",          icon: "circle-check",   desc: "финальное решение по кандидату" },
   { type: "offer",            label: "Оффер",            icon: "file-text",      desc: "оффер + подпись" },
   { type: "security_check",   label: "СБ-проверка",      icon: "shield-check",   desc: "проверки (Dadata)" },
   { type: "reference_check",  label: "Реф-чек",          icon: "phone",          desc: "отзыв прошлого работодателя" },

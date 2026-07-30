@@ -815,6 +815,10 @@ async function processOneTouch(
   // нулевой риск для существующих дожимов, пока флаг явно не включён.
   // Только на реальных дожимных касаниях (не одноразовые транзакционные).
   const dozhimAgentEnabled = (vacancy.aiProcessSettings as { dozhimAgentEnabled?: boolean } | null)?.dozhimAgentEnabled === true
+  // Фаза 1 «единого центра коммуникаций» (drizzle/0276): production-след —
+  // true, только если comms-agent реально подменил текст (adapted.safe).
+  // Пишется в follow_up_messages.ai_adapted при переводе касания в 'sent'.
+  let aiAdapted = false
   if (dozhimAgentEnabled && isDozhimTouch) {
     const adapted = await adaptFollowupMessage({
       guardrailText: finalText,
@@ -828,6 +832,7 @@ async function processOneTouch(
     })
     if (adapted.safe) {
       finalText = adapted.text
+      aiAdapted = true
     } else {
       console.info(`[cron/follow-up] comms-agent fallback to literal text: ${adapted.reason}`)
     }
@@ -914,7 +919,9 @@ async function processOneTouch(
           }).where(eq(candidates.id, msg.candidateId))
         }
       }
-      await db.update(followUpMessages).set({ status: "sent", sentAt: new Date() }).where(eq(followUpMessages.id, msg.id))
+      // drizzle/0276: sentText — реально ушедший текст (literal ИЛИ AI-адаптированный),
+      // aiAdapted — переписан ли comms-agent'ом (см. adapted.safe выше).
+      await db.update(followUpMessages).set({ status: "sent", sentAt: new Date(), sentText: finalText, aiAdapted }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "sent", delayMs }
     }
 
@@ -939,9 +946,13 @@ async function processOneTouch(
       await db.update(followUpMessages).set({ status: "held" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "held", delayMs }
     }
+    // drizzle/0276: sentText — реально ушедший текст (literal ИЛИ AI-адаптированный),
+    // aiAdapted — переписан ли comms-agent'ом (см. adapted.safe выше).
     await db.update(followUpMessages).set({
       status: "sent",
       sentAt: new Date(),
+      sentText: finalText,
+      aiAdapted,
     }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "sent", delayMs }
   } catch (err) {

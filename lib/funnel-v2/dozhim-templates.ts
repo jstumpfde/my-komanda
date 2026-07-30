@@ -29,6 +29,9 @@ export const STEP_WORDS: Record<string, StepWords> = {
   prequalification: { noun: "вопросы", verb: "ответьте",    verb_done: "доответьте",  time: "пару минут",  link: "demo_link" },
   // Живые этапы: verb_done = null → ветка Б НЕ генерится; time = null → строки со {{step_time}} пропускаются.
   interview:        { noun: "встречу", verb: "подтвердите", verb_done: null,          time: null,          link: "demo_link" },
+  // decision — внутренний этап ожидания финального решения HR, кандидату
+  // нечего «пройти» → verb=null (обе ветки пустые, как offer/hired).
+  decision:         { noun: "решение", verb: null,          verb_done: null,          time: null,          link: "" },
   offer:            { noun: "оффер",   verb: null,          verb_done: null,          time: null,          link: "" },
   // hired — терминальная позитивная стадия (кандидат уже нанят), «дожимать»
   // нечего → обе ветки пустые (см. buildDozhimChain).

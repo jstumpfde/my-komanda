@@ -17,14 +17,14 @@ import {
 } from "date-fns"
 import { ru } from "date-fns/locale"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import {
   ChevronLeft,
@@ -47,6 +47,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { RU_HOLIDAYS } from "@/lib/schedule/holidays"
+import { BookingSettings } from "@/components/calendar/booking-settings"
 import { WeekView } from "@/components/calendar/week-view"
 import { DayView } from "@/components/calendar/day-view"
 import { MonthView } from "@/components/calendar/month-view"
@@ -124,7 +125,22 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [defaultDate, setDefaultDate] = useState<Date | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // Шестерёнка — хаб «Настройки календаря и записи». ?settings=1 открывает
+  // панель сразу (сюда ведут заглушка «Настройки HR → Интервью» и Карта
+  // настроек); состояние синхронится в URL — перезагрузка возвращает панель.
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(
+    () => searchParams?.get("settings") === "1"
+  )
+  const [settingsTab, setSettingsTab] = useState<"booking" | "calendar">("booking")
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if ((sp.get("settings") === "1") === settingsOpen) return
+    if (settingsOpen) sp.set("settings", "1")
+    else sp.delete("settings")
+    router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen])
 
   // Calendar settings
   interface DaySchedule { enabled: boolean; start: string; end: string; slot: string }
@@ -572,16 +588,31 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
         onDelete={selectedEvent ? handleDelete : undefined}
       />
 
-      {/* ═══ Settings Sheet ═══ */}
+      {/* ═══ Settings Sheet — хаб «Настройки календаря и записи» (задача #6) ═══
+          Таб «Запись кандидатов» — способы/длительность интервью, часы записи,
+          напоминания (hiring_defaults_json.schedule; перенесено из Настроек HR).
+          Таб «Календарь» — рабочее время сетки, праздники, отображение, iCal
+          (workScheduleJson, как раньше). */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
-              <Settings className="size-5" />Настройки календаря
+              <Settings className="size-5" />Настройки календаря и записи
             </SheetTitle>
           </SheetHeader>
 
-          <div className="space-y-6 mt-2 px-4 pb-6">
+          <SheetBody>
+            <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as "booking" | "calendar")}>
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="booking">Запись кандидатов</TabsTrigger>
+                <TabsTrigger value="calendar">Календарь</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="booking" className="mt-0">
+                <BookingSettings />
+              </TabsContent>
+
+              <TabsContent value="calendar" className="mt-0 space-y-6">
 
             {/* ── Рабочее время по дням ── */}
             <Card>
@@ -838,7 +869,9 @@ export function CalendarView({ vacancyId }: { vacancyId?: string } = {}) {
               </CardContent>
             </Card>
 
-          </div>
+              </TabsContent>
+            </Tabs>
+          </SheetBody>
         </SheetContent>
       </Sheet>
 

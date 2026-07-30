@@ -36,21 +36,19 @@ import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT, STORIES_CARD_DEF
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 import { resolveOptionPoints } from "@/lib/score-test-objective"
-import { TEMPLATE_VARIABLES } from "@/lib/templates/demo-templates"
+import { DEMO_PLACEHOLDER_RE, DEMO_VARIABLE_EXAMPLES } from "@/lib/demo-vars"
 import { getMaterialType } from "@/lib/demo-types"
 import { questionsToSections } from "@/lib/library/convert"
 import { LibraryDialog } from "./library-dialog"
 
 // ─── Variable highlighting ────────────────────────────────────────────────
-
-const VARIABLE_EXAMPLES: Record<string, { label: string; example: string }> = Object.fromEntries(
-  TEMPLATE_VARIABLES.map(v => [v.key, { label: v.label, example: v.example }])
-)
+// Мета и регулярка — из общего lib/demo-vars.ts: локальная регулярка с `\w`
+// не матчила кириллицу, и русские {{переменные}} не подсвечивались вовсе.
 
 /** Replace {{var}} with blue badge spans for preview/display rendering */
 function highlightVariables(html: string): string {
-  return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    const info = VARIABLE_EXAMPLES[key]
+  return html.replace(DEMO_PLACEHOLDER_RE, (match, key) => {
+    const info = DEMO_VARIABLE_EXAMPLES[key]
     const tooltip = info ? `${info.label}: ${info.example}` : key
     return `<span class="variable-badge" data-tooltip="${tooltip}" title="${tooltip}" style="display:inline-flex;align-items:center;gap:2px;background:#3b82f610;color:#3b82f6;border:1px solid #3b82f630;border-radius:4px;padding:0 5px;font-size:0.8em;font-weight:500;cursor:default;white-space:nowrap">${match}</span>`
   })

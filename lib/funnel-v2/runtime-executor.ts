@@ -606,10 +606,13 @@ export async function executeStageEntry(
       break
     }
 
-    // ── Остальные (СБ, реф-чек): no-op — реализация Фаза 3 ─────────────────
+    // ── Остальные (СБ, реф-чек, решение): no-op — ждём ручного продвижения HR ──
     case "security_check":
-    case "reference_check": {
-      // TODO (Фаза 3): отдельная логика проверок
+    case "reference_check":
+    case "decision": {
+      // TODO (Фаза 3, security_check/reference_check): отдельная логика проверок.
+      // decision — намеренно no-op: это ручной этап ожидания финального
+      // решения HR, автоматике тут нечего делать.
       result = {
         action:      "noop",
         description: `action=${stage.action} пока no-op (TODO Фаза 3)`,

@@ -7,11 +7,12 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { Settings, Plug, GitBranch, Clock, ShieldAlert, Wrench, MessageSquare, Heart, Building2 } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { IntegrationsContent } from "@/components/hr/integrations-content"
 import { SendDelaySettings } from "@/components/company/send-delay-settings"
 import { TrashRetentionSettings } from "@/components/company/trash-retention-settings"
 import { FunnelAutomationSection } from "@/components/hiring-settings/funnel-automation-section"
-import { InterviewSection } from "@/components/hiring-settings/interview-section"
 import { AdaptationSection } from "@/components/hiring-settings/adaptation-section"
 import { StopFactorsSection } from "@/components/hiring-settings/stop-factors-section"
 import { ServiceSection } from "@/components/hiring-settings/service-section"
@@ -162,8 +163,26 @@ export default function HiringSettingsPage() {
                 <MessagesSection defaults={defaults} onPatch={onPatch} />
               )}
 
+              {/* Интервью переехало в шестерёнку календаря (задача #6 Юрия,
+                  11.07) — таб оставлен заглушкой, чтобы старые ссылки и
+                  привычка «настройки интервью в Настройках HR» не вели в тупик. */}
               {activeTab === "interview" && (
-                <InterviewSection defaults={defaults} onPatch={onPatch} />
+                <Card>
+                  <CardContent className="py-10 flex flex-col items-center text-center gap-3">
+                    <Clock className="size-8 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Настройки интервью переехали в Календарь</p>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                        Способы и длительность интервью, часы записи кандидатов и
+                        напоминания теперь настраиваются в одном месте — в календаре,
+                        по шестерёнке.
+                      </p>
+                    </div>
+                    <Button className="gap-2 mt-1" onClick={() => router.push("/hr/calendar?settings=1")}>
+                      Открыть настройки календаря
+                    </Button>
+                  </CardContent>
+                </Card>
               )}
 
               {activeTab === "adaptation" && (

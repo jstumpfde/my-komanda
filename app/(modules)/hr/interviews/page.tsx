@@ -309,10 +309,60 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const [dropTargetDay, setDropTargetDay] = useState<string | null>(null)
   const [dropTargetStatus, setDropTargetStatus] = useState<InterviewStatus | null>(null)
 
-  // Легаси-диалог «Уведомить кандидата о переносе?» удалён 11.07: его «Да,
-  // уведомить» показывал тост об отправке, ничего не отправляя (скрытое
-  // ложное обещание). Честное уведомление при отмене — через диалог отмены
-  // (cancel-and-notify); уведомление при переносе — бэклог.
+  // Диалог «Уведомить кандидата о переносе?» (11.07) — честная замена легаси-
+  // диалога, чьё «Да, уведомить» показывало тост об отправке, ничего не
+  // отправляя. Теперь: предпросмотр/редактирование шаблона interview_rescheduled
+  // (StageMessageControl), реальная отправка через reschedule-and-notify (роут
+  // перезаписывает startAt/endAt и рендерит {{new_date}}/{{new_time}} из них —
+  // сообщение совпадает с сохранённым временем, даже если фоновый PATCH из
+  // updateInterview не дошёл), тост по факту messageSent.
+  const [reschedDialog, setReschedDialog] = useState<{
+    iv: Interview; startAt: Date; endAt: Date; label: string
+  } | null>(null)
+  const [reschedSendMessage, setReschedSendMessage] = useState(true)
+  const [reschedMessageText, setReschedMessageText] = useState("")
+  const [reschedSubmitting, setReschedSubmitting] = useState(false)
+  const [reschedSavingTemplate, setReschedSavingTemplate] = useState(false)
+  const [reschedPreview, setReschedPreview] = useState<{ loading: boolean; hasMessage: boolean }>({ loading: false, hasMessage: false })
+
+  const saveRescheduleTemplate = async () => {
+    if (!reschedDialog?.iv.vacancyId) { toast.error("Не удалось определить вакансию"); return }
+    setReschedSavingTemplate(true)
+    try {
+      const res = await fetch(`/api/modules/hr/vacancies/${reschedDialog.iv.vacancyId}/ai-settings`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interviewRescheduledMessage: reschedMessageText }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Шаблон сохранён для этой вакансии")
+    } catch { toast.error("Не удалось сохранить шаблон") }
+    finally { setReschedSavingTemplate(false) }
+  }
+
+  const submitRescheduleNotify = async () => {
+    if (!reschedDialog) return
+    setReschedSubmitting(true)
+    try {
+      const res = await fetch(`/api/modules/hr/calendar/${reschedDialog.iv.id}/reschedule-and-notify`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: reschedMessageText,
+          startAt: reschedDialog.startAt.toISOString(),
+          endAt: reschedDialog.endAt.toISOString(),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const json = await res.json().catch(() => null) as { messageSent?: boolean } | null
+      // Тост — по фактическому исходу отправки, не по нажатой кнопке.
+      if (json?.messageSent) {
+        toast.success("Кандидату отправлено сообщение о новом времени")
+      } else {
+        toast.warning("Перенос сохранён, но сообщение не доставлено — предупредите кандидата вручную")
+      }
+      setReschedDialog(null)
+    } catch { toast.error("Не удалось отправить сообщение") }
+    finally { setReschedSubmitting(false) }
+  }
 
   // Диалог отмены интервью менеджером (Юрий 10.07): вкладка «Отменить» —
   // приглашение перезаписаться (слот освобождается, кандидат не отклоняется);
@@ -576,6 +626,27 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
   const ivDragStart = (id: string) => setDragIvId(id)
   const ivDragEnd = () => { setDragIvId(null); setDropTargetHour(null); setDropTargetDay(null); setDropTargetStatus(null) }
 
+  // После drag-переноса времени/дня — предложить уведомить кандидата (диалог
+  // reschedDialog). Только для реальных событий с кандидатом и вакансией (иначе
+  // ни канала, ни шаблона) и не отменённых. startAt/endAt считаются из тех же
+  // значений, что ушли в PATCH updateInterview, — их же перезапишет
+  // reschedule-and-notify при отправке.
+  const offerRescheduleNotify = (iv: Interview, patch: Partial<Interview>) => {
+    if (!iv.candidateId || !iv.vacancyId || iv.byStageOnly || iv.status === "Отменено") return
+    const merged = { ...iv, ...patch }
+    const [sh, sm] = merged.time.split(":").map(Number)
+    const [eh, em] = merged.endTime.split(":").map(Number)
+    if ([sh, sm, eh, em].some(n => !Number.isFinite(n))) return
+    const startAt = new Date(merged.date); startAt.setHours(sh, sm, 0, 0)
+    const endAt = new Date(merged.date); endAt.setHours(eh, em, 0, 0)
+    if (endAt <= startAt) return
+    const label = `${startAt.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })} в ${merged.time}`
+    setReschedDialog({ iv, startAt, endAt, label })
+    setReschedSendMessage(true)
+    setReschedMessageText("")
+    setReschedPreview({ loading: true, hasMessage: false })
+  }
+
   const dayDropOnHour = (hour: number) => {
     if (dragIvId === null) return
     const iv = interviews.find(x => x.id === dragIvId)
@@ -584,6 +655,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     const durationMin = iv.endTime && iv.time ? Math.max(5, timeToMinutes(iv.endTime) - timeToMinutes(iv.time)) : 60
     const newEnd = minutesToTime(Math.min(hour * 60 + durationMin, 20 * 60))
     updateInterview(dragIvId, { time: newTime, endTime: newEnd }, `Встреча перенесена на ${newTime}`)
+    offerRescheduleNotify(iv, { time: newTime, endTime: newEnd })
     ivDragEnd()
   }
 
@@ -595,6 +667,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
       newDate.setHours(iv.date.getHours(), iv.date.getMinutes())
     }
     updateInterview(dragIvId, { date: newDate }, `Встреча перенесена на ${targetDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`)
+    if (iv) offerRescheduleNotify(iv, { date: newDate })
     ivDragEnd()
   }
 
@@ -614,6 +687,7 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
     const newEnd = minutesToTime(Math.min(hour * 60 + durationMin, 20 * 60))
     const dayLabel = day.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
     updateInterview(dragIvId, { date: newDate, time: newTime, endTime: newEnd }, `Встреча перенесена на ${dayLabel} в ${newTime}`)
+    offerRescheduleNotify(iv, { date: newDate, time: newTime, endTime: newEnd })
     ivDragEnd()
   }
 
@@ -1473,6 +1547,57 @@ export function InterviewsView({ vacancyId, embedded, calendarOnly }: { vacancyI
               >
                 {cancelSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 {cancelTab === "reschedule" ? "Отменить интервью" : "Отказать"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ Диалог «Уведомить кандидата о переносе?» (11.07) ═══════════════
+          Открывается после drag-переноса времени/дня. Перенос уже применён
+          (updateInterview); здесь — только сообщение кандидату: предпросмотр/
+          редактирование шаблона interview_rescheduled, реальная отправка
+          через reschedule-and-notify, тост по факту messageSent. */}
+      <Dialog open={!!reschedDialog} onOpenChange={o => { if (!o) setReschedDialog(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Интервью перенесено на {reschedDialog?.label}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Можно отправить кандидату
+              {(() => { const n = (reschedDialog?.iv.candidate ?? "").replace(/^Интервью\s*—\s*/, "").trim(); return n ? ` (${n})` : "" })()}
+              {" "}сообщение с новым временем и ссылкой для перезаписи.
+            </p>
+            <StageMessageControl
+              stage="interview_rescheduled"
+              vacancyId={reschedDialog?.iv.vacancyId ?? null}
+              sendMessage={reschedSendMessage}
+              onSendMessageChange={setReschedSendMessage}
+              messageText={reschedMessageText}
+              onMessageTextChange={setReschedMessageText}
+              onPreviewState={setReschedPreview}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-2">
+            {reschedSendMessage && reschedMessageText.trim() && (
+              <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={saveRescheduleTemplate} disabled={reschedSavingTemplate}>
+                {reschedSavingTemplate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Сохранить как шаблон вакансии
+              </Button>
+            )}
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" size="sm" onClick={() => setReschedDialog(null)} disabled={reschedSubmitting}>
+                Не уведомлять
+              </Button>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={submitRescheduleNotify}
+                disabled={reschedSubmitting || reschedPreview.loading || !reschedSendMessage || !reschedPreview.hasMessage || !reschedMessageText.trim()}
+              >
+                {reschedSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Отправить сообщение
               </Button>
             </div>
           </div>

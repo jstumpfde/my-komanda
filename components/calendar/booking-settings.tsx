@@ -1,7 +1,17 @@
 "use client"
 
+// Настройки записи кандидатов и интервью — живут в шестерёнке календаря
+// (/hr/calendar → Настройки → таб «Запись кандидатов»). Задача #6 Юрия 11.07:
+// календарь записи и длительность интервью настраиваются в ОДНОМ месте.
+// Перенесено из components/hiring-settings/interview-section.tsx (страница
+// «Настройки HR → Интервью» теперь заглушка со ссылкой сюда).
+//
+// Хранение НЕ менялось: companies.hiring_defaults_json.schedule
+// (GET/PATCH /api/modules/hr/company/hiring-defaults).
+
 import { useState, useEffect } from "react"
-import { Clock, Bell, Plug, Save, Loader2, Send } from "lucide-react"
+import Link from "next/link"
+import { Clock, Bell, Plug, Save, Loader2, Video, ExternalLink, Plus, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -10,19 +20,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { Plus, X } from "lucide-react"
 import type { CompanyHiringDefaults, InterviewTimeRange } from "@/lib/db/schema"
 import {
   INTERVIEW_METHOD_LABELS,
+  METHOD_DEFAULT_DURATIONS,
   getInterviewMethodConfigs,
   type MethodConfig,
   type InterviewMethodKey,
 } from "@/lib/hiring/interview-methods"
 import { resolveDaySchedule, type DayId, type DaySchedule } from "@/lib/schedule/day-windows"
+import { ManagerReminderBotCard } from "@/components/telegram/manager-reminder-bot-card"
 
 // ─── Constants ──────────────────────────────────────────────────────────────
+
+const HIRING_DEFAULTS_URL = "/api/modules/hr/company/hiring-defaults"
 
 const INTERVIEW_DAYS: { id: DayId; label: string; full: string }[] = [
   { id: "mon", label: "Пн", full: "Понедельник" },
@@ -43,14 +57,6 @@ const TIME_OPTIONS: string[] = (() => {
   return out
 })()
 
-const DURATION_OPTIONS = [
-  { value: 15,  label: "15 мин" },
-  { value: 30,  label: "30 мин" },
-  { value: 45,  label: "45 мин" },
-  { value: 60,  label: "60 мин" },
-  { value: 90,  label: "90 мин" },
-]
-
 const BUFFER_OPTIONS = [
   { value: 0,  label: "Без буфера" },
   { value: 5,  label: "5 мин" },
@@ -70,13 +76,14 @@ function durationRangeOptions(min: number, max: number): { value: number; label:
   return out
 }
 
-const CALL_DURATION_OPTIONS   = durationRangeOptions(5, 60)   // Звонок: 5–60, дефолт 15
-const ONLINE_DURATION_OPTIONS = durationRangeOptions(5, 60)   // Онлайн: 5–60, дефолт 25
-const OFFICE_DURATION_OPTIONS = durationRangeOptions(5, 120)  // В офисе: 5–120, дефолт 45
+const CALL_DURATION_OPTIONS   = durationRangeOptions(5, 60)   // Звонок: 5–60
+const ONLINE_DURATION_OPTIONS = durationRangeOptions(5, 60)   // Онлайн: 5–60
+const OFFICE_DURATION_OPTIONS = durationRangeOptions(5, 120)  // В офисе: 5–120
 
-const CALL_DEFAULT_DURATION   = 15
-const ONLINE_DEFAULT_DURATION = 25
-const OFFICE_DEFAULT_DURATION = 45
+// Канонические дефолты видов — из lib/hiring/interview-methods (один источник).
+const CALL_DEFAULT_DURATION   = METHOD_DEFAULT_DURATIONS.phone
+const ONLINE_DEFAULT_DURATION = METHOD_DEFAULT_DURATIONS.telemost
+const OFFICE_DEFAULT_DURATION = METHOD_DEFAULT_DURATIONS.office
 
 const ONLINE_PLATFORMS: InterviewMethodKey[] = ["telemost", "zoom", "meet"]
 
@@ -91,9 +98,112 @@ const SLOT_STEP_OPTIONS = [
   { value: 60, label: "60 мин" },
 ]
 
-// ─── Компонент ──────────────────────────────────────────────────────────────
+// ─── Плашка статуса личного Zoom ────────────────────────────────────────────
+// Подключение/отключение живёт в Профиле (/settings/profile) — здесь только
+// статус со ссылкой, чтобы настраивающий запись сразу видел, готов ли Zoom.
 
-export function InterviewSection({
+function ZoomStatusPlate() {
+  const [loading, setLoading] = useState(true)
+  const [connected, setConnected] = useState(false)
+  const [email, setEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch("/api/integrations/zoom/status")
+      .then(r => (r.ok ? r.json() : null))
+      .then((j: { data?: { connected: boolean; email: string | null } } | null) => {
+        const d = j?.data
+        setConnected(!!d?.connected)
+        setEmail(d?.email ?? null)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <Video className="size-4 text-muted-foreground" />Личный Zoom
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Свой Zoom-аккаунт — чтобы создавать ссылку на встречу прямо из карточки
+          интервью, от вашего имени.
+        </p>
+        {loading ? (
+          <Skeleton className="h-9 w-full rounded-lg" />
+        ) : (
+          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+            <span className="text-sm flex items-center gap-2 min-w-0">
+              {connected ? (
+                <>
+                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">Подключено</Badge>
+                  {email && <span className="text-muted-foreground truncate">{email}</span>}
+                </>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground">Не подключён</Badge>
+              )}
+            </span>
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground shrink-0" asChild>
+              <Link href="/settings/profile">
+                {connected ? "Управлять в Профиле" : "Подключить в Профиле"}
+                <ExternalLink className="size-3.5" />
+              </Link>
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Обёртка с самозагрузкой ────────────────────────────────────────────────
+// В отличие от страницы «Настройки HR» (грузит defaults для всех секций),
+// шестерёнка календаря загружает hiring-defaults сама при открытии Sheet.
+
+export function BookingSettings() {
+  const [defaults, setDefaults] = useState<CompanyHiringDefaults | null>(null)
+  const [loadError, setLoadError] = useState(false)
+
+  useEffect(() => {
+    fetch(HIRING_DEFAULTS_URL)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { hiringDefaults?: CompanyHiringDefaults }) => {
+        setDefaults(d?.hiringDefaults ?? {})
+      })
+      .catch(() => setLoadError(true))
+  }, [])
+
+  const onPatch = async (patch: Partial<CompanyHiringDefaults>) => {
+    const res = await fetch(HIRING_DEFAULTS_URL, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) throw new Error("save_failed")
+    const data = (await res.json()) as { hiringDefaults: CompanyHiringDefaults }
+    setDefaults((prev) => (prev ? { ...prev, ...data.hiringDefaults } : data.hiringDefaults))
+  }
+
+  if (loadError) {
+    return <p className="text-sm text-muted-foreground py-6">Не удалось загрузить настройки. Обновите страницу.</p>
+  }
+  if (!defaults) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+      </div>
+    )
+  }
+  return <BookingSettingsForm defaults={defaults} onPatch={onPatch} />
+}
+
+// ─── Форма настроек записи (бывший InterviewSection) ────────────────────────
+
+function BookingSettingsForm({
   defaults,
   onPatch,
 }: {
@@ -137,60 +247,25 @@ export function InterviewSection({
 
   // ── Напоминания ──
   const [remind24h, setRemind24h] = useState<boolean>(schedule.remind24h ?? true)
-  const [remind2h, setRemind2h] = useState<boolean>(schedule.remind2h ?? true) // легаси, тумблер больше не показывается
+  const [remind2h] = useState<boolean>(schedule.remind2h ?? true) // легаси, тумблер больше не показывается
   const [remindMorning, setRemindMorning] = useState<boolean>(schedule.remindMorning ?? true)
   const [remind1h, setRemind1h] = useState<boolean>(schedule.remind1h ?? true)
   const [remind15m, setRemind15m] = useState<boolean>(schedule.remind15m ?? true)
 
   // ── Флаг platform admin (для блока интеграций) ──
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
-  // ── Напоминания об интервью в Telegram (@Ren_HR_bot) — личный chat_id ТЕКУЩЕГО
-  // залогиненного пользователя (Юрий 09.07: показать рядом с расписанием записи,
-  // а не только в личном Профиле — здесь его находят те, кто настраивает вакансию).
-  const [managerChatId, setManagerChatId] = useState<string | null>(null)
   useEffect(() => {
     fetch("/api/auth/me")
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
         const u = d?.data ?? d
         setIsPlatformAdmin(!!u?.isPlatformAdmin)
-        setManagerChatId(u?.managerReminderChatId ?? null)
       })
       .catch(() => {})
   }, [])
-  const [reminderLinkCode, setReminderLinkCode] = useState<{ code: string; botUsername: string } | null>(null)
-  const [generatingReminderCode, setGeneratingReminderCode] = useState(false)
-  const [unlinkingReminder, setUnlinkingReminder] = useState(false)
-  const handleGenerateReminderCode = async () => {
-    setGeneratingReminderCode(true)
-    try {
-      const res = await fetch("/api/telegram/manager-bot/link-code", { method: "POST" })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { toast.error(json.error ?? "Не удалось получить код"); return }
-      const data = json.data ?? json
-      setReminderLinkCode({ code: data.code, botUsername: data.botUsername })
-    } catch { toast.error("Ошибка сети") }
-    finally { setGeneratingReminderCode(false) }
-  }
-  const handleUnlinkReminderBot = async () => {
-    setUnlinkingReminder(true)
-    try {
-      const res = await fetch("/api/auth/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ managerReminderChatId: null }),
-      })
-      if (!res.ok) { toast.error("Не удалось отключить"); return }
-      setManagerChatId(null)
-      setReminderLinkCode(null)
-      toast.success("Бот напоминаний отключён")
-    } catch { toast.error("Ошибка сети") }
-    finally { setUnlinkingReminder(false) }
-  }
 
   // ── Состояния сохранения ──
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   // ── Хелперы ──
 
@@ -200,7 +275,7 @@ export function InterviewSection({
         if (c.method !== method) return c
         const enabled = !c.enabled
         // При первом включении подставляем дефолт вида, если длительность ещё не настроена
-        // пользователем (осталась на общем нормализованном дефолте 45 мин).
+        // пользователем (осталась на общем нормализованном дефолте 45 мин из легаси-данных).
         if (enabled && c.duration === 45) {
           const viewDefault = method === "phone" ? CALL_DEFAULT_DURATION : OFFICE_DEFAULT_DURATION
           return { ...c, enabled, duration: viewDefault }
@@ -241,7 +316,7 @@ export function InterviewSection({
           // включаем — активной становится ранее выбранная (или дефолтная) платформа
           if (c.method !== current.method) return { ...c, enabled: false }
           // При первом включении подставляем дефолт вида «Онлайн», если длительность
-          // ещё не настроена пользователем (осталась на общем дефолте 45 мин).
+          // ещё не настроена пользователем (осталась на легаси-дефолте 45 мин).
           const duration = c.duration === 45 ? ONLINE_DEFAULT_DURATION : c.duration
           return { ...c, enabled: true, duration }
         }
@@ -304,7 +379,6 @@ export function InterviewSection({
 
   async function handleSave() {
     setSaving(true)
-    setSaved(false)
     try {
       // legacy interviewMethods — массив включённых method-id для старых потребителей
       const enabledMethods = methodConfigs.filter(c => c.enabled).map(c => c.method)
@@ -344,9 +418,7 @@ export function InterviewSection({
           defaultInterviewMethod: defaultMethod,
         },
       })
-      setSaved(true)
-      toast.success("Настройки интервью сохранены")
-      setTimeout(() => setSaved(false), 2500)
+      toast.success("Настройки записи сохранены")
     } catch {
       toast.error("Не удалось сохранить")
     } finally {
@@ -361,7 +433,7 @@ export function InterviewSection({
   const officeEnabled = officeConfig?.enabled ?? false
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4">
 
       {/* Блок 1: Способы интервью */}
       <Card>
@@ -377,7 +449,7 @@ export function InterviewSection({
           {/* Вид 1: Звонок по телефону */}
           <div
             className={cn(
-              "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+              "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors flex-wrap",
               phoneConfig.enabled ? "border-border bg-background" : "border-border/60 bg-muted/20"
             )}
           >
@@ -461,7 +533,7 @@ export function InterviewSection({
               onlineConfig.enabled ? "border-border bg-background" : "border-border/60 bg-muted/20"
             )}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Switch
                 checked={onlineConfig.enabled}
                 onCheckedChange={toggleOnline}
@@ -539,7 +611,7 @@ export function InterviewSection({
 
             {/* Под-выбор платформы — только когда вид «Онлайн» включён */}
             {onlineConfig.enabled && (
-              <div className="flex items-center gap-4 pl-[3.25rem]">
+              <div className="flex items-center gap-4 pl-[3.25rem] flex-wrap">
                 {ONLINE_PLATFORMS.map(platform => (
                   <button
                     key={platform}
@@ -572,7 +644,7 @@ export function InterviewSection({
           {/* Вид 3: В офисе */}
           <div
             className={cn(
-              "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+              "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors flex-wrap",
               officeConfig.enabled ? "border-border bg-background" : "border-border/60 bg-muted/20"
             )}
           >
@@ -692,35 +764,8 @@ export function InterviewSection({
         </CardContent>
       </Card>
 
-      {/* Блок 2: Интеграции календарей (заглушка, только для platformAdmin) */}
-      <Card className={cn(!isPlatformAdmin && "hidden")}>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Plug className="size-4 text-muted-foreground" />Интеграции календарей
-            <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">
-              Скоро
-            </Badge>
-          </CardTitle>
-          <CardDescription>
-            Двусторонняя синхронизация слотов и автосоздание встреч.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {[
-            { id: "gcal",    label: "Google Calendar" },
-            { id: "outlook", label: "Outlook Calendar" },
-            { id: "yandex",  label: "Яндекс Календарь" },
-            { id: "zoom",    label: "Zoom OAuth" },
-          ].map(integration => (
-            <div key={integration.id} className="flex items-center justify-between rounded-lg border p-3">
-              <span className="text-sm">{integration.label}</span>
-              <Button size="sm" variant="outline" disabled className="h-7 text-xs">
-                Подключить
-              </Button>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      {/* Блок 2: Личный Zoom — статус, подключение в Профиле */}
+      <ZoomStatusPlate />
 
       {/* Блок 3: Часы для записи кандидатов */}
       <Card>
@@ -866,46 +911,10 @@ export function InterviewSection({
         </CardContent>
       </Card>
 
-      {/* Напоминания об интервью в Telegram — личная привязка текущего пользователя
-          к платформенному боту @Ren_HR_bot (та же каденция, что у кандидата: за
-          сутки/утром/за час/за 15 минут). Юрий 09.07: рядом с расписанием записи. */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Send className="size-4 text-muted-foreground" />Напоминания об интервью в Telegram
-          </CardTitle>
-          <CardDescription>Если вы назначаете интервью кандидатам — бот пришлёт напоминание вам лично, так же как получает кандидат</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {managerChatId ? (
-            <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
-              <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">Подключено</Badge>
-              <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={handleUnlinkReminderBot} disabled={unlinkingReminder}>
-                {unlinkingReminder ? <Loader2 className="size-3.5 animate-spin" /> : "Отключить"}
-              </Button>
-            </div>
-          ) : reminderLinkCode ? (
-            <div className="rounded-lg border bg-muted/30 px-3 py-3 space-y-2">
-              <p className="text-sm">
-                Откройте{" "}
-                <a href={`https://t.me/${reminderLinkCode.botUsername}`} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
-                  @{reminderLinkCode.botUsername}
-                </a>{" "}
-                и отправьте боту команду:
-              </p>
-              <code className="block text-sm font-mono bg-background rounded px-2 py-1.5 border">/start {reminderLinkCode.code}</code>
-              <p className="text-xs text-muted-foreground">Код действует 15 минут и одноразовый. Привязка личная — на аккаунт, под которым вы сейчас вошли.</p>
-            </div>
-          ) : (
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleGenerateReminderCode} disabled={generatingReminderCode}>
-              {generatingReminderCode ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-              Подключить Telegram
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      {/* Блок 4: Telegram-бот менеджера — общий компонент (тот же в Профиле) */}
+      <ManagerReminderBotCard />
 
-      {/* Блок 4: Напоминания — 4 настраиваемых порога (Юрий 09.07) */}
+      {/* Блок 5: Напоминания — 4 настраиваемых порога (Юрий 09.07) */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -943,8 +952,37 @@ export function InterviewSection({
         </CardContent>
       </Card>
 
+      {/* Блок 6: Интеграции календарей (заглушка, только для platformAdmin) */}
+      <Card className={cn(!isPlatformAdmin && "hidden")}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Plug className="size-4 text-muted-foreground" />Интеграции календарей
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">
+              Скоро
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Двусторонняя синхронизация слотов и автосоздание встреч.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {[
+            { id: "gcal",    label: "Google Calendar" },
+            { id: "outlook", label: "Outlook Calendar" },
+            { id: "yandex",  label: "Яндекс Календарь" },
+          ].map(integration => (
+            <div key={integration.id} className="flex items-center justify-between rounded-lg border p-3">
+              <span className="text-sm">{integration.label}</span>
+              <Button size="sm" variant="outline" disabled className="h-7 text-xs">
+                Подключить
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
       {/* Кнопка сохранения */}
-      <div className="flex justify-end">
+      <div className="flex justify-end sticky bottom-0 bg-background/95 backdrop-blur py-3 border-t -mx-1 px-1">
         <Button
           className="gap-2"
           onClick={handleSave}

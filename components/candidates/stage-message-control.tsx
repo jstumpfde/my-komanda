@@ -192,7 +192,11 @@ export function StageMessageControl({
           <p className="text-[11px] text-muted-foreground">
             Переменные: <code className="bg-muted px-1 rounded">{"{{name}}"}</code>,{" "}
             <code className="bg-muted px-1 rounded">{"{{vacancy}}"}</code>
-            {preview?.branch === "schedule_invite" && (
+            {stage === "interview_rescheduled" && (
+              <>, <code className="bg-muted px-1 rounded">{"{{new_date}}"}</code>,{" "}
+              <code className="bg-muted px-1 rounded">{"{{new_time}}"}</code></>
+            )}
+            {(preview?.branch === "schedule_invite" || stage === "interview_cancelled" || stage === "interview_rescheduled") && (
               <>, <code className="bg-muted px-1 rounded">{"{{schedule_link}}"}</code></>
             )}
             {preview?.hhAction === "invitation" && (
