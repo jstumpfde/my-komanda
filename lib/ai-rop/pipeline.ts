@@ -101,6 +101,26 @@ export async function processCall(callId: string, companyId: string, opts?: { sc
   // 0. Если транскрипт уже есть — переанализ, не платим STT заново.
   const [existingTranscript] = await db.select().from(ropTranscripts).where(eq(ropTranscripts.callId, callId)).limit(1)
 
+  // ── Ранний гард коротких звонков (ДО скачивания записи и STT) ──
+  // duration_sec < 7 гарантированно попадёт под гард «нет полезной речи» ниже
+  // (после транскрипции) — но до сих пор мы сначала платили за STT (Whisper/Yandex),
+  // а потом выбрасывали результат. Переносим отсев ДО скачивания записи и
+  // транскрипции: экономит STT-минуты без изменения итогового статуса/поведения
+  // UI (звонок всё равно уйдёт в no_recording). Не трогаем text-only (chat/email) —
+  // там нет STT и durationSec нерелевантен, и не трогаем случай с уже существующим
+  // (кэшированным) транскриптом — его нет смысла выбрасывать повторно STT-затратами,
+  // там просто следующий гард «нет полезной речи» отработает по тексту.
+  if (!isTextOnly && !existingTranscript && (row.durationSec ?? 0) < 7) {
+    await upsertTranscript(callId, { text: "", segmentsJson: [], dialogueJson: [], language: null, model: "skipped-short" })
+    await setCallStatus(callId, "no_recording")
+    await db
+      .update(ropCalls)
+      .set({ error: `Нет речи для анализа: звонок ${row.durationSec ?? 0}с (короче 7с — STT пропущен до траты)` })
+      .where(eq(ropCalls.id, callId))
+    console.log(`[ai-rop/pipeline] #${callId}: пропуск STT — короткий звонок (${row.durationSec ?? 0}с < 7с)`)
+    return
+  }
+
   // 1. Скачать запись — пропускаем для text-only и если транскрипт уже есть.
   let recordingPath = row.recordingPath
   if (!isTextOnly && !recordingPath && !existingTranscript) {
