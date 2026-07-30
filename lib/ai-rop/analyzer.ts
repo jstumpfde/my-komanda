@@ -207,7 +207,7 @@ function userPrompt(args: {
   interactionType?: "call" | "chat" | "email" | "meeting"
   triageKind?: "manager_written" | "inbound_no_manager" | "dialogue"
   glossary?: string | null
-}) {
+}): { cacheable: string; dynamic: string } {
   const { transcript, checklist, context } = args
   const itype = args.interactionType ?? "call"
 
@@ -263,11 +263,15 @@ ${context.recentComments.map((c) => `  • ${c.createdAt}: ${c.text.slice(0, 300
 `
     : "Контекст сделки/лида не получен."
 
-  return `${glossaryBlock}${roleBlock}Тип взаимодействия: ${labels.noun}. ${labels.diarization}.
+  // Разбиение на cacheable/dynamic для prompt caching (см. ai-provider.ts):
+  // глоссарий и чек-лист одинаковы для СЕРИИ звонков одного скрипта/компании —
+  // выносим их в отдельный кэшируемый блок. roleBlock/контекст сделки/транскрипт
+  // уникальны на каждый звонок — остаются в динамической части без кэша.
+  const cacheable = `${glossaryBlock}${checklistBlock}`
+
+  const dynamic = `${roleBlock}Тип взаимодействия: ${labels.noun}. ${labels.diarization}.
 
 ${contextBlock}
-
-${checklistBlock}
 
 ${labels.transcriptLabel}:
 """
@@ -277,6 +281,8 @@ ${transcript}
 Вызови инструмент save_analysis со всеми обязательными полями.
 Для dialogue — псевдо-диаризация: размети каждую реплику по косвенным признакам
 (приветствие, вопросы о продукте, цене, сроках — это менеджер; вопросы о цене, гарантии — это клиент).`
+
+  return { cacheable, dynamic }
 }
 
 export async function analyzeCall(args: {
@@ -293,11 +299,13 @@ export async function analyzeCall(args: {
   /** Глоссарий названий компании (rop_settings.glossary). */
   glossary?: string | null
 }): Promise<{ analysis: CallAnalysis; raw: string; model: string }> {
+  const { cacheable, dynamic } = userPrompt({ ...args, interactionType: args.interactionType })
   const out = await callWithTool<CallAnalysis>({
     toolName: "save_analysis",
     schema: SAVE_ANALYSIS_SCHEMA,
     system: SYSTEM_PROMPT,
-    user: await maskPIIFull(userPrompt({ ...args, interactionType: args.interactionType })),
+    user: await maskPIIFull(dynamic),
+    cacheableContext: await maskPIIFull(cacheable),
     modelTier: "premium",
     // 12000 = с запасом на dialogue для длинных звонков (10+ мин).
     maxTokens: 12000,

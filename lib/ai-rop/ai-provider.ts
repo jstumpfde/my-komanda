@@ -31,7 +31,16 @@ export interface ToolCallArgs {
   /** JSON Schema параметров tool. */
   schema: Record<string, unknown>
   system: string
+  /** User prompt (динамическая часть — меняется на каждый вызов, транскрипт/контекст сделки). */
   user: string
+  /**
+   * Статичный контекст, идущий ПЕРЕД user (чек-лист скрипта + глоссарий) — одинаковый
+   * для серии звонков одного скрипта/компании. Anthropic: кэшируется отдельным
+   * content-блоком (cache_control: ephemeral), экономит input-токены на повторных
+   * вызовах с тем же чек-листом. OpenAI: просто склеивается с user (там нет
+   * cache_control в этом раритетном fetch-клиенте — кэш прогревается по префиксу сам).
+   */
+  cacheableContext?: string
   modelTier?: "premium" | "fast"
   maxTokens?: number
   /** Переопределить провайдера на этот вызов (иначе — getActiveProvider()). */
@@ -200,26 +209,55 @@ async function callAnthropic<T>(args: ToolCallArgs, model: string): Promise<Tool
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY не задан")
   const client = anthropicClient()
 
+  // Prompt caching: tool-schema и system-промпт одинаковы на КАЖДОМ вызове
+  // (не зависят от звонка) — помечаем их cache_control:ephemeral, чтобы Anthropic
+  // закэшировал префикс запроса и второй/третий/... вызов подряд платил меньше
+  // за input вместо полной цены (порог кэша — 1024-4096 токенов префикса в
+  // зависимости от модели; если текста меньше, кэш просто не создастся).
   const tool: Anthropic.Tool = {
     name: args.toolName,
     description: "Сохранить структурированный результат",
     input_schema: args.schema as Anthropic.Tool["input_schema"],
+    cache_control: { type: "ephemeral" },
   }
+
+  // cacheableContext (чек-лист + глоссарий) — отдельный кэшируемый блок ПЕРЕД
+  // динамическим user-текстом (транскрипт/контекст сделки меняются на каждый звонок).
+  const userContent: Anthropic.MessageParam["content"] = args.cacheableContext
+    ? [
+        { type: "text", text: args.cacheableContext, cache_control: { type: "ephemeral" } },
+        { type: "text", text: args.user },
+      ]
+    : args.user
 
   const msg = await client.messages.create({
     model,
     max_tokens: args.maxTokens ?? 4000,
     thinking: { type: "disabled" }, // Sonnet 5: без поля включился бы adaptive thinking
-    system: args.system,
+    system: [{ type: "text", text: args.system, cache_control: { type: "ephemeral" } }],
     tools: [tool],
     tool_choice: { type: "tool", name: args.toolName },
-    messages: [{ role: "user", content: args.user }],
+    messages: [{ role: "user", content: userContent }],
   })
 
   const toolUse = msg.content.find(
     (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === args.toolName
   )
   if (!toolUse) throw new Error(`Anthropic не вызвал tool ${args.toolName}`)
+
+  // Диагностика prompt-caching — видно в логах, создался ли кэш и сколько
+  // input-токенов пришло из кэша (cache_read) вместо полной цены.
+  const usage = msg.usage as unknown as {
+    input_tokens?: number
+    output_tokens?: number
+    cache_creation_input_tokens?: number
+    cache_read_input_tokens?: number
+  }
+  if (usage?.cache_creation_input_tokens || usage?.cache_read_input_tokens) {
+    console.log(
+      `[ai-rop/ai-provider:anthropic] prompt-cache: created=${usage.cache_creation_input_tokens ?? 0} read=${usage.cache_read_input_tokens ?? 0} input=${usage.input_tokens ?? 0}`
+    )
+  }
 
   return {
     result: toolUse.input as T,
@@ -238,6 +276,11 @@ async function callOpenAi<T>(args: ToolCallArgs, model: string): Promise<ToolCal
   if (!apiKey) throw new Error("OPENAI_API_KEY не задан")
   const baseURL = (process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "")
 
+  // OpenAI не даёт явный cache_control API в этом сыром fetch-клиенте — просто
+  // склеиваем cacheableContext (чек-лист+глоссарий) с user-текстом, поведение
+  // как раньше (без regressions); кэш прогревается автоматически по префиксу.
+  const openAiUser = args.cacheableContext ? `${args.cacheableContext}\n\n${args.user}` : args.user
+
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(new Error("OpenAI timeout 90s")), 90_000)
   let res: Response
@@ -250,7 +293,7 @@ async function callOpenAi<T>(args: ToolCallArgs, model: string): Promise<ToolCal
         max_tokens: args.maxTokens ?? 4000,
         messages: [
           { role: "system", content: args.system },
-          { role: "user", content: args.user },
+          { role: "user", content: openAiUser },
         ],
         tools: [
           {
