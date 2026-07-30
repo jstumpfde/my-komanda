@@ -16,11 +16,7 @@ import { Label } from "@/components/ui/label"
 
 type Mode = "done" | "failed" | "all"
 
-const CONFIRM_MSG: Record<Mode, string> = {
-  done: "Сбросить ВСЕ успешно обработанные звонки на переанализ? Они будут заново прогнаны через AI с актуальными скриптами. STT повторно не запускается (используются сохранённые транскрипты).",
-  failed: "Сбросить все failed звонки на повторную обработку? Это в основном те, что упали из-за лимита API или временной ошибки.",
-  all: "Сбросить done + failed звонки на переанализ?",
-}
+const MODE_LABEL: Record<Mode, string> = { done: "done", failed: "failed", all: "done + failed" }
 
 export function ReanalyzeCard() {
   const [busy, setBusy] = useState(false)
@@ -32,9 +28,26 @@ export function ReanalyzeCard() {
   const router = useRouter()
 
   async function run(mode: Mode) {
-    if (!confirm(CONFIRM_MSG[mode])) return
     setBusy(true); setResult(null)
     try {
+      // Гард от случайного массового пережога бюджета: сначала dry-run — узнаём
+      // РЕАЛЬНОЕ количество звонков и оценку стоимости, показываем в confirm,
+      // и только после явного согласия выполняем настоящий сброс+переанализ.
+      const dryR = await fetch("/api/modules/ai-rop/calls/reanalyze-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, dryRun: true }),
+      })
+      const dry = await dryR.json()
+      if (!dry.ok) { alert("Ошибка: " + dry.error); return }
+      if (dry.count === 0) { alert("Нечего переанализировать — подходящих звонков не найдено."); return }
+
+      const msg =
+        `Сбросить ${dry.count} звонков (${MODE_LABEL[mode]}) на переанализ?\n\n` +
+        `Каждый будет заново прогнан через AI (STT НЕ запускается — транскрипты уже сохранены).\n` +
+        `Оценочная стоимость: ~$${dry.estUsd} (≈$0.01 × ${dry.count} звонков).`
+      if (!confirm(msg)) return
+
       const r = await fetch("/api/modules/ai-rop/calls/reanalyze-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
