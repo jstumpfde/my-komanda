@@ -34,6 +34,8 @@ import { SttCard, type SttInitial } from "./_components/stt-card"
 import { DashboardSettingsCard, type DashboardSettingsInitial } from "./_components/dashboard-settings-card"
 import { ObjectionTaxonomyCard } from "./_components/objection-taxonomy-card"
 import { ReanalyzeCard } from "./_components/reanalyze-card"
+import { AttentionSettingsCard, type AttentionSettingsInitial } from "./_components/attention-settings-card"
+import { DEFAULT_ATTENTION_SETTINGS } from "@/lib/ai-rop/attention"
 
 export const dynamic = "force-dynamic"
 
@@ -76,6 +78,10 @@ export default async function AiRopSettingsPage() {
     contactThresholdSeconds: typeof settingsJson.contactThresholdSeconds === "number" ? settingsJson.contactThresholdSeconds : DEFAULT_CONTACT_THRESHOLD_SECONDS,
     recordingsRetentionDays: typeof settingsJson.recordingsRetentionDays === "number" ? settingsJson.recordingsRetentionDays : DEFAULT_RECORDINGS_RETENTION_DAYS,
     weeklyDoneGoal: typeof settingsJson.weeklyDoneGoal === "number" ? settingsJson.weeklyDoneGoal : DEFAULT_WEEKLY_DONE_GOAL,
+  }
+  const attentionInitial: AttentionSettingsInitial = {
+    silenceDays: typeof settingsJson.attention?.silenceDays === "number" ? settingsJson.attention.silenceDays : DEFAULT_ATTENTION_SETTINGS.silenceDays,
+    weakCallScoreThreshold: typeof settingsJson.attention?.weakCallScoreThreshold === "number" ? settingsJson.attention.weakCallScoreThreshold : DEFAULT_ATTENTION_SETTINGS.weakCallScoreThreshold,
   }
   const platformUsers: PlatformUserOption[] = platformUsersRows.map((u) => ({ id: u.id, name: u.name, email: u.email }))
 
@@ -145,6 +151,8 @@ export default async function AiRopSettingsPage() {
               <DashboardSettingsCard initial={dashboardSettingsInitial} />
 
               <DiscrepancyCard initial={discrepancyInitial} />
+              <AttentionSettingsCard initial={attentionInitial} />
+
               <BudgetCard initial={budget} usage={usage} />
 
               <TokensSection status={billingStatus} ledger={ledger} />

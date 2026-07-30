@@ -35,6 +35,9 @@ const SEVERITIES: Severity[] = ["low", "medium", "high"]
 // на чтении, если в settings.jsonb значения ещё нет.
 const DEFAULT_RECORDINGS_RETENTION_DAYS = 30
 const DEFAULT_WEEKLY_DONE_GOAL = 50
+// Держать в синхроне с DEFAULT_ATTENTION_SETTINGS (lib/ai-rop/attention.ts).
+const DEFAULT_ATTENTION_SILENCE_DAYS = 7
+const DEFAULT_ATTENTION_WEAK_SCORE = 3
 
 /** Секрет → «…хвост» (последние 6 символов), null если пусто. */
 function maskSecret(value: string | null | undefined): string | null {
@@ -103,6 +106,10 @@ export async function GET() {
           typeof json.recordingsRetentionDays === "number" ? json.recordingsRetentionDays : DEFAULT_RECORDINGS_RETENTION_DAYS,
         weeklyDoneGoal: typeof json.weeklyDoneGoal === "number" ? json.weeklyDoneGoal : DEFAULT_WEEKLY_DONE_GOAL,
         objectionTaxonomy: Array.isArray(json.objectionTaxonomy) && json.objectionTaxonomy.length > 0 ? json.objectionTaxonomy : null,
+        attention: {
+          silenceDays: typeof json.attention?.silenceDays === "number" ? json.attention.silenceDays : DEFAULT_ATTENTION_SILENCE_DAYS,
+          weakCallScoreThreshold: typeof json.attention?.weakCallScoreThreshold === "number" ? json.attention.weakCallScoreThreshold : DEFAULT_ATTENTION_WEAK_SCORE,
+        },
       },
     })
   } catch (err) {
@@ -139,6 +146,10 @@ export async function POST(req: Request) {
       recordingsRetentionDays?: number | null
       weeklyDoneGoal?: number | null
       objectionTaxonomy?: Array<{ name: string; def: string }> | null
+      attention?: {
+        silenceDays?: number
+        weakCallScoreThreshold?: number
+      }
     }
 
     const patch: Record<string, unknown> = {}
@@ -187,7 +198,8 @@ export async function POST(req: Request) {
       body.stt !== undefined ||
       body.recordingsRetentionDays !== undefined ||
       body.weeklyDoneGoal !== undefined ||
-      body.objectionTaxonomy !== undefined
+      body.objectionTaxonomy !== undefined ||
+      body.attention !== undefined
     if (touchesJsonSettings) {
       const row = await getRopSettings(user.companyId)
       const json = getSettingsJson(row)
@@ -239,6 +251,22 @@ export async function POST(req: Request) {
             .filter((c) => c.name)
           nextJson.objectionTaxonomy = cleaned.length > 0 ? cleaned : undefined
         }
+      }
+
+      if (body.attention !== undefined) {
+        const current = json.attention ?? {}
+        const nextAttention: NonNullable<RopSettingsJson["attention"]> = { ...current }
+        if (body.attention.silenceDays !== undefined) {
+          const n = Number(body.attention.silenceDays)
+          if (!Number.isFinite(n) || n <= 0) return apiError("attention.silenceDays должен быть положительным числом", 400)
+          nextAttention.silenceDays = Math.trunc(n)
+        }
+        if (body.attention.weakCallScoreThreshold !== undefined) {
+          const n = Number(body.attention.weakCallScoreThreshold)
+          if (!Number.isFinite(n) || n < 0) return apiError("attention.weakCallScoreThreshold должен быть числом ≥ 0", 400)
+          nextAttention.weakCallScoreThreshold = n
+        }
+        nextJson.attention = nextAttention
       }
 
       await updateRopSettings(user.companyId, { settings: nextJson })

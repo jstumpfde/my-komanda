@@ -328,7 +328,7 @@ export default async function AiRopDashboardPage(props: {
                 )}
               </div>
 
-              <div className="rounded-xl border bg-card p-5">
+              <div id="slabye-mesta" className="rounded-xl border bg-card p-5 scroll-mt-20">
                 <h2 className="mb-3.5 flex items-center gap-2 text-sm font-semibold"><AlertOctagon className="size-4 text-violet-600" /> Слабые места в скрипте</h2>
                 {data.checklistStats.length === 0 ? <div className="py-6 text-center text-sm text-muted-foreground">Чек-лист ещё не оценивался</div> : (
                   <div className="flex flex-col gap-2.5">

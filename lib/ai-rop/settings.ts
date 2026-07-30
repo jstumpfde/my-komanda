@@ -43,6 +43,11 @@ export interface RopSettingsJson {
   weeklyDoneGoal?: number
   /** Per-tenant таксономия категорий возражений (см. objection-clusters.ts::getTaxonomy). Пусто/нет = дефолт платформы. */
   objectionTaxonomy?: Array<{ name: string; def: string }>
+  /** Пороги экрана «Точки внимания» (см. attention.ts). Дефолты: 7 дней тишины, оценка ≤3/10 — слабый звонок. */
+  attention?: {
+    silenceDays?: number
+    weakCallScoreThreshold?: number
+  }
   /** Статус AI/STT-провайдера — см. provider-health.ts (RopProviderHealthStatus). Хранится
    *  здесь ТОЛЬКО если решили держать per-company; см. provider-health.ts docblock — по факту
    *  выбран платформенный уровень (platformSettings), поле оставлено про запас/на будущее. */

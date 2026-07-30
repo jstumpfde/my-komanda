@@ -272,6 +272,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
     basePath: '/ai-rop',
     menuItems: [
       { label: 'Дашборд',          href: '/ai-rop',               icon: 'LayoutDashboard' },
+      { label: 'Точки внимания',   href: '/ai-rop/attention',     icon: 'Target' },
       { label: 'Звонки',           href: '/ai-rop/calls',         icon: 'Phone' },
       { label: 'Кабинет РОПа',     href: '/ai-rop/rop',           icon: 'UserCog' },
       { label: 'Динамика',         href: '/ai-rop/dynamics',      icon: 'TrendingUp' },
