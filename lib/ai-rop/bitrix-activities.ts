@@ -17,7 +17,10 @@
  * БЫЛО: сохранение (saveInteraction) и метка last_fetched_at читались/писались
  * напрямую в БД (getDbAsync). СТАЛО: saveInteraction — колбэк-параметр
  * (SaveInteractionFn из types.ts); since-метку хранит и передаёт вызывающий
- * пайплайн (фаза 2b, lib/ai-rop/importer.ts) — TODO фаза 2b.
+ * пайплайн (lib/ai-rop/auto-importer.ts, .../bitrix-activities/route.ts) —
+ * курсор лежит в rop_settings.settings.activitiesLastFetchedAt, вызывающий
+ * код должен прогонять его через resolveActivitiesSince() ниже (перекрытие
+ * окна + защита от битого/будущего курсора) перед вызовом fetchEmailAndChats().
  */
 import type { BitrixClient } from "./bitrix";
 import type { NormalizedInteraction, SaveInteractionFn } from "./types";
@@ -169,6 +172,46 @@ function normalizeActivity(raw: BitrixActivityRaw, tenantId: number): Normalized
   };
 }
 
+/** Перекрытие окна инкрементального забора назад, минут (см. resolveActivitiesSince). */
+const ACTIVITIES_OVERLAP_MIN = 15;
+/** Фолбэк, если курсор отсутствует/битый/в будущем — на сколько дней назад откатиться. */
+const ACTIVITIES_FALLBACK_LOOKBACK_DAYS = 7;
+
+/**
+ * Вычисляет `since` для fetchEmailAndChats() из сохранённого курсора
+ * (rop_settings.settings.activitiesLastFetchedAt), с защитой от трёх случаев:
+ *  - курсора ещё нет (первый запуск) — возвращает null (fetchEmailAndChats
+ *    тянет без фильтра CREATED, ограничено `limit` за прогон);
+ *  - курсор битый (не парсится как дата) — лог + откат на
+ *    ACTIVITIES_FALLBACK_LOOKBACK_DAYS дней назад;
+ *  - курсор в будущем (рассинхрон часов/ручная правка) — тот же откат;
+ *  - иначе — курсор минус ACTIVITIES_OVERLAP_MIN минут, чтобы не терять
+ *    activities, которые Bitrix зафиксировал с небольшой задержкой ровно на
+ *    границе предыдущего окна (аналог OVERLAP_MIN в auto-importer.ts).
+ */
+export function resolveActivitiesSince(lastFetchedAt: string | null | undefined): string | null {
+  if (!lastFetchedAt) return null;
+
+  const cursor = new Date(lastFetchedAt);
+  const fallback = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - ACTIVITIES_FALLBACK_LOOKBACK_DAYS);
+    return d.toISOString();
+  };
+
+  if (Number.isNaN(cursor.getTime())) {
+    console.warn(`[ai-rop/bitrix-activities] битый курсор activitiesLastFetchedAt="${lastFetchedAt}" — откат на ${ACTIVITIES_FALLBACK_LOOKBACK_DAYS} дней`);
+    return fallback();
+  }
+  if (cursor.getTime() > Date.now()) {
+    console.warn(`[ai-rop/bitrix-activities] курсор activitiesLastFetchedAt="${lastFetchedAt}" в будущем — откат на ${ACTIVITIES_FALLBACK_LOOKBACK_DAYS} дней`);
+    return fallback();
+  }
+
+  cursor.setMinutes(cursor.getMinutes() - ACTIVITIES_OVERLAP_MIN);
+  return cursor.toISOString();
+}
+
 export interface FetchOptions {
   tenantId: number;
   /** ISO timestamp — последний known activity. Если null/undefined — fetch без фильтра (вся история). */
@@ -272,10 +315,12 @@ export async function fetchEmailAndChats(
     processed = 0; // сброс лимита между типами
   }
 
-  // TODO фаза 2b: сохранить метку last_fetched_at (rop_settings) для
-  // инкрементального fetch — БЫЛО settings.bitrix_activities_last_fetched
-  // напрямую в БД внутри этой функции, теперь ответственность вызывающего
-  // (lib/ai-rop/importer.ts / auto-importer.ts).
+  // Метку last_fetched_at (rop_settings.settings.activitiesLastFetchedAt)
+  // сохраняет вызывающий код ПОСЛЕ успешного вызова (lib/ai-rop/auto-importer.ts,
+  // app/api/modules/ai-rop/bitrix-activities/route.ts) — эта функция сама
+  // ничего не пишет в rop_settings, только читает `since`, который вызывающий
+  // код должен получить через resolveActivitiesSince() (см. выше) для защиты
+  // от потери activities на границе окна / битого / будущего курсора.
 
   return result;
 }

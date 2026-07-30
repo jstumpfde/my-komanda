@@ -8,7 +8,7 @@ import { apiError } from "@/lib/api-helpers"
 import { requireRopManage } from "@/lib/ai-rop/access"
 import { getRopSettings, getSettingsJson, patchSettingsJson, toBitrixConfig } from "@/lib/ai-rop/settings"
 import { createBitrixClient } from "@/lib/ai-rop/bitrix"
-import { fetchEmailAndChats } from "@/lib/ai-rop/bitrix-activities"
+import { fetchEmailAndChats, resolveActivitiesSince } from "@/lib/ai-rop/bitrix-activities"
 import { toLegacySaveInteractionFn } from "@/lib/ai-rop/interaction-source"
 
 export const maxDuration = 300
@@ -36,7 +36,11 @@ export async function POST(req: Request) {
     if (!bitrixConfig) return apiError("Bitrix не подключён", 400)
     const client = createBitrixClient(bitrixConfig)
 
-    const since = body.since !== undefined ? body.since : getSettingsJson(settingsRow).activitiesLastFetchedAt ?? null
+    // Явный since от пользователя (ручной запуск с конкретной даты) уходит как есть —
+    // overlap/reset-защита нужна только для автоматически сохранённого курсора.
+    const since = body.since !== undefined
+      ? body.since
+      : resolveActivitiesSince(getSettingsJson(settingsRow).activitiesLastFetchedAt ?? null)
 
     const result = await fetchEmailAndChats(
       client,

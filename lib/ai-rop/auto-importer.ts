@@ -8,7 +8,7 @@
  */
 import { getRopSettings, getSettingsJson, patchSettingsJson } from "./settings"
 import { importCallsFromBitrix, type ImportError, type ImportResult } from "./importer"
-import { fetchEmailAndChats, type FetchResult } from "./bitrix-activities"
+import { fetchEmailAndChats, resolveActivitiesSince, type FetchResult } from "./bitrix-activities"
 import { toLegacySaveInteractionFn } from "./interaction-source"
 import type { BitrixClient } from "./bitrix"
 
@@ -119,9 +119,10 @@ export async function runAutoImport(
 
   if (dueForActivities) {
     try {
+      const since = resolveActivitiesSince(lastActivitiesAt)
       activities = await fetchEmailAndChats(
         client,
-        { tenantId: 1, since: lastActivitiesAt, limit: 200 }, // tenantId — плейсхолдер числового контракта, см. interaction-source.ts docblock
+        { tenantId: 1, since, limit: 200 }, // tenantId — плейсхолдер числового контракта, см. interaction-source.ts docblock
         toLegacySaveInteractionFn(companyId)
       )
       await patchSettingsJson(companyId, { activitiesLastFetchedAt: new Date().toISOString() })
