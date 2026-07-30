@@ -1,4 +1,4 @@
--- migration 0276: AI-РОП (перенос call-agent)
+-- migration 0277: AI-РОП (перенос call-agent)
 -- Схема БД модуля AI-РОП (docs/architecture/AI-ROP-MODULE-PLAN-2026-07.md):
 -- перенос продукта call-agent (БД `callagent` на радаре) внутрь my-komanda.
 -- Идемпотентная (CREATE ... IF NOT EXISTS). Отличия от оригинала — см.

@@ -4821,7 +4821,7 @@ export const bigLifeCovers = pgTable("big_life_covers", {
 export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
 export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
 
-// ─── AI-РОП (перенос call-agent, 0276) ──────────────────────────────────────
+// ─── AI-РОП (перенос call-agent, 0277) ──────────────────────────────────────
 // Модуль ai_rop (docs/architecture/AI-ROP-MODULE-PLAN-2026-07.md): перенос
 // продукта call-agent (Call-Pilot, БД `callagent` на радаре) внутрь
 // my-komanda как модуль. Оригинал на радаре НЕ трогаем — он продолжает

@@ -49,7 +49,7 @@
    | settings (глобальный PK=key!) | rop_settings | PK companyId, jsonb + явные колонки; известный баг per-tenant чинится переносом |
    | events (outbox) | — | не используется, не переносим |
    | onboarding_requests, contact_requests | — | лендинговое, не переносим (лендинг — отдельная тема) |
-   Миграция: `drizzle/0276_ai_rop.sql` (0275 занят веткой согласий).
+   Миграция: `drizzle/0277_ai_rop.sql` (0275 занят веткой согласий).
 5. **Per-company Bitrix.** В call-agent BITRIX_WEBHOOK_URL — глобальный env (один
    клиент). На Company24 — колонки rop_settings: `bitrixWebhookUrl`,
    `bitrixInboundToken`, dryRun-флаги (crm/messages, ДЕФОЛТ dry=true!), glossary,
@@ -121,7 +121,7 @@
 ручная загрузка взаимодействий, PDF (после разрешения на пакеты).
 
 ## Фазы и зоны (агенты не пересекаются по файлам)
-1. Схема БД: lib/db/schema.ts + drizzle/0276_ai_rop.sql. [zone: schema]
+1. Схема БД: lib/db/schema.ts + drizzle/0277_ai_rop.sql. [zone: schema]
 2a. Чистые либы (без БД): lib/ai-rop/{bitrix,bitrix-write,bitrix-im,
     bitrix-activities,transcribe,transcribe-yandex,pii-mask,ner-mask,
     script-templates,knowledge-articles,types}. Конфиг параметром. [zone: libs-pure]
