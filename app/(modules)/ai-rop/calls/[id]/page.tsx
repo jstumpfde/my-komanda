@@ -19,7 +19,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { requireRopViewer } from "../../_components/rop-guard"
-import { SentimentBadge, LeadOutcomeBadge } from "../../_components/badges"
+import { SentimentBadge, LeadOutcomeBadge, CallStatusBadge } from "../../_components/badges"
 import { ChecklistBlock, type ChecklistScoreItem } from "../../_components/checklist-block"
 import { formatDateTime, formatDuration } from "../../_components/format"
 import { ReprocessButton, ReassignScriptButton, DeepAnalyzeButton, EnrichCrmButton, SendToCrmButton } from "./CallActions"
@@ -149,11 +149,18 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
               </div>
             </div>
 
-            {call.error && (
+            {call.error && (call.status === "skipped_inbound" || call.status === "no_recording" ? (
+              <div className="mb-4 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                <b className="text-foreground">
+                  {call.status === "skipped_inbound" ? "Пропущено: входящий спам/без менеджера" : "Без записи"}:
+                </b>{" "}
+                {call.error}
+              </div>
+            ) : (
               <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
                 <b className="text-destructive">Ошибка обработки:</b> {call.error}
               </div>
-            )}
+            ))}
 
             <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="rounded-xl border bg-card p-5">
@@ -170,7 +177,7 @@ export default async function CallDetailPage(props: { params: Promise<{ id: stri
                   : "—"
                 } />
                 <Row label="Длительность" value={formatDuration(call.durationSec)} />
-                <Row label="Статус" value={call.status} />
+                <Row label="Статус" value={<CallStatusBadge value={call.status} />} />
               </div>
 
               <div className="rounded-xl border bg-card p-5">
