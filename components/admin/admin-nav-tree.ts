@@ -11,6 +11,7 @@ import {
   LayoutDashboard, Building2, Package, Library, ShieldAlert, Shield, Handshake,
   Inbox, Bot, BookOpen, Activity, Wrench, Palette, Sparkles, UserPlus, Ticket,
   GitCommitHorizontal, Briefcase, MessageSquare, Repeat, ScrollText, Star, Globe,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react"
 
@@ -40,6 +41,7 @@ export const ADMIN_NAV_TREE: AdminNavCategory[] = [
   { title: "Юлия",             icon: Bot,             items: [{ label: "Юлия",             href: "/admin/platform/yulia",       icon: Bot }] },
   { title: "AI-мониторинг",    icon: Bot,             items: [{ label: "AI-мониторинг",    href: "/admin/platform/companies",   icon: Bot }] },
   { title: "AI вакансии",      icon: BookOpen,        items: [{ label: "AI вакансии",      href: "/admin/platform/vacancies",   icon: BookOpen }] },
+  { title: "AI-РОП",           icon: CreditCard,      items: [{ label: "AI-РОП — биллинг", href: "/admin/platform/ai-rop",      icon: CreditCard }] },
   { title: "Роли и доступ",    icon: Shield,          items: [{ label: "Роли и доступ",    href: "/admin/roles",                icon: Shield }] },
   { title: "Присутствие",      icon: Activity,        items: [{ label: "Присутствие",      href: "/admin/platform/presence",    icon: Activity }] },
   { title: "Брендинг и SEO",   icon: Palette,         items: [{ label: "Брендинг и SEO",   href: "/admin/platform/branding",    icon: Palette }] },

@@ -243,4 +243,31 @@
    (оно нужно только для контентных списков — статьи БЗ, описания). */
 [data-slot="sidebar-wrapper"] ul { list-style: none; padding-left: 0; }
 
+/* Печать дашборда AI-РОП (см. app/api/modules/ai-rop/reports/dashboard-pdf) —
+   headless chromium рендерит page.pdf() с эмуляцией media=print по умолчанию,
+   поэтому эти правила действуют и на серверный PDF-экспорт, и на Ctrl+P.
+   Платформенного печатного стиля ещё нет — скоуп намеренно узкий, только
+   .ai-rop-print-root (класс на SidebarProvider страницы /ai-rop), чтобы не
+   зацепить другие модули. */
+@media print {
+  .ai-rop-print-root [data-slot="sidebar"],
+  .ai-rop-print-root header,
+  .ai-rop-print-root .no-print {
+    display: none !important;
+  }
+  .ai-rop-print-root [data-slot="sidebar-inset"] {
+    margin: 0 !important;
+  }
+  .ai-rop-print-root main {
+    overflow: visible !important;
+  }
+  .ai-rop-print-root table {
+    font-size: 10px;
+  }
+  .ai-rop-print-root .rounded-xl,
+  .ai-rop-print-root .rounded-lg {
+    border-radius: 4px;
+  }
+}
+
 /* Powered by Company24 Agents · 2026 */

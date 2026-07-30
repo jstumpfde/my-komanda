@@ -1,0 +1,337 @@
+/**
+ * AI-разбор звонка — порт call-agent lib/analyzer.ts, промпт/схема/правила
+ * тона перенесены 1:1. Адаптация: companyId вместо tenantId (uuid), callId
+ * uuid, вызов через lib/ai-rop/ai-provider.ts::callWithTool (action='rop_analyze'),
+ * маскирование ПДн через lib/ai-rop/pii-mask.ts::maskPIIFull ПЕРЕД отправкой в AI.
+ */
+import type { ChecklistItem, ChecklistItemScore, DialogueTurn } from "./types"
+import type { DealContext } from "./bitrix"
+import { callWithTool } from "./ai-provider"
+import { maskPIIFull } from "./pii-mask"
+
+export interface CallAnalysis {
+  client_name: string | null
+  summary: string
+  sentiment: "positive" | "neutral" | "negative"
+  client_intent: string
+  objections: string[]
+  manager_score: number // 0..10
+  manager_score_reason: string
+  checklist_compliance: number // 0..1
+  checklist_scores: ChecklistItemScore[]
+  next_action: string
+  topics: string[]
+  dialogue: DialogueTurn[]
+  coaching_tips: string[] // 1-3 доброжелательных совета менеджеру (он их видит)
+  rop_notes: string[] // прямая честная оценка для РОПа (менеджер её НЕ видит)
+  call_stage: "cold" | "qualification" | "deal_followup" | "informational" | "no_contact"
+  callback_agreed: boolean // клиент явно согласовал КОНКРЕТНОЕ время/дату перезвона
+  callback_phrase: string | null // дословная/близкая к тексту формулировка договорённости, иначе null
+}
+
+const SYSTEM_PROMPT = `Ты — эксперт по B2B-продажам и контролю качества call-центра.
+Анализируешь стенограмму одного телефонного разговора менеджера с заказчиком.
+
+ВАЖНО: сначала определи call_stage — этап звонка:
+- cold: впервые контактируешь, истории отношений нет
+- qualification: выясняешь потребности/бюджет/ЛПР, сделки ещё нет
+- deal_followup: уже есть открытая сделка/КП/договорённости — звонок чтобы двинуть к закрытию
+- informational: статус/технический вопрос, не продажный
+- no_contact: клиент не взял или сразу повесил
+
+Оценивай менеджера СТРОГО ПОД ЭТАП. Нельзя снижать оценку за «не закрыл сделку» если был cold-звонок —
+у холодного звонка цель не закрытие, а выявление потребности и договорённость о следующем шаге.
+Подобным образом: если был deal_followup — пункты типа «представился впервые» нерелевантны.
+
+Если дан чек-лист QC — оцениваешь каждый его пункт независимо (0..1) С УЧЁТОМ этапа.
+Если пункт чек-листа не применим к этапу (например «закрытие сделки» в cold-звонке) —
+ставь score=null или 1.0 и в notes пометь «нерелевантно для cold-звонка».
+
+Если дан контекст сделки/лида — используешь его как фон для оценки.
+Также делаешь псевдо-диаризацию (manager/client/unknown) по косвенным признакам.
+
+ТОН ТЕКСТОВ ДЛЯ МЕНЕДЖЕРА (next_action, coaching_tips, manager_score_reason):
+их читает сам менеджер по продажам — и обвинительный, приказной или снисходительный
+тон он справедливо отвергнет, а система потеряет доверие. Пиши как наставник-помощник,
+а не контролёр:
+- через ВОЗМОЖНОСТЬ И ВЫГОДУ менеджеру («добавишь X — вырастет конверсия / будет меньше
+  пересозвонов / легче закрыть»), а НЕ через ошибку;
+- конкретно по этому звонку, с готовой фразой, которую можно сказать дословно;
+- без слова «срочно», без приказов и без микроменеджмента («встаньте», «улыбнитесь»);
+- на недозвонах/обрывах/техсбоях НЕ выдумывай вину менеджера — честно отметь, что данных мало;
+- если есть за что похвалить — отметь это первым.
+manager_score_reason тоже держи корректным и по фактам этапа, без ярлыков «плохой сотрудник».
+
+ОТДЕЛЬНО зафиксируй callback_agreed/callback_phrase — это НЕ то же самое, что next_action.
+next_action — твоя общая рекомендация «что сделать дальше», а callback_agreed/callback_phrase —
+факт: озвучили ли стороны КОНКРЕТНУЮ дату/день/время следующего созвона. Если да — сохрани
+формулировку близко к тексту (нужна для автоматического разбора даты, не для читателя-человека).
+Если конкретики не было («созвонимся как-нибудь», «я подумаю») — callback_agreed=false, callback_phrase=null.
+
+Используй инструмент save_analysis для возврата результата.`
+
+// JSON Schema для tool_use — одинаковый для Anthropic и OpenAI через ai-provider.callWithTool
+const SAVE_ANALYSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    client_name: {
+      type: ["string", "null"] as unknown as "string", // SDK type quirk
+      description: "Имя заказчика если упомянуто в разговоре, иначе null",
+    },
+    summary: {
+      type: "string",
+      description:
+        "Телеграфно, 1-2 предложения: «<заказчик> о <теме>. <результат>». " +
+        "Только факты, без оценок. Запрещены: «в ходе», «состоялся разговор», " +
+        "«обсудили», «была затронута тема».",
+    },
+    sentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
+    client_intent: { type: "string", description: "Что хочет клиент одной фразой" },
+    objections: { type: "array", items: { type: "string" }, description: "Возражения заказчика" },
+    manager_score: { type: "number", minimum: 0, maximum: 10, description: "Оценка работы менеджера от 0 до 10" },
+    manager_score_reason: { type: "string", description: "Короткое обоснование оценки" },
+    checklist_compliance: { type: "number", minimum: 0, maximum: 1, description: "Взвешенное среднее по чек-листу (0..1)" },
+    checklist_scores: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          score: { type: "number", minimum: 0, maximum: 1 },
+          notes: { type: "string" },
+          block: { type: "string" },
+        },
+        required: ["id", "title", "score", "notes"],
+      },
+    },
+    next_action: {
+      type: "string",
+      description:
+        "ОДИН конкретный следующий шаг: глагол + что + к какому сроку. Одно-два предложения, " +
+        "НЕ абзац и НЕ список из пяти пунктов. Формулируй как договорённость, а не приказ — без слова «срочно». " +
+        "Пример: «Согласовать встречу с директором на конкретный день и подтвердить письмом до конца недели». " +
+        "Если звонок — недозвон/обрыв: короткий нейтральный шаг («перезвонить, представиться, уточнить вопрос»), без разбора вины.",
+    },
+    topics: { type: "array", items: { type: "string" }, description: "Темы разговора" },
+    dialogue: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          speaker: { type: "string", enum: ["manager", "client", "unknown"] },
+          text: { type: "string" },
+        },
+        required: ["speaker", "text"],
+      },
+    },
+    coaching_tips: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "1–2 совета менеджеру (НЕ три ради галочки; если важного сказать нечего — оставь один или пустой массив []). " +
+        "Эти советы читает сам менеджер. Тон — «играющий тренер»: опытный коллега, который сам звонит и делится приёмом, " +
+        "уважительный и помогающий, НИКОГДА не обвиняющий. Правила:\n" +
+        "1) Формула «рычаг + выгода»: не «ты не сделал X», а «добавишь X → получишь Y», где Y — выгода менеджеру " +
+        "(выше конверсия, меньше пересозвонов, легче закрытие). Отталкивайся от возможности, а не от ошибки.\n" +
+        "2) Конкретно по этому звонку и с готовой фразой-скриптом, которую можно сказать дословно: «Можно так: „…“». " +
+        "Никакой воды из учебника («работайте лучше», «программируйте разговор», «будьте активнее»).\n" +
+        "3) Если было что-то хорошее — начни с короткой искренней похвалы за это (это снимает защиту и располагает).\n" +
+        "4) Предлагай, не приказывай: «стоит», «можно», «в следующий раз». Запрещены «срочно», приказной тон, " +
+        "микроменеджмент («встаньте», «улыбнитесь», «отложите дела»).\n" +
+        "5) Если данных мало или вина не менеджера (недозвон, обрыв, техника) — не выдумывай претензии: дай максимум " +
+        "один мягкий совет и честно признай, что по этому звонку сказать почти нечего.\n" +
+        "6) Каждый совет — 1–2 фразы, коротко.",
+    },
+    rop_notes: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "1–3 наблюдения для РОПа (руководителя отдела продаж). Менеджер их НЕ видит. " +
+        "Стиль — профессиональный аналитический отчёт: конкретно, по фактам, но БЕЗ явного негатива и ярлыков. Правила:\n" +
+        "1) Каждый пункт = наблюдение + рекомендация: «Возражение по цене осталось без отработки — рекомендуем сделать акцент " +
+        "на аргументации ценности при разборе таких звонков», «Стоит обратить внимание на фиксацию договорённостей: клиент " +
+        "не услышал конкретной даты следующего шага». Формулируй как аналитик, оценивающий процесс, а не человека.\n" +
+        "2) ЗАПРЕЩЕНЫ формулировки-поручения вида «укажите менеджеру», «скажите ему», «проведите беседу» — только " +
+        "«рекомендуем…», «стоит обратить внимание…», «есть потенциал в…». Решение о действиях РОП принимает сам.\n" +
+        "3) Фокус на том, что важно руководителю: влияние на сделку/конверсию, повторяющиеся паттерны, " +
+        "сильные стороны менеджера (что работает и что можно тиражировать на отдел).\n" +
+        "4) Если звонок штатный — коротко подтверди («работа по скрипту, отклонений нет») или оставь пустой массив [].\n" +
+        "5) Не дублируй дословно coaching_tips — там мягкая версия для менеджера, здесь аналитика для управленца. " +
+        "На недозвонах/техсбоях вину менеджера не приписывай.",
+    },
+    call_stage: {
+      type: "string",
+      enum: ["cold", "qualification", "deal_followup", "informational", "no_contact"],
+      description:
+        "Этап звонка по контексту:\n" +
+        "- cold: заказчика впервые слышит, нет истории отношений, менеджер устанавливает первичный контакт\n" +
+        "- qualification: менеджер выясняет потребности, бюджет, ЛПР; сделки ещё нет\n" +
+        "- deal_followup: уже есть открытая сделка/КП/конкретные договорённости — менеджер двигает её к закрытию\n" +
+        "- informational: уточнение статуса, технический вопрос, не продажный\n" +
+        "- no_contact: клиент не взял или сразу повесил, реального диалога нет\n" +
+        "Чек-лист и оценка применяются СТРОГО под этот этап — нельзя ругать менеджера за «не закрыл сделку» если был cold-звонок.",
+    },
+    callback_agreed: {
+      type: "boolean",
+      description:
+        "true ТОЛЬКО если в разговоре прозвучала КОНКРЕТНАЯ, явно проговорённая договорённость о " +
+        "следующем созвоне — точная дата («20 июля»), день недели («во вторник»), «завтра»/«послезавтра», " +
+        "и/или конкретное время («в 15:00», «утром», «после обеда», «вечером»). " +
+        "false если стороны разошлись расплывчато («созвонимся как-нибудь», «я подумаю», «перезвоню на " +
+        "днях», «в течение недели» без уточнения дня) — здесь конкретики нет, это НЕ договорённость.",
+    },
+    callback_phrase: {
+      type: ["string", "null"] as unknown as "string", // SDK type quirk
+      description:
+        "Если callback_agreed=true — дословная или близкая к дословной формулировка договорённости " +
+        "ИЗ РАЗГОВОРА, с датой/днём/временем в том виде как это прозвучало: «во вторник после 15:00», " +
+        "«20 июля утром», «завтра в 10 часов», «15.07». Не перефразируй в общий совет (это для next_action), " +
+        "здесь нужна именно точная формулировка для машинного разбора даты. Если callback_agreed=false — " +
+        "всегда null.",
+    },
+  },
+  required: [
+    "summary", "sentiment", "client_intent", "objections",
+    "manager_score", "manager_score_reason",
+    "checklist_compliance", "checklist_scores",
+    "next_action", "topics", "dialogue", "coaching_tips", "call_stage",
+    "callback_agreed",
+  ],
+}
+
+function userPrompt(args: {
+  transcript: string
+  checklist: ChecklistItem[] | null
+  context: DealContext | null
+  interactionType?: "call" | "chat" | "email" | "meeting"
+  triageKind?: "manager_written" | "inbound_no_manager" | "dialogue"
+  glossary?: string | null
+}): { cacheable: string; dynamic: string } {
+  const { transcript, checklist, context } = args
+  const itype = args.interactionType ?? "call"
+
+  // Позиция автора текста по триажу (только text-only; direction в CRM ненадёжен).
+  // inbound_no_manager с высокой уверенностью сюда не доходит (гейт в pipeline),
+  // но на случай низкой уверенности предупреждаем модель и о нём.
+  const roleBlock =
+    args.triageKind === "manager_written"
+      ? `ВАЖНО про роли: этот текст целиком написан НАШИМ менеджером (исходящее письмо/сообщение клиенту, ответа клиента здесь нет). Оценивай КАЧЕСТВО ТЕКСТА МЕНЕДЖЕРА: структуру, персонализацию, выгоды, CTA. Не выдумывай реакцию клиента.\n\n`
+      : args.triageKind === "inbound_no_manager"
+        ? `ВАЖНО про роли: этот текст, вероятно, ВХОДЯЩЕЕ сообщение от внешнего отправителя (клиент или сторонняя рассылка) — наш менеджер в нём не писал. НЕ оценивай его как работу менеджера, manager_score оставь низко-нейтральным, coaching_tips — пустой массив, в summary честно опиши, что это входящее без участия менеджера.\n\n`
+        : ""
+
+  const glossaryText = (args.glossary ?? "").trim()
+  const glossaryBlock = glossaryText
+    ? `ВАЖНО — правильные написания названий (глоссарий компании):
+${glossaryText}
+Используй ИМЕННО эти написания в summary, client_intent, next_action и других текстовых полях.
+Whisper/STT мог распознать названия на слух неправильно — исправляй на правильные из глоссария.
+
+КРИТИЧНО про стороны разговора: названия из глоссария выше — это НАША компания
+(продавец), от лица которой работает менеджер. Менеджер обычно представляет её
+в начале разговора («это компания …, меня зовут …»). НЕ путай её с клиентом!
+Поле client_name — это название компании КЛИЕНТА (покупателя), вторая сторона
+разговора. НИКОГДА не подставляй в client_name название из глоссария (нашей
+компании). Если название клиента не прозвучало — оставь client_name пустым.
+
+`
+    : ""
+
+  const labels = {
+    call: { noun: "звонок", transcriptLabel: "Стенограмма звонка", diarization: "сделай псевдо-диаризацию (manager/client/unknown)" },
+    chat: { noun: "переписка", transcriptLabel: "Текст переписки", diarization: "если в тексте видно кто пишет (manager/client) — размечай; иначе ставь unknown" },
+    email: { noun: "email", transcriptLabel: "Email-переписка", diarization: "размечай по From/To если видно: получатель=client, отправитель из нашей компании=manager" },
+    meeting: { noun: "встреча", transcriptLabel: "Стенограмма видео-встречи", diarization: "псевдо-диаризация по контексту (manager/client/unknown)" },
+  }[itype]
+
+  const checklistBlock =
+    checklist && checklist.length > 0
+      ? `Чек-лист QC (оцени каждый пункт от 0 до 1; 1 = выполнено полностью, 0 = не выполнено вообще, weight — важность от 1 до 5):
+${JSON.stringify(checklist, null, 2)}`
+      : `Чек-листа нет — оцени стандартные пункты: приветствие, выявление потребности, презентация выгод, отработка возражений, договорённость о следующем шаге. Сформируй checklist_scores из этих 5 пунктов (id: greeting, needs, pitch, objections, next_step).`
+
+  const contextBlock = context
+    ? `Контекст ${context.kind === "deal" ? "сделки" : "лида"}:
+- Название: ${context.title ?? "—"}
+- Стадия: ${context.stage ?? "—"}
+- Сумма: ${context.opportunity ?? "—"}
+- Создана: ${context.createdAt ?? "—"}
+- Последние ${context.recentComments.length} комментариев таймлайна:
+${context.recentComments.map((c) => `  • ${c.createdAt}: ${c.text.slice(0, 300)}`).join("\n") || "  —"}
+- Прошлые активности (звонки/встречи): ${context.priorActivities.length}
+`
+    : "Контекст сделки/лида не получен."
+
+  // Разбиение на cacheable/dynamic для prompt caching (см. ai-provider.ts):
+  // глоссарий и чек-лист одинаковы для СЕРИИ звонков одного скрипта/компании —
+  // выносим их в отдельный кэшируемый блок. roleBlock/контекст сделки/транскрипт
+  // уникальны на каждый звонок — остаются в динамической части без кэша.
+  const cacheable = `${glossaryBlock}${checklistBlock}`
+
+  const dynamic = `${roleBlock}Тип взаимодействия: ${labels.noun}. ${labels.diarization}.
+
+${contextBlock}
+
+${labels.transcriptLabel}:
+"""
+${transcript}
+"""
+
+Вызови инструмент save_analysis со всеми обязательными полями.
+Для dialogue — псевдо-диаризация: размети каждую реплику по косвенным признакам
+(приветствие, вопросы о продукте, цене, сроках — это менеджер; вопросы о цене, гарантии — это клиент).`
+
+  return { cacheable, dynamic }
+}
+
+export async function analyzeCall(args: {
+  transcript: string
+  checklist: ChecklistItem[] | null
+  context: DealContext | null
+  companyId?: string // §4.4 для бюджет-гарда + логирования
+  callId?: string // rop_calls.id, для usage_events.call_id
+  interactionType?: "call" | "chat" | "email" | "meeting"
+  /** Вердикт триажа text-only (text-triage.ts) — от чьего лица написан текст. */
+  triageKind?: "manager_written" | "inbound_no_manager" | "dialogue"
+  /** Per-company переопределение модели (rop_settings.analysisModel). */
+  modelOverride?: string | null
+  /** Глоссарий названий компании (rop_settings.glossary). */
+  glossary?: string | null
+}): Promise<{ analysis: CallAnalysis; raw: string; model: string }> {
+  const { cacheable, dynamic } = userPrompt({ ...args, interactionType: args.interactionType })
+  const out = await callWithTool<CallAnalysis>({
+    toolName: "save_analysis",
+    schema: SAVE_ANALYSIS_SCHEMA,
+    system: SYSTEM_PROMPT,
+    user: await maskPIIFull(dynamic),
+    cacheableContext: await maskPIIFull(cacheable),
+    modelTier: "premium",
+    // 12000 = с запасом на dialogue для длинных звонков (10+ мин).
+    maxTokens: 12000,
+    companyId: args.companyId,
+    callId: args.callId,
+    action: "rop_analyze",
+    modelOverride: args.modelOverride,
+  })
+
+  const parsed = out.result
+
+  // Нормализация — на случай если модель не дала какое-то опциональное поле
+  parsed.client_name = parsed.client_name ?? null
+  parsed.dialogue ||= []
+  parsed.coaching_tips ||= []
+  parsed.rop_notes ||= []
+  parsed.call_stage = parsed.call_stage || "cold"
+  parsed.checklist_scores ||= []
+  parsed.objections ||= []
+  parsed.topics ||= []
+  parsed.callback_agreed = parsed.callback_agreed ?? false
+  parsed.callback_phrase = parsed.callback_agreed ? (parsed.callback_phrase ?? null) : null
+
+  return {
+    analysis: parsed,
+    raw: out.rawResponseJson,
+    model: `${out.provider}:${out.model}`,
+  }
+}

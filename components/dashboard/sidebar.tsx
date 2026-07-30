@@ -101,6 +101,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   qc:        'ОКК',
   email_marketing: 'ЕМЛ',
   price_monitor:   'Цены',
+  ai_rop:          'РОП',
 }
 
 // Module accent colors for visual distinction
@@ -119,6 +120,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   qc:        'text-indigo-500',
   email_marketing: 'text-rose-500',
   price_monitor:   'text-lime-500',
+  ai_rop:          'text-pink-500',
 }
 
 const MODULE_BG_COLORS: Record<ModuleId, string> = {
@@ -136,6 +138,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   qc:        'bg-indigo-500/10',
   email_marketing: 'bg-rose-500/10',
   price_monitor:   'bg-lime-500/10',
+  ai_rop:          'bg-pink-500/10',
 }
 
 const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
@@ -153,6 +156,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   qc:        '#6366f1',
   email_marketing: '#f43f5e',
   price_monitor:   '#84cc16',
+  ai_rop:          '#ec4899',
 }
 
 // Group colors for style C (colored icons + badge)
@@ -370,6 +374,11 @@ export function DashboardSidebar() {
   const priceMonitorEnabled =
     !isOwner && !isAdminOrManager && !fullModulesCompany &&
     Array.isArray(companyModulesRaw) && companyModulesRaw.includes('price_monitor')
+  // AI-РОП — тот же аддитивный паттерн, что и price_monitor (default-OFF,
+  // включается только через companies.enabled_modules), но виден и владельцу
+  // компании: включённый модуль должны видеть все её пользователи.
+  const aiRopEnabled =
+    Array.isArray(companyModulesRaw) && companyModulesRaw.includes('ai_rop')
 
   // Пересчёт модулей при изменении роли (когда useSession догружает данные)
   useEffect(() => {
@@ -387,6 +396,8 @@ export function DashboardSidebar() {
     // Мониторинг цен — скрыт по умолчанию, аддитивный тумблер per-company
     // (см. priceMonitorEnabled выше); не входит в ALL_MODULE_KEYS/базовые списки.
     if (priceMonitorEnabled) add('price_monitor' as ModuleId)
+    // AI-РОП — аддитивный, как price_monitor (см. aiRopEnabled выше).
+    if (aiRopEnabled) add('ai_rop' as ModuleId)
     // Админ-оверрайд видимых модулей (companies.enabled_modules) — ПОСЛЕДНИЙ в
     // цепочке. Непустой список → показываем РОВНО заданные модули (hr гарантирован
     // нормализацией). Это ОВЕРРАЙД роли и стейджинг/пилот-расширений: например,
@@ -395,7 +406,7 @@ export function DashboardSidebar() {
     // ALL_MODULE_KEYS), поэтому явно сохраняем его, даже если он не попал в
     // companyEnabledModules (нормализованный список).
     const finalModules = companyEnabledModules
-      ? newModules.filter((m) => companyEnabledModules.includes(m) || (m === 'price_monitor' && priceMonitorEnabled))
+      ? newModules.filter((m) => companyEnabledModules.includes(m) || (m === 'price_monitor' && priceMonitorEnabled) || (m === 'ai_rop' && aiRopEnabled))
       : newModules
     // Защита: если фильтр случайно опустошил список — оставляем hr (никогда пусто).
     const safeModules = finalModules.length > 0 ? finalModules : (['hr'] as ModuleId[])
@@ -403,7 +414,7 @@ export function DashboardSidebar() {
       if (prev.length === safeModules.length && prev.every((m, i) => m === safeModules[i])) return prev
       return safeModules
     })
-  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany, companyEnabledKey, priceMonitorEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vis.modules, stagingFullAccess, pilotCompanyFull, fullModulesCompany, companyEnabledKey, priceMonitorEnabled, aiRopEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sidebar visibility customization ──
   const { visibility: sidebarVis, setVisibility: setSidebarVis, isModuleVisible, isItemVisible, resetToDefault: resetSidebarVis } = useSidebarVisibility()
