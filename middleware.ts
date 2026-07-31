@@ -58,6 +58,9 @@ const PUBLIC_PREFIXES = [
                         // session-email из PLATFORM_ADMIN_EMAILS (presence/deadlines).
                         // Без этого middleware редиректил curl на /login (302),
                         // ломая задокументированный curl-доступ (seed/emergency/migrations).
+  "/api/salesradar/webhook", // внешние коннекторы (Telegram Bot API/WhatsApp-агрегаторы)
+                        // шлют сюда POST без сессии/куки — секрет проверяется
+                        // самим роутом (X-Telegram-Bot-Api-Secret-Token / ?secret=).
   "/api/access-requests",
   "/api/visit-log",
   "/api/modules",
