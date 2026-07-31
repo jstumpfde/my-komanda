@@ -21,6 +21,7 @@ import { TableCard, DataTable, DataHead, DataHeadCell, DataRow, DataCell } from 
 import { formatDateTime } from "@/app/(modules)/ai-rop/_components/format"
 import { ModeBadge, CrmStatusBadge, actionLabel, entityLabel } from "./_ui"
 import { ModeFilter } from "./_client"
+import { TrialBanner } from "../_components/trial-banner"
 
 export const dynamic = "force-dynamic"
 
@@ -51,6 +52,7 @@ export default async function CrmLogPage({
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-4 sm:py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             <div className="flex flex-wrap items-center justify-between gap-2 pt-3 pb-2">
               <div className="flex items-center gap-2">
                 <History className="h-5 w-5 text-violet-600" />

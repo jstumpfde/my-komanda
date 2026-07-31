@@ -25,6 +25,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { Card, CardContent } from "@/components/ui/card"
 import { ReportsClient } from "./_client"
+import { TrialBanner } from "../_components/trial-banner"
 
 export const dynamic = "force-dynamic"
 
@@ -62,6 +63,7 @@ export default async function ReportsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-4 sm:py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             <div className="flex items-center gap-2 pt-3 pb-2">
               <Send className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Отчёты в Bitrix</h1>

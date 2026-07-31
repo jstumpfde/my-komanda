@@ -24,6 +24,7 @@ import { DashboardFilters } from "./_components/dashboard-filters"
 import { ShareDashboardButton } from "./_components/share-dashboard-button"
 import { PrintDashboardButton } from "./_components/print-dashboard-button"
 import { TokenBalanceBanner } from "./_components/token-balance-banner"
+import { TrialBanner } from "./_components/trial-banner"
 import { ProviderHealthBanner } from "./_components/provider-health-banner"
 import { CoachInsights } from "./_components/coach-insights"
 import { KpiRow, KpiTile } from "./_components/kpi-tile"
@@ -107,6 +108,7 @@ export default async function AiRopDashboardPage(props: {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             {providerHealth && <ProviderHealthBanner health={providerHealth} canManage={viewer.canManage} />}
             {billingStatus && <TokenBalanceBanner status={billingStatus} />}
 

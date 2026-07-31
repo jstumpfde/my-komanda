@@ -10,6 +10,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { DataTable, DataHead, DataHeadCell, DataRow, DataCell } from "@/components/ui/data-table"
 import { requireRopTeamViewer } from "../_components/rop-guard"
+import { TrialBanner } from "../_components/trial-banner"
 
 export const dynamic = "force-dynamic"
 
@@ -97,6 +98,7 @@ export default async function QueuePage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             <div className="flex items-center gap-2 pt-3 pb-2">
               <Activity className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Очередь обработки</h1>

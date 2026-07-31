@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ropCanViewTeam } from "@/lib/ai-rop/access"
 import { getTeamDynamics } from "@/lib/ai-rop/team-dynamics"
 import { ManagerCard, formatPeriodStart } from "./_ui"
+import { TrialBanner } from "../_components/trial-banner"
 
 export const dynamic = "force-dynamic"
 
@@ -34,6 +35,7 @@ export default async function DynamicsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-4 sm:py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             <div className="flex items-center gap-2 pt-3 pb-2">
               <TrendingUp className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Динамика по менеджерам</h1>

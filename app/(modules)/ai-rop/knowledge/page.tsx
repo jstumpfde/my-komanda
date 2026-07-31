@@ -6,6 +6,7 @@ import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { BookOpen, ArrowRight } from "lucide-react"
 import { KB_ARTICLES } from "@/lib/ai-rop/knowledge-articles"
+import { TrialBanner } from "../_components/trial-banner"
 
 /**
  * /ai-rop/knowledge — Центр знаний AI-РОП: список материалов (how-to гайды).
@@ -22,6 +23,7 @@ export default async function AiRopKnowledgePage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-4 sm:py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             <div className="flex items-center gap-2 pt-3 pb-2">
               <BookOpen className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Центр знаний</h1>

@@ -287,6 +287,7 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Загрузить запись', href: '/ai-rop/upload',        icon: 'Upload' },
       { label: 'Обучение',         href: '/ai-rop/knowledge',     icon: 'BookOpen' },
       { label: 'Каналы',           href: '/ai-rop/connectors',    icon: 'Radio' },
+      { label: 'Мастер подключения', href: '/ai-rop/onboarding',  icon: 'Rocket' },
       { label: 'Настройки',        href: '/ai-rop/settings',      icon: 'Settings' },
     ],
   },
