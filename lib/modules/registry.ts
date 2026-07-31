@@ -278,6 +278,8 @@ export const MODULE_REGISTRY: Record<ModuleId, ModuleConfig> = {
       { label: 'Динамика',         href: '/ai-rop/dynamics',      icon: 'TrendingUp' },
       { label: 'Возражения',       href: '/ai-rop/objections',    icon: 'MessageSquare' },
       { label: 'Клиенты',          href: '/ai-rop/clients',       icon: 'Users' },
+      { label: 'Сделки',           href: '/ai-rop/deals',         icon: 'Workflow' },
+      { label: 'Контрагенты',      href: '/ai-rop/counterparties', icon: 'Building2' },
       { label: 'Лидерборд',        href: '/ai-rop/leaderboard',   icon: 'Trophy' },
       { label: 'Отчёты',           href: '/ai-rop/reports',       icon: 'FileText' },
       { label: 'Расхождения',      href: '/ai-rop/discrepancies', icon: 'Scale' },

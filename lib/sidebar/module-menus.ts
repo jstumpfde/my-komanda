@@ -69,6 +69,7 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
     { label: 'Обзор', hrefs: ['/ai-rop', '/ai-rop/attention', '/ai-rop/calls', '/ai-rop/rop'] },
     { label: 'Аналитика', hrefs: [
       '/ai-rop/dynamics', '/ai-rop/objections', '/ai-rop/clients',
+      '/ai-rop/deals', '/ai-rop/counterparties',
       '/ai-rop/leaderboard', '/ai-rop/reports', '/ai-rop/discrepancies',
     ] },
     { label: 'Управление', hrefs: [
