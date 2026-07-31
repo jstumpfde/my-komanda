@@ -4939,6 +4939,13 @@ export const ropCalls = pgTable("rop_calls", {
   dealStageId:          text("deal_stage_id"),
   dealOpportunity:      numeric("deal_opportunity"),
   crmOutcomeSyncedAt:   timestamp("crm_outcome_synced_at", { withTimezone: true }),
+  // SalesRadar (Фаза 1, миграция 0278): денормализация лучшей привязки для
+  // быстрых выборок дашборда. Nullable — старые строки остаются NULL, ничего
+  // не ломается. Таблицы объявлены ниже по файлу — closure в .references()
+  // резолвится лениво, порядок объявления констант не важен.
+  connectorId:          uuid("connector_id").references(() => ropChannelConnectors.id, { onDelete: "set null" }),
+  counterpartyId:       uuid("counterparty_id").references(() => ropCounterparties.id, { onDelete: "set null" }),
+  dealThreadId:         uuid("deal_thread_id").references(() => ropDealThreads.id, { onDelete: "set null" }),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
@@ -4952,6 +4959,9 @@ export const ropCalls = pgTable("rop_calls", {
   index("rop_calls_tenant_manager_idx").on(t.tenantId, t.managerId),
   index("rop_calls_started_at_idx").on(t.startedAt),
   index("rop_calls_lead_status_idx").on(t.tenantId, t.leadStatusId).where(sql`${t.leadStatusId} IS NOT NULL`),
+  index("rop_calls_connector_idx").on(t.connectorId).where(sql`${t.connectorId} IS NOT NULL`),
+  index("rop_calls_counterparty_idx").on(t.counterpartyId).where(sql`${t.counterpartyId} IS NOT NULL`),
+  index("rop_calls_deal_thread_idx").on(t.dealThreadId).where(sql`${t.dealThreadId} IS NOT NULL`),
 ])
 export type RopCall    = typeof ropCalls.$inferSelect
 export type NewRopCall = typeof ropCalls.$inferInsert
@@ -5296,3 +5306,190 @@ export const ropReportShares = pgTable("rop_report_shares", {
 ])
 export type RopReportShare    = typeof ropReportShares.$inferSelect
 export type NewRopReportShare = typeof ropReportShares.$inferInsert
+
+// ============================================================
+// SalesRadar — омниканальное расширение AI-РОП (Фаза 1, миграция 0278).
+// Strangler-слой: новый код пишет в таблицы ниже, на границе конвертирует в
+// существующий контракт saveInteraction() → rop_calls остаётся «взаимодействием
+// /эпизодом» (см. новые nullable-колонки connectorId/counterpartyId/
+// dealThreadId выше). Ни один существующий файл фазы 2a не переписывается.
+// companyId (не tenantId) — как в более новых rop_report_shares/rop_report_
+// views выше по файлу; для SalesRadar это единственная используемая
+// конвенция именования тенанта.
+// ============================================================
+
+// Подключённый канал коммуникации (почта/telegram/whatsapp/...).
+export const ropChannelConnectors = pgTable("rop_channel_connectors", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  kind:            text("kind").notNull(), // imap|telegram_bot|telegram_user|whatsapp_agg|vk|avito|bitrix
+  providerKey:     text("provider_key"), // адаптер: wazzup|green_api|360dialog|...
+  title:           text("title"),
+  mode:            text("mode").notNull().default("pull"), // pull|webhook
+  credentialsEnc:  jsonb("credentials_enc"), // AES-GCM зашифрованные креды, по образцу lib/telegram-posting/crypto.ts
+  config:          jsonb("config").default({}),
+  webhookSecret:   text("webhook_secret"),
+  cursorJson:      jsonb("cursor_json"), // курсор инкрементального pull (IMAP UIDVALIDITY+UID, TG offset, ...)
+  country:         text("country").default("RU"), // RU|DE
+  isEnabled:       boolean("is_enabled").notNull().default(true),
+  status:          text("status").notNull().default("pending"), // pending|active|error|disabled
+  lastSyncAt:      timestamp("last_sync_at", { withTimezone: true }),
+  lastError:       text("last_error"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:       timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_channel_connectors_company_idx").on(t.companyId, t.isEnabled),
+  index("rop_channel_connectors_sync_idx").on(t.isEnabled, t.lastSyncAt),
+])
+export type RopChannelConnector    = typeof ropChannelConnectors.$inferSelect
+export type NewRopChannelConnector = typeof ropChannelConnectors.$inferInsert
+
+// Контрагент — шире клиента (клиент/поставщик/партнёр/внутренний/неизвестный).
+export const ropCounterparties = pgTable("rop_counterparties", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  companyId:         uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  kind:              text("kind").notNull().default("unknown"), // client|supplier|partner|internal|unknown
+  name:              text("name"),
+  displayHint:       text("display_hint"),
+  inn:               text("inn"),
+  bitrixContactId:   text("bitrix_contact_id"),
+  bitrixCompanyId:   text("bitrix_company_id"),
+  primaryPhone:      text("primary_phone"),
+  firstSeenAt:       timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastActivityAt:    timestamp("last_activity_at", { withTimezone: true }),
+  isArchived:        boolean("is_archived").notNull().default(false),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:         timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_counterparties_company_idx").on(t.companyId),
+  index("rop_counterparties_company_activity_idx").on(t.companyId, t.lastActivityAt),
+  index("rop_counterparties_phone_idx").on(t.companyId, t.primaryPhone).where(sql`${t.primaryPhone} IS NOT NULL`),
+  index("rop_counterparties_bitrix_contact_idx").on(t.companyId, t.bitrixContactId).where(sql`${t.bitrixContactId} IS NOT NULL`),
+])
+export type RopCounterparty    = typeof ropCounterparties.$inferSelect
+export type NewRopCounterparty = typeof ropCounterparties.$inferInsert
+
+// Идентификатор контрагента в конкретном канале — ключ склейки (телефон/
+// email/tg id/wa jid/bitrix contact → один и тот же counterpartyId).
+export const ropCounterpartyIdentities = pgTable("rop_counterparty_identities", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  counterpartyId:  uuid("counterparty_id").notNull().references(() => ropCounterparties.id, { onDelete: "cascade" }),
+  kind:            text("kind").notNull(), // phone|email|tg_user_id|tg_username|wa_jid|vk_id|avito_chat|bitrix_contact
+  value:           text("value").notNull(), // нормализованное значение (normalizePhone для phone)
+  confidence:      numeric("confidence").notNull().default("1.0"),
+  source:          text("source"), // backfill|connector|ai|manual
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("rop_counterparty_identities_company_kind_value_uniq").on(t.companyId, t.kind, t.value),
+  index("rop_counterparty_identities_counterparty_idx").on(t.counterpartyId),
+])
+export type RopCounterpartyIdentity    = typeof ropCounterpartyIdentities.$inferSelect
+export type NewRopCounterpartyIdentity = typeof ropCounterpartyIdentities.$inferInsert
+
+// Сделка-нить — CRM-сделка (kind='crm') либо теневая (kind='shadow',
+// создана AI-атрибуцией до появления сделки в CRM).
+export const ropDealThreads = pgTable("rop_deal_threads", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  counterpartyId:   uuid("counterparty_id").references(() => ropCounterparties.id, { onDelete: "set null" }),
+  kind:             text("kind").notNull().default("shadow"), // crm|shadow
+  bitrixDealId:     text("bitrix_deal_id"),
+  bitrixLeadId:     text("bitrix_lead_id"),
+  title:            text("title"),
+  stage:            text("stage"),
+  amount:           numeric("amount"),
+  currency:         text("currency").default("RUB"),
+  status:           text("status").notNull().default("open"), // open|won|lost|stale|merged
+  profileJson:      jsonb("profile_json").default({}), // {products[],keyPhrases[],participants[],amounts[],objects[],aliases[],lastSnippets[3]}
+  firstSeenAt:      timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastActivityAt:   timestamp("last_activity_at", { withTimezone: true }),
+  confidence:       numeric("confidence").notNull().default("1.0"),
+  createdBy:        text("created_by").notNull().default("human"), // ai|human|crm
+  mergedIntoId:     uuid("merged_into_id"),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("rop_deal_threads_company_bitrix_deal_uniq").on(t.companyId, t.bitrixDealId).where(sql`${t.bitrixDealId} IS NOT NULL`),
+  index("rop_deal_threads_company_idx").on(t.companyId),
+  index("rop_deal_threads_company_status_idx").on(t.companyId, t.status),
+  index("rop_deal_threads_counterparty_idx").on(t.counterpartyId).where(sql`${t.counterpartyId} IS NOT NULL`),
+  index("rop_deal_threads_company_activity_idx").on(t.companyId, t.lastActivityAt),
+])
+export type RopDealThread    = typeof ropDealThreads.$inferSelect
+export type NewRopDealThread = typeof ropDealThreads.$inferInsert
+
+// Сырое сообщение из коннектора — отдельно от rop_calls: мессенджеры дают
+// поток по одному сообщению, анализировать поштучно дорого и бессмысленно;
+// свёртка в эпизод (rop_calls) происходит в rollup.ts.
+export const ropMessages = pgTable("rop_messages", {
+  id:                  uuid("id").primaryKey().defaultRandom(),
+  companyId:           uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  connectorId:         uuid("connector_id").notNull().references(() => ropChannelConnectors.id, { onDelete: "cascade" }),
+  threadKey:           text("thread_key").notNull(), // id чата/треда в канале
+  externalId:          text("external_id").notNull(),
+  counterpartyId:      uuid("counterparty_id").references(() => ropCounterparties.id, { onDelete: "set null" }),
+  direction:           text("direction"), // in|out
+  authorExternalId:    text("author_external_id"),
+  authorName:          text("author_name"),
+  isOurs:              boolean("is_ours").notNull().default(false),
+  text:                text("text"),
+  attachmentsJson:     jsonb("attachments_json"),
+  sentAt:              timestamp("sent_at", { withTimezone: true }).notNull(),
+  interactionId:       uuid("interaction_id").references(() => ropCalls.id, { onDelete: "set null" }), // эпизод, в который свёрнуто
+  attributionStatus:   text("attribution_status").notNull().default("pending"), // pending|linked|skipped
+  createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("rop_messages_connector_external_uniq").on(t.connectorId, t.externalId), // идемпотентность ingest
+  index("rop_messages_company_thread_idx").on(t.companyId, t.threadKey, t.sentAt),
+  index("rop_messages_attribution_idx").on(t.attributionStatus, t.companyId),
+  index("rop_messages_counterparty_idx").on(t.counterpartyId).where(sql`${t.counterpartyId} IS NOT NULL`),
+])
+export type RopMessage    = typeof ropMessages.$inferSelect
+export type NewRopMessage = typeof ropMessages.$inferInsert
+
+// Привязка сообщение↔сделка. UNIQUE partial по messageId гарантирует одну
+// актуальную привязку; история переклассификации сохраняется целиком через
+// supersededById (аудит + откат) — старые линки не удаляются.
+export const ropMessageDealLinks = pgTable("rop_message_deal_links", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  companyId:        uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  messageId:        uuid("message_id").references(() => ropMessages.id, { onDelete: "cascade" }),
+  interactionId:    uuid("interaction_id").references(() => ropCalls.id, { onDelete: "cascade" }),
+  segmentIndex:     integer("segment_index"),
+  dealThreadId:     uuid("deal_thread_id").notNull().references(() => ropDealThreads.id, { onDelete: "cascade" }),
+  confidence:       numeric("confidence").notNull(),
+  method:           text("method").notNull(), // crm_explicit|sticky|heuristic_single_open|ai|manual
+  modelVersion:     text("model_version"),
+  evidence:         text("evidence"),
+  supersededById:   uuid("superseded_by_id"),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("rop_message_deal_links_message_active_uniq").on(t.messageId).where(sql`${t.supersededById} IS NULL AND ${t.messageId} IS NOT NULL`),
+  index("rop_message_deal_links_deal_thread_idx").on(t.dealThreadId),
+  index("rop_message_deal_links_interaction_idx").on(t.interactionId).where(sql`${t.interactionId} IS NOT NULL`),
+  index("rop_message_deal_links_company_idx").on(t.companyId),
+])
+export type RopMessageDealLink    = typeof ropMessageDealLinks.$inferSelect
+export type NewRopMessageDealLink = typeof ropMessageDealLinks.$inferInsert
+
+// Факты по сделке — «обещано / упущено / можно лучше», извлекаются тем же
+// вызовом модели, что и анализ эпизода (analyzer.ts), питают attention.ts.
+export const ropDealFacts = pgTable("rop_deal_facts", {
+  id:             uuid("id").primaryKey().defaultRandom(),
+  companyId:      uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  dealThreadId:   uuid("deal_thread_id").notNull().references(() => ropDealThreads.id, { onDelete: "cascade" }),
+  interactionId:  uuid("interaction_id").references(() => ropCalls.id, { onDelete: "set null" }),
+  kind:           text("kind").notNull(), // promise|missed|improvement|risk|agreement|requirement
+  text:           text("text").notNull(),
+  dueAt:          timestamp("due_at", { withTimezone: true }),
+  status:         text("status").notNull().default("open"), // open|done|overdue|dismissed
+  severity:       text("severity").default("medium"),
+  evidence:       text("evidence"),
+  createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("rop_deal_facts_deal_thread_idx").on(t.dealThreadId),
+  index("rop_deal_facts_company_status_idx").on(t.companyId, t.status),
+])
+export type RopDealFact    = typeof ropDealFacts.$inferSelect
+export type NewRopDealFact = typeof ropDealFacts.$inferInsert
