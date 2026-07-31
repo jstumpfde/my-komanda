@@ -36,6 +36,7 @@ import { ObjectionTaxonomyCard } from "./_components/objection-taxonomy-card"
 import { ReanalyzeCard } from "./_components/reanalyze-card"
 import { AttentionSettingsCard, type AttentionSettingsInitial } from "./_components/attention-settings-card"
 import { DEFAULT_ATTENTION_SETTINGS } from "@/lib/ai-rop/attention"
+import { TrialBanner } from "../_components/trial-banner"
 
 export const dynamic = "force-dynamic"
 
@@ -129,6 +130,7 @@ export default async function AiRopSettingsPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             <div className="mb-5 flex items-center gap-2 pt-3 pb-2">
               <Settings className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Настройки AI-РОП</h1>

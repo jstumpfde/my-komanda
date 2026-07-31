@@ -17,6 +17,7 @@ import { getRopPriorityCalls, getRopTeamNotes, type RopPriorityCall, type RopMan
 import { getTeamDynamics, type ManagerDynamics } from "@/lib/ai-rop/team-dynamics"
 import { formatDateTime } from "@/app/(modules)/ai-rop/_components/format"
 import { SentimentBadge, VerdictBadge, ManagerScoreBadge, riskStripeClass, verdictOrder } from "./_ui"
+import { TrialBanner } from "../_components/trial-banner"
 
 export const dynamic = "force-dynamic"
 
@@ -39,6 +40,7 @@ export default async function RopPage() {
         <DashboardHeader />
         <main className="flex-1 overflow-auto bg-background">
           <div className="py-4 sm:py-6" style={{ paddingLeft: 56, paddingRight: 56 }}>
+            <TrialBanner />
             <div className="flex items-center gap-2 pt-3 pb-2">
               <UserCog className="h-5 w-5 text-violet-600" />
               <h1 className="text-lg font-semibold">Кабинет РОПа</h1>
