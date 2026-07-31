@@ -1,26 +1,45 @@
 /**
- * Каскад привязки сообщений к сделкам-нитям (раздел B плана SalesRadar).
+ * Привязка сообщений к сделкам-нитям (раздел B плана SalesRadar).
  * «В одном чате обсуждают 5-10 сделок, разъединить их» — задача этого файла.
  *
- * Каскад (дорогое — в последнюю очередь), для каждого pending-сообщения по
- * порядку sentAt внутри threadKey:
- *   1. CRM-детерминизм — сообщение уже привязано к нити method='crm_explicit'
- *      (ставит backfill/ingest при явном bitrixDealId на источнике). Здесь
- *      просто пропускаем такие сообщения (attributionStatus уже не 'pending').
- *   2. Единственная открытая нить контрагента (пауза < 24ч с последней
- *      активности) → heuristic_single_open, confidence 0.85, AI не зовём.
- *   3. Sticky-наследование — >1 открытых нити, но дешёвый gate не увидел
- *      смены темы → наследуем нить предыдущего сообщения треда, confidence 0.7.
- *   4. Дешёвый gate «смена темы» — эвристики без AI (пауза >6ч, приветствие,
- *      новая сумма/объект не из профиля предыдущей нити, смена участника).
- *      При неоднозначности — fast-модель, лёгкий tool-call {topic_changed}.
- *   5. AI-attribution — tool-call с окном последних 15 сообщений треда +
- *      компактные профили открытых нитей контрагента. Модель fast по
- *      умолчанию, эскалация на premium при >5 открытых нитях или низкой
- *      уверенности эвристик/первого прохода.
- *   6. confidence>=0.7 и outcome=new_deal → создаём теневую сделку.
- *      confidence<0.5 → attributionStatus='pending' (не 'linked') — "требует
- *      уточнения" в UI, ручная привязка method='manual' переклассифицирует.
+ * АРХИТЕКТУРА: ОКОННАЯ (батчевая) разметка, а не пошаговая.
+ *
+ * Первая версия каскада решала по одному сообщению за раз (sticky-наследование
+ * + дешёвый gate «сменилась ли тема» + AI только на подозрении). На адверсарной
+ * переписке (3 сделки round-robin в одном чате) это давало 50-77% чистоты:
+ * одна ошибка gate'а на короткой малоинформативной реплике («Хорошо, а когда
+ * забрать?») наследовалась дальше по sticky и тянула за собой хвост сообщений.
+ * Модель при этом видела только «предыдущее сообщение» и не могла понять, что
+ * реплика отвечает не на него, а на сообщение тремя строками выше.
+ *
+ * Теперь: сообщения треда режутся на окна по WINDOW_SIZE, и модель размечает
+ * ВСЁ окно за один вызов, видя его целиком (контекст вперёд и назад) плюс
+ * хвост уже размеченных сообщений с их метками. Это одновременно
+ *   - точнее: видно, кто кому отвечает, и параллельные ветки разговора;
+ *   - дешевле: 1 вызов на ~12 сообщений вместо 1-2 вызовов на КАЖДОЕ
+ *     сообщение (gate + attribution).
+ *
+ * Порядок работы для каждого threadKey:
+ *   1. CRM-детерминизм — сообщения с уже проставленной привязкой
+ *      (attributionStatus != 'pending') в выборку не попадают вовсе.
+ *   2. Детерминированный матч по сущностям — сумма/артикул/адрес/номер заказа
+ *      из сообщения ТОЧНО совпадает ровно с одной открытой нитью и ни с одной
+ *      другой → привязка без AI (method='heuristic_single_open'). Работает
+ *      только на «жёстких» сущностях (цифры/коды), НЕ на общей лексике —
+ *      попытка матчить по пересечению ключевых слов проверялась и ухудшала
+ *      точность (общая деловая лексика ложно склеивает разные сделки).
+ *   3. Единственная открытая нить + окно без признаков новой темы
+ *      (приветствие/новый участник/длинная пауза) → привязка без AI.
+ *   4. Всё остальное окно уходит в один AI-вызов с полными профилями открытых
+ *      нитей + хвостом размеченного контекста. Модель возвращает метку для
+ *      КАЖДОГО сообщения окна (существующая нить / новая сделка / small talk)
+ *      с confidence и evidence.
+ *   5. Ревизия (второй проход): если внутри окна остались сообщения с низкой
+ *      уверенностью ИЛИ окно «раздробило» соседние реплики одного автора,
+ *      окно переразмечается моделью старшего уровня, старые привязки гасятся
+ *      через supersededById (история сохраняется, см. схему).
+ *   6. confidence < PENDING_MAX_CONFIDENCE → attributionStatus='pending'
+ *      («требует уточнения» в UI), ручная привязка method='manual'.
  *
  * PII маскируется (maskPIIFull) перед отправкой текста сообщений в модель —
  * тот же слой, что и в существующем pipeline.ts/analyzer.ts.
@@ -34,7 +53,6 @@ import { maskPIIFull } from "@/lib/ai-rop/pii-mask"
 import {
   createShadowThread,
   findOpenThreadsForCounterparty,
-  getThread,
   patchThreadProfile,
   threadProfile,
   touchThreadActivity,
@@ -48,130 +66,99 @@ export interface AttributionResult {
   smallTalk: number
   pending: number
   aiCalls: number
+  /** Вызовы модели ревизии (второй проход). Раньше — вызовы дешёвого topic-gate'а. */
   gateAiCalls: number
   tokensSpent: number
 }
 
-const SINGLE_THREAD_STICKY_HOURS = 24
-const TOPIC_GATE_PAUSE_HOURS = 6
-const AI_WINDOW_MESSAGES = 15
+/** Сколько pending-сообщений одного треда размечается за один AI-вызов. */
+const WINDOW_SIZE = 12
+/** Сколько уже размеченных сообщений треда показываем как контекст (с их метками). */
+const CONTEXT_SIZE = 8
+/** Больше этого числа открытых нитей у контрагента → сразу премиум-модель. */
 const ESCALATE_THREAD_COUNT = 5
 const NEW_DEAL_MIN_CONFIDENCE = 0.7
 const PENDING_MAX_CONFIDENCE = 0.5
-// Максимум подряд идущих дешёвых (sticky/heuristic_single_open, БЕЗ полной AI-проверки)
-// привязок для одного threadKey, прежде чем каскад принудительно зовёт полный
-// AI-attribution даже если gate считает, что тема не менялась. Страховка от
-// неограниченного дрейфа при ошибке gate на малоинформативной короткой реплике.
-const STICKY_STREAK_CAP = 3
+/** Ниже этого — окно уходит на ревизию премиум-моделью (второй проход). */
+const REVISION_CONFIDENCE = 0.75
+/** Не запускать ревизию, если «шатких» сообщений в окне меньше этого числа. */
+const REVISION_MIN_WEAK = 2
 
 const GREETING_RE = /здравствуй|добрый день|добрый вечер|доброе утро|приветству|здрав[еи]й|hello|hi\b/i
-const AMOUNT_RE = /(\d[\d\s]{2,}(?:[.,]\d+)?)\s?(?:₽|руб|р\.)|(?<!\d)\d{4,}(?!\d)/gi
+/** Часов паузы, после которых окно считаем потенциально новой темой (для дешёвого пути). */
+const NEW_TOPIC_PAUSE_HOURS = 6
 
-function extractAmounts(text: string): string[] {
+// ─── Извлечение «жёстких» сущностей ──────────────────────────────────────────
+// Именно они (а не общая лексика) дают детерминированный сигнал принадлежности:
+// сумма, артикул/маркировка, номер заказа/счёта, адрес объекта.
+
+const AMOUNT_RE = /(\d[\d\s]{2,}(?:[.,]\d+)?)\s?(?:₽|руб|р\.)|(?<!\d)\d{4,}(?!\d)/gi
+/** Артикулы/маркировки: С21, RAL 8017, JCB 8025, №7 — буква(ы)+цифры или код после №. */
+const CODE_RE = /(?:№\s?\d+)|(?:\b[A-ZА-Я]{1,4}[- ]?\d{2,5}\b)/g
+/** Адрес объекта: «ул. Гаражная 14», «г. Пушкино», «на Ярославском шоссе». */
+const ADDRESS_RE = /(?:\bг\.\s?|\bул\.\s?|\bпр-т\s?|\bшоссе\s)[А-ЯЁ][а-яё-]+(?:\s?\d+)?|\b[А-ЯЁ][а-яё-]+(?:ое|ском|ском)\s+шоссе\b/g
+
+function normalizeEntity(v: string): string {
+  return v.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+export function extractAmounts(text: string): string[] {
   const found = new Set<string>()
   for (const m of text.matchAll(AMOUNT_RE)) {
     const v = (m[0] ?? "").trim()
     if (v) found.add(v)
   }
-  return [...found].slice(0, 5)
+  return [...found].slice(0, 6)
 }
 
-const STOPWORDS = new Set([
-  "это", "того", "если", "когда", "нужно", "можно", "будет", "было", "есть",
-  "который", "которая", "которые", "чтобы", "также", "просто", "очень",
-  "здравствуйте", "спасибо", "пожалуйста", "добрый", "день", "вечер",
-  // Общая деловая лексика — встречается в переписке про ЛЮБУЮ сделку, не
-  // несёт различающего сигнала (пополнен по итогам синтетического теста —
-  // именно эти слова ложно "склеивали" разные сделки через overlap-эвристику).
-  "отлично", "тогда", "получится", "около", "понял", "хорошо", "давайте",
-  "сегодня", "завтра", "четверг", "четверга", "почту", "адрес", "спасибо",
-  "большое", "встречи", "получил", "оплачу", "записал", "ждём", "утром",
-  "утру", "отправлен", "внутри", "реквизиты", "оформлю", "самовывоз",
-])
-
-function extractKeyPhrases(text: string): string[] {
-  const words = (text.toLowerCase().match(/[а-яёa-z]{4,}/g) ?? []).filter((w) => !STOPWORDS.has(w))
-  return [...new Set(words)].slice(0, 8)
+/** Коды/артикулы/адреса — «объекты» профиля нити. */
+export function extractObjects(text: string): string[] {
+  const found = new Set<string>()
+  for (const re of [CODE_RE, ADDRESS_RE]) {
+    for (const m of text.matchAll(re)) {
+      const v = (m[0] ?? "").trim()
+      if (v && v.length >= 3) found.add(v)
+    }
+  }
+  return [...found].slice(0, 6)
 }
 
 /**
- * Бесплатная (без AI) проверка: содержимое сообщения явно ближе к ДРУГОЙ уже
- * открытой нити, чем к текущему sticky-кандидату? НЕ используется в основном
- * каскаде сейчас (см. docblock в attributeMessage — на синтетическом тесте
- * ухудшало точность из-за шумного profileJson.keyPhrases). Оставлена как
- * заготовка для Ф2, когда появится eval-набор для калибровки порога score.
+ * Числовое ядро суммы — «57600 руб», «57 600 ₽» и «57600» это одна сущность.
+ * Нужно, чтобы детерминированный матч не зависел от формы записи.
  */
-function findBetterMatchingThread(text: string, threads: RopDealThread[], excludeId: string | null): { thread: RopDealThread; score: number } | null {
-  const phrases = extractKeyPhrases(text)
-  const amounts = extractAmounts(text)
-  let best: { thread: RopDealThread; score: number } | null = null
+function amountCore(v: string): string {
+  return v.replace(/[^\d]/g, "")
+}
+
+/**
+ * Детерминированный матч по жёстким сущностям: сообщение принадлежит нити X,
+ * если его сумма/код/адрес встречается в профиле X и НИ В ОДНОЙ другой
+ * открытой нити. Пересечения (сущность есть у двух нитей) сигналом не
+ * считаются — только уникальные.
+ *
+ * ГОТЧА: раньше здесь пробовали матч по пересечению ключевых слов
+ * (profileJson.keyPhrases). На адверсарном тесте это роняло чистоту с 77% до
+ * 43-60%: общая деловая лексика («доставка», «оплата», «счёт») встречается во
+ * всех сделках и ложно склеивает их. Матчим только цифры/коды/адреса.
+ */
+function matchByEntities(text: string, threads: RopDealThread[]): RopDealThread | null {
+  const amounts = new Set(extractAmounts(text).map(amountCore).filter((v) => v.length >= 3))
+  const objects = new Set(extractObjects(text).map(normalizeEntity))
+  if (!amounts.size && !objects.size) return null
+
+  const hits: { thread: RopDealThread; score: number }[] = []
   for (const t of threads) {
-    if (t.id === excludeId) continue
     const p = threadProfile(t)
-    const vocab = new Set([...p.keyPhrases, ...p.products].map((s) => s.toLowerCase()))
+    const tAmounts = new Set(p.amounts.map(amountCore).filter(Boolean))
+    const tObjects = new Set([...p.objects, ...p.products].map(normalizeEntity))
     let score = 0
-    for (const ph of phrases) if (vocab.has(ph)) score++
-    for (const a of amounts) if (p.amounts.includes(a)) score += 2
-    if (score > 0 && (!best || score > best.score)) best = { thread: t, score }
+    for (const a of amounts) if (tAmounts.has(a)) score += 2
+    for (const o of objects) if (tObjects.has(o)) score += 2
+    if (score > 0) hits.push({ thread: t, score })
   }
-  return best
-}
-
-/** Урезанная форма сообщения — то немногое, что нужно gate/sticky-эвристикам о "предыдущем" сообщении. */
-type MinimalMessage = Pick<RopMessage, "id" | "sentAt" | "text" | "authorExternalId" | "authorName" | "isOurs">
-
-interface CascadeState {
-  // Последняя АКТИВНАЯ привязка для данного threadKey (не обязательно того же контрагента —
-  // но threadKey у нас скоуп на уровне канал+чат, контрагент внутри него как правило один).
-  lastLinkedThreadId: string | null
-  lastMessage: MinimalMessage | null
-  // Сколько подряд сообщений привязано дешёвыми методами (sticky/heuristic_single_open)
-  // БЕЗ полной AI-проверки. Защита от неограниченного дрейфа: если gate ошибся один раз
-  // (сказал "тема не изменилась" по короткой малоинформативной реплике), эта ошибка иначе
-  // могла бы тянуться сколь угодно долго — периодически форсируем полный AI-attribution
-  // даже если gate/эвристика говорят "не менялось" (см. STICKY_STREAK_CAP ниже).
-  consecutiveCheapLinks: number
-}
-
-// Явный плоский select вместо select({msg: table, link: table}) — избегаем неоднозначности
-// формы результата join'а и тянем только нужные колонки (дешевле и типобезопаснее).
-async function loadLastLinkForThreadKey(companyId: string, threadKey: string, beforeSentAt: Date): Promise<CascadeState> {
-  const [row] = await db
-    .select({
-      dealThreadId: ropMessageDealLinks.dealThreadId,
-      id: ropMessages.id,
-      sentAt: ropMessages.sentAt,
-      text: ropMessages.text,
-      authorExternalId: ropMessages.authorExternalId,
-      authorName: ropMessages.authorName,
-      isOurs: ropMessages.isOurs,
-    })
-    .from(ropMessages)
-    .innerJoin(
-      ropMessageDealLinks,
-      and(eq(ropMessageDealLinks.messageId, ropMessages.id), sql`${ropMessageDealLinks.supersededById} IS NULL`)
-    )
-    .where(and(eq(ropMessages.companyId, companyId), eq(ropMessages.threadKey, threadKey), lt(ropMessages.sentAt, beforeSentAt)))
-    .orderBy(desc(ropMessages.sentAt))
-    .limit(1)
-  if (!row) return { lastLinkedThreadId: null, lastMessage: null, consecutiveCheapLinks: 0 }
-  return {
-    lastLinkedThreadId: row.dealThreadId,
-    lastMessage: { id: row.id, sentAt: row.sentAt, text: row.text, authorExternalId: row.authorExternalId, authorName: row.authorName, isOurs: row.isOurs },
-    // Холодный старт кэша в рамках прогона крона — реальную длину streak'а не знаем
-    // (стоило бы отдельного запроса по истории), консервативно начинаем с 0.
-    consecutiveCheapLinks: 0,
-  }
-}
-
-async function loadRecentThreadWindow(companyId: string, threadKey: string, upTo: Date, limit = AI_WINDOW_MESSAGES): Promise<RopMessage[]> {
-  const rows = await db
-    .select()
-    .from(ropMessages)
-    .where(and(eq(ropMessages.companyId, companyId), eq(ropMessages.threadKey, threadKey), lte(ropMessages.sentAt, upTo)))
-    .orderBy(desc(ropMessages.sentAt))
-    .limit(limit)
-  return rows.reverse()
+  if (hits.length !== 1) return null // ноль совпадений или неоднозначность — пусть решает AI
+  return hits[0].thread
 }
 
 async function createLink(args: {
@@ -196,326 +183,550 @@ async function createLink(args: {
   await touchThreadActivity(args.dealThreadId, new Date())
 }
 
+/**
+ * Погасить актуальную привязку сообщения (ревизия): supersededById ссылается на
+ * НОВУЮ привязку. Порядок важен — partial unique index допускает ровно одну
+ * строку с supersededById IS NULL на сообщение, поэтому сначала гасим старую.
+ */
+async function supersedeLink(messageId: string, newLinkPlaceholder: string): Promise<void> {
+  await db
+    .update(ropMessageDealLinks)
+    .set({ supersededById: newLinkPlaceholder })
+    .where(and(eq(ropMessageDealLinks.messageId, messageId), sql`${ropMessageDealLinks.supersededById} IS NULL`))
+}
+
 async function markPending(messageId: string): Promise<void> {
   await db.update(ropMessages).set({ attributionStatus: "pending" }).where(eq(ropMessages.id, messageId))
 }
 
-const GATE_SCHEMA = {
-  type: "object" as const,
-  properties: {
-    topic_changed: { type: "boolean", description: "true — новое сообщение открывает новую тему/сделку, false — продолжение текущей." },
-    reason: { type: "string" },
-  },
-  required: ["topic_changed"],
-}
+// ─── Контракт AI-разметки окна ───────────────────────────────────────────────
 
-/** Дешёвый gate: сначала эвристики, при неоднозначности — лёгкий fast-вызов. */
-async function detectTopicChange(args: {
-  companyId: string
-  message: RopMessage
-  prevMessage: MinimalMessage | null
-  prevThread: RopDealThread | null
-}): Promise<{ changed: boolean; usedAi: boolean; tokens: number }> {
-  const text = args.message.text ?? ""
-  const prevText = args.prevMessage?.text ?? ""
-
-  if (!args.prevMessage || !args.prevThread) return { changed: true, usedAi: false, tokens: 0 }
-
-  const pauseHours = (args.message.sentAt.getTime() - args.prevMessage.sentAt.getTime()) / 3_600_000
-  const hasGreeting = GREETING_RE.test(text)
-  const amounts = extractAmounts(text)
-  const profile = threadProfile(args.prevThread)
-  const newAmount = amounts.some((a) => !profile.amounts.includes(a))
-  const newParticipant = !!args.message.authorExternalId && !profile.participants.includes(args.message.authorExternalId)
-
-  // Пересечение по содержанию с профилем нити-кандидата (продукты/ключевые фразы) —
-  // без этого сигнала пауза+без-приветствия ошибочно "усыпляла" gate даже когда
-  // сообщение явно про другой товар/объект (см. синтетический тест: 3 сделки без
-  // явных пауз/приветствий между репликами одного и того же диалога).
-  const currentPhrases = extractKeyPhrases(text)
-  const profileVocab = new Set([...profile.keyPhrases, ...profile.products].map((p) => p.toLowerCase()))
-  const hasContentOverlap = profileVocab.size === 0 || currentPhrases.some((p) => profileVocab.has(p))
-
-  // Явные сигналы — решаем без AI.
-  if (pauseHours > TOPIC_GATE_PAUSE_HOURS && hasGreeting) return { changed: true, usedAi: false, tokens: 0 }
-  if (pauseHours <= 0.25 && !hasGreeting && !newAmount && hasContentOverlap) return { changed: false, usedAi: false, tokens: 0 }
-
-  const ambiguous = hasGreeting || newAmount || newParticipant || pauseHours > TOPIC_GATE_PAUSE_HOURS || !hasContentOverlap
-  if (!ambiguous) return { changed: false, usedAi: false, tokens: 0 }
-
-  // Неоднозначно — короткий fast-вызов вместо эвристического угадывания.
-  try {
-    await checkBudget(args.companyId, "anthropic_tokens")
-    const masked = await maskPIIFull(text)
-    const prevMasked = await maskPIIFull(prevText)
-    const out = await callWithTool<{ topic_changed: boolean; reason?: string }>({
-      toolName: "save_gate",
-      schema: GATE_SCHEMA,
-      system: "Ты определяешь, начинается ли в переписке отдела продаж новая тема/сделка. Отвечай кратко, вызови save_gate.",
-      user: `Предыдущее сообщение в этом чате:\n"""${prevMasked.slice(0, 500)}"""\n\nТекущее сообщение (пауза ${pauseHours.toFixed(1)}ч):\n"""${masked.slice(0, 500)}"""\n\nЭто продолжение той же сделки или начало новой темы?`,
-      modelTier: "fast",
-      maxTokens: 150,
-      companyId: args.companyId,
-      action: "deal_attribution_gate",
-    })
-    const tokens = out.inputTokens + out.outputTokens
-    return { changed: !!out.result?.topic_changed, usedAi: true, tokens }
-  } catch (e) {
-    console.warn(`[salesradar/attribution] gate AI fail-open → считаем что тема не менялась: ${(e as Error).message}`)
-    return { changed: false, usedAi: false, tokens: 0 }
-  }
-}
-
-interface AiAttributionOutput {
-  outcome: "linked" | "new_deal" | "small_talk" | "unclear"
-  deal_thread_id: string | null
+interface WindowAssignment {
+  n: number
+  deal: string // метка существующей нити (T1..Tn) | ключ новой сделки (N1..) | SMALL_TALK
   confidence: number
-  evidence: string
-  proposed_title: string | null
-  profile_patch: DealThreadProfilePatch
+  evidence?: string
 }
 
-const ATTRIBUTION_SCHEMA = {
+interface NewDealDecl {
+  key: string
+  title: string
+  products?: string[]
+  amounts?: string[]
+  objects?: string[]
+}
+
+interface WindowOutput {
+  assignments: WindowAssignment[]
+  new_deals?: NewDealDecl[]
+}
+
+// ВАЖЕН ПОРЯДОК ПОЛЕЙ: new_deals объявлен ПЕРЕД assignments намеренно — модель
+// генерирует поля в порядке схемы, и при упоре в max_tokens обрезается хвост.
+// Потерять кусок assignments не страшно (недостающие уйдут в pending), а потеря
+// new_deals обесценивает ВСЁ окно: метки N1/N2 становятся нерезолвимыми и в
+// pending падает всё окно целиком (ровно этот баг ловился на realistic-сценарии).
+const WINDOW_SCHEMA = {
   type: "object" as const,
   properties: {
-    outcome: {
-      type: "string",
-      enum: ["linked", "new_deal", "small_talk", "unclear"],
-      description:
-        "linked — сообщение относится к одной из перечисленных существующих нитей (укажи deal_thread_id). " +
-        "new_deal — это новая сделка/тема, которой нет среди перечисленных. " +
-        "small_talk — не относится ни к одной сделке (приветствие, оффтоп, благодарность без контекста). " +
-        "unclear — недостаточно данных, чтобы решить.",
+    new_deals: {
+      type: "array",
+      description: "Новые сделки, которых нет среди перечисленных. Объявляй ТОЛЬКО если тема реально новая.",
+      items: {
+        type: "object",
+        properties: {
+          key: { type: "string", description: "N1, N2, ... — ссылка из assignments.deal" },
+          title: { type: "string", description: "Короткое название, напр. 'Поставка профнастила'." },
+          products: { type: "array", items: { type: "string" } },
+          amounts: { type: "array", items: { type: "string" } },
+          objects: { type: "array", items: { type: "string" }, description: "Адрес/артикул/номер заказа." },
+        },
+        required: ["key", "title"],
+      },
     },
-    deal_thread_id: { type: ["string", "null"], description: "id нити при outcome=linked, иначе null." },
-    confidence: { type: "number", description: "0..1" },
-    evidence: { type: "string", description: "Короткая цитата/причина решения." },
-    proposed_title: { type: ["string", "null"], description: "Заголовок для new_deal, напр. 'Поставка профнастила'." },
-    profile_patch: {
-      type: "object",
-      description: "Новые факты для профиля нити — только то, что реально упомянуто в сообщении.",
-      properties: {
-        products: { type: "array", items: { type: "string" } },
-        keyPhrases: { type: "array", items: { type: "string" } },
-        participants: { type: "array", items: { type: "string" } },
-        amounts: { type: "array", items: { type: "string" } },
-        objects: { type: "array", items: { type: "string" } },
-        aliases: { type: "array", items: { type: "string" } },
+    assignments: {
+      type: "array",
+      description: "По одному элементу на КАЖДОЕ сообщение окна, в том же порядке.",
+      items: {
+        type: "object",
+        properties: {
+          n: { type: "number", description: "Номер сообщения из окна (как в разметке [n])." },
+          deal: {
+            type: "string",
+            description:
+              "Метка сделки: T1/T2/... — одна из перечисленных открытых сделок; N1/N2/... — новая сделка, " +
+              "объявленная в new_deals; SMALL_TALK — реплика вне сделок (чистое приветствие/благодарность без темы).",
+          },
+          confidence: { type: "number", description: "0..1 — насколько уверенно сообщение относится к этой сделке." },
+          evidence: { type: "string", description: "Очень кратко: на что опирался (товар/сумма/адрес/кому отвечает)." },
+        },
+        required: ["n", "deal", "confidence"],
       },
     },
   },
-  required: ["outcome", "confidence"],
+  required: ["new_deals", "assignments"],
 }
 
-function formatWindow(messages: RopMessage[], maskedTexts: string[]): string {
-  return messages
-    .map((m, i) => `[${m.sentAt.toISOString()}] ${m.isOurs ? "МЫ" : "КЛИЕНТ"}${m.authorName ? ` (${m.authorName})` : ""}: ${maskedTexts[i] || "(без текста)"}`)
-    .join("\n")
-}
-
-function formatCandidateThreads(threads: RopDealThread[]): string {
-  if (!threads.length) return "(открытых нитей у контрагента нет)"
+function formatCandidateThreads(threads: RopDealThread[], labelById: Map<string, string>): string {
+  if (!threads.length) return "(открытых сделок у контрагента пока нет — все темы окна будут новыми)"
   return threads
     .map((t) => {
       const p = threadProfile(t)
-      return `- id=${t.id} title="${t.title ?? "без названия"}" продукты=[${p.products.join(", ")}] фразы=[${p.keyPhrases.slice(-8).join(", ")}] суммы=[${p.amounts.join(", ")}] последнее="${p.lastSnippets.at(-1) ?? ""}"`
+      const parts = [
+        `товары/услуги=[${p.products.join(", ")}]`,
+        p.objects.length ? `объекты=[${p.objects.join(", ")}]` : "",
+        p.amounts.length ? `суммы=[${p.amounts.slice(-6).join(", ")}]` : "",
+        p.participants.length ? `участники=[${p.participants.slice(-4).join(", ")}]` : "",
+        p.lastSnippets.length ? `последняя реплика="${(p.lastSnippets.at(-1) ?? "").slice(0, 120)}"` : "",
+      ].filter(Boolean)
+      return `${labelById.get(t.id)}: "${t.title ?? "без названия"}" ${parts.join(" ")}`
     })
     .join("\n")
 }
 
-async function runAiAttribution(args: {
-  companyId: string
-  message: RopMessage
-  window: RopMessage[]
-  candidateThreads: RopDealThread[]
-  tier: "fast" | "premium"
-}): Promise<{ out: AiAttributionOutput; tokens: number }> {
-  await checkBudget(args.companyId, "anthropic_tokens")
-  const maskedTexts = await Promise.all(args.window.map((m) => maskPIIFull(m.text ?? "")))
+function formatMessageLine(m: RopMessage, masked: string, prefix: string): string {
+  const who = m.isOurs ? "МЫ" : "КЛИЕНТ"
+  const name = m.authorName ? ` ${m.authorName}` : ""
+  const time = m.sentAt.toISOString().replace("T", " ").slice(5, 16)
+  return `${prefix} [${time}] ${who}${name}: ${masked || "(без текста)"}`
+}
 
-  const out = await callWithTool<AiAttributionOutput>({
-    toolName: "save_attribution",
-    schema: ATTRIBUTION_SCHEMA,
-    system:
-      "Ты разбираешь переписку отдела продаж, в которой в одном чате вперемешку могут обсуждаться несколько разных сделок " +
-      "(разные товары/услуги, разные суммы, разные объекты). Твоя задача — определить, к какой из уже открытых сделок-нитей " +
-      "относится ПОСЛЕДНЕЕ сообщение в окне переписки, либо что это новая сделка, либо что это не относится к сделкам вовсе (small talk). " +
-      "Решай по содержанию (товар/услуга, сумма, адрес/объект, номер заказа), а не только по времени.",
+const WINDOW_SYSTEM =
+  "Ты разбираешь переписку отдела продаж. В ОДНОМ чате параллельно и вперемешку обсуждаются несколько разных сделок " +
+  "(разные товары/услуги, разные объекты, разные суммы, иногда разные люди со стороны клиента). " +
+  "Тебе дают окно сообщений — размечай КАЖДОЕ сообщение окна: к какой сделке оно относится.\n\n" +
+  "Правила разметки:\n" +
+  "1. Соседние по времени сообщения ЧАСТО относятся к РАЗНЫМ сделкам — не наследуй метку у предыдущего сообщения по инерции.\n" +
+  "2. Короткую малоинформативную реплику («да», «хорошо», «а когда?», «спасибо») относи к той сделке, на реплику которой она " +
+  "   ОТВЕЧАЕТ: ищи выше последнее сообщение противоположной стороны, к которому она подходит по смыслу (вопрос→ответ, цена→реакция).\n" +
+  "3. Опирайся на содержание: товар/услуга, сумма, адрес/объект, артикул, имя участника со стороны клиента. Разные суммы и разные " +
+  "   объекты — почти всегда разные сделки.\n" +
+  "4. Если у одной сделки свой человек со стороны клиента, реплики этого человека — его сделка.\n" +
+  "5. SMALL_TALK ставь редко — только для реплик, вообще не относящихся ни к какой сделке.\n" +
+  "6. Не плоди новые сделки: если тема совпадает с уже открытой — используй её метку."
+
+async function classifyWindow(args: {
+  companyId: string
+  contextLines: string[]
+  windowMessages: RopMessage[]
+  maskedWindow: string[]
+  openThreads: RopDealThread[]
+  labelById: Map<string, string>
+  tier: "fast" | "premium"
+  revision: boolean
+  previousLabels?: string[]
+}): Promise<{ out: WindowOutput; tokens: number }> {
+  await checkBudget(args.companyId, "anthropic_tokens")
+
+  const windowBlock = args.windowMessages
+    .map((m, i) => {
+      const prev = args.revision && args.previousLabels?.[i] ? ` (черновая метка: ${args.previousLabels[i]})` : ""
+      return formatMessageLine(m, args.maskedWindow[i], `[${i + 1}]`) + prev
+    })
+    .join("\n")
+
+  const contextBlock = args.contextLines.length
+    ? `Уже размеченные сообщения этого чата (для контекста, переразмечать НЕ нужно):\n${args.contextLines.join("\n")}\n\n`
+    : ""
+
+  const revisionNote = args.revision
+    ? "\nЭто ВТОРОЙ проход (ревизия). Черновые метки могли «слипнуться» по инерции — перепроверь каждое сообщение " +
+      "по содержанию и по тому, на какую реплику оно отвечает, и при необходимости исправь.\n"
+    : ""
+
+  const out = await callWithTool<WindowOutput>({
+    toolName: "save_window_attribution",
+    schema: WINDOW_SCHEMA,
+    system: WINDOW_SYSTEM,
     user:
-      `Открытые сделки-нити этого контрагента:\n${formatCandidateThreads(args.candidateThreads)}\n\n` +
-      `Окно переписки (последнее сообщение — то, которое нужно классифицировать):\n${formatWindow(args.window, maskedTexts)}\n\n` +
-      `Вызови save_attribution для последнего сообщения в окне.`,
+      `Открытые сделки этого контрагента:\n${formatCandidateThreads(args.openThreads, args.labelById)}\n\n` +
+      contextBlock +
+      `Окно для разметки (${args.windowMessages.length} сообщений):\n${windowBlock}\n` +
+      revisionNote +
+      `\nВызови save_window_attribution и верни ровно ${args.windowMessages.length} элементов assignments — по одному на каждый номер [1..${args.windowMessages.length}].\n` +
+      `В assignments.deal допустимы ТОЛЬКО: метки открытых сделок выше (${[...args.labelById.values()].join(", ") || "их нет"}), ` +
+      `ключи новых сделок, которые ты объявил в new_deals (N1, N2, ...), либо SMALL_TALK. Каждая новая сделка ОБЯЗАНА быть объявлена в new_deals.`,
     modelTier: args.tier,
-    maxTokens: 700,
+    // ~160 токенов на сообщение (метка + confidence + короткое evidence) + запас
+    // под токенизатор Sonnet 5 и объявления new_deals. Обрезание ответа по
+    // max_tokens ломает разметку окна целиком, поэтому запас щедрый.
+    maxTokens: Math.min(6000, 800 + args.windowMessages.length * 160),
     companyId: args.companyId,
-    action: "deal_attribution",
+    action: args.revision ? "deal_attribution_revision" : "deal_attribution_window",
   })
   return { out: out.result, tokens: out.inputTokens + out.outputTokens }
 }
 
-/**
- * Обработать один message через каскад. Возвращает применённый исход +
- * потраченные токены (для агрегированной статистики вызывающей стороны).
- */
-async function attributeMessage(args: {
+// ─── Применение разметки окна ────────────────────────────────────────────────
+
+interface WindowApplyStats {
+  linked: number
+  newDeals: number
+  smallTalk: number
+  pending: number
+}
+
+/** Разобрать метку модели в id нити (создавая теневую при необходимости). */
+async function resolveDealLabel(args: {
   companyId: string
-  message: RopMessage
-  state: CascadeState
-}): Promise<{
-  outcome: "linked" | "new_deal" | "small_talk" | "unclear" | "pending"
-  tokens: number
-  aiCalled: boolean
-  gateAiCalled: boolean
-  usedCheapPath: boolean // true — привязано БЕЗ полного AI-attribution (sticky/heuristic_single_open), для STICKY_STREAK_CAP
-}> {
-  const { companyId, message, state } = args
-  let gateTokensSpent = 0
-  let gateAiUsed = false
+  counterpartyId: string
+  label: string
+  labelToThreadId: Map<string, string>
+  newDeals: Map<string, NewDealDecl>
+  createdNew: Map<string, string>
+  confidence: number
+}): Promise<{ threadId: string | null; created: boolean }> {
+  const label = (args.label ?? "").trim()
+  if (!label || label.toUpperCase() === "SMALL_TALK") return { threadId: null, created: false }
 
-  if (!message.counterpartyId) {
-    // Без опознанного контрагента каскад бессилен — ждём identity resolution (ingest.ts, зона другого агента).
-    await markPending(message.id)
-    return { outcome: "pending", tokens: 0, aiCalled: false, gateAiCalled: false, usedCheapPath: false }
+  const existing = args.labelToThreadId.get(label.toUpperCase()) ?? args.labelToThreadId.get(label)
+  if (existing) return { threadId: existing, created: false }
+
+  const already = args.createdNew.get(label.toUpperCase())
+  if (already) return { threadId: already, created: false }
+
+  const decl = args.newDeals.get(label.toUpperCase())
+  if (!decl) return { threadId: null, created: false }
+  if (args.confidence < NEW_DEAL_MIN_CONFIDENCE) return { threadId: null, created: false }
+
+  const created = await createShadowThread({
+    companyId: args.companyId,
+    counterpartyId: args.counterpartyId,
+    title: decl.title,
+    confidence: args.confidence,
+    profile: {
+      products: decl.products ?? [],
+      amounts: decl.amounts ?? [],
+      objects: decl.objects ?? [],
+    },
+  })
+  args.createdNew.set(label.toUpperCase(), created.id)
+  return { threadId: created.id, created: true }
+}
+
+/** Дописать в профиль нити жёсткие сущности сообщения + снимок последней реплики. */
+async function enrichProfile(threadId: string, message: RopMessage): Promise<void> {
+  const text = message.text ?? ""
+  const patch: DealThreadProfilePatch = {
+    amounts: extractAmounts(text),
+    objects: extractObjects(text),
+    participants: message.isOurs ? [] : [message.authorName || message.authorExternalId || ""].filter(Boolean),
+    lastSnippets: text ? [text.slice(0, 200)] : [],
   }
+  await patchThreadProfile(threadId, patch)
+}
 
-  const openThreads = await findOpenThreadsForCounterparty(companyId, message.counterpartyId)
+// ─── Основной проход по треду ────────────────────────────────────────────────
 
-  // Кандидат для sticky-проверки: нить, к которой было привязано ПРЕДЫДУЩЕЕ сообщение
-  // этого же threadKey (если она всё ещё открыта), иначе — единственная открытая нить.
-  // ВАЖНО: даже когда нить одна, её нельзя брать не глядя (см. правку по итогам
-  // синтетического теста — "1 открытая нить" не означает "тема не сменилась", когда
-  // разные сделки того же контрагента ещё не выявлены как отдельные нити).
-  const stickyCandidateId = state.lastLinkedThreadId && openThreads.some((t) => t.id === state.lastLinkedThreadId)
-    ? state.lastLinkedThreadId
-    : openThreads.length === 1
-      ? openThreads[0].id
-      : null
-
-  // Страховка от неограниченного дрейфа: streak дешёвых привязок подряд исчерпан →
-  // форсируем полный AI-attribution на этом сообщении, даже если gate скажет "не менялось".
-  const streakExhausted = state.consecutiveCheapLinks >= STICKY_STREAK_CAP
-
-  if (stickyCandidateId && !streakExhausted) {
-    const candidateThread = openThreads.find((t) => t.id === stickyCandidateId) ?? (await getThread(stickyCandidateId))
-    if (candidateThread) {
-      // Первое сообщение вообще для этой нити/контрагента в рамках каскада (нет prevMessage
-      // из этого же threadKey) — сравнивать не с чем, линкуем сразу дешёвой эвристикой.
-      //
-      // ГОТЧА (по итогам синтетического теста, 3 прогона): пробовал ещё один "бесплатный"
-      // слой ПЕРЕД gate — findBetterMatchingThread(), форсирующий changed=true без AI, если
-      // content явно ближе к другой открытой нити. На адверсарном тесте (round-robin из 3 тем
-      // без явных маркеров смены) это НЕ помогло: даже со строгим порогом (score>=2) purity
-      // упала с 76.7% до 43-60% между прогонами — детерминированный overlap по зашумлённому
-      // profileJson.keyPhrases (общая лексика деловой переписки) ложно триггерил "смену темы"
-      // чаще, чем реальная AI-оценка полного контекста. Оставлен только detectTopicChange
-      // (эвристики + fast-модель на неоднозначности) + STICKY_STREAK_CAP как страховка от
-      // накопительного дрейфа; функция findBetterMatchingThread оставлена в файле для Ф2
-      // (нужен нормальный eval-набор, чтобы откалибровать порог, а не гадать на 30 сообщениях).
-      const isFirstTouch = !state.lastMessage
-      const gate = isFirstTouch
-        ? { changed: false, usedAi: false, tokens: 0 }
-        : await detectTopicChange({ companyId, message, prevMessage: state.lastMessage, prevThread: candidateThread })
-
-      if (!gate.changed) {
-        const method: AttributionMethod = state.lastLinkedThreadId === stickyCandidateId ? "sticky" : "heuristic_single_open"
-        const confidence = method === "heuristic_single_open" ? 0.85 : 0.7
-        await createLink({ companyId, messageId: message.id, dealThreadId: candidateThread.id, confidence, method })
-        await patchThreadProfile(candidateThread.id, {
-          amounts: extractAmounts(message.text ?? ""),
-          keyPhrases: extractKeyPhrases(message.text ?? ""),
-          lastSnippets: [message.text ?? ""].filter(Boolean),
-          participants: message.authorExternalId ? [message.authorExternalId] : [],
-        })
-        return { outcome: "linked", tokens: gate.tokens, aiCalled: false, gateAiCalled: gate.usedAi, usedCheapPath: true }
-      }
-      // gate сказал "сменилась тема" → идём в полный AI-attribution ниже, токены gate добавим к итогу.
-      gateTokensSpent += gate.tokens
-      gateAiUsed = gate.usedAi
-    }
-  }
-
-  // Шаг 5: полноценный AI-attribution.
-  const window = await loadRecentThreadWindow(companyId, message.threadKey, message.sentAt)
-  const tier: "fast" | "premium" = openThreads.length > ESCALATE_THREAD_COUNT ? "premium" : "fast"
-  let ai: { out: AiAttributionOutput; tokens: number }
-  try {
-    ai = await runAiAttribution({ companyId, message, window, candidateThreads: openThreads, tier })
-  } catch (e) {
-    console.warn(`[salesradar/attribution] AI-attribution ошибка (${(e as Error).message}) → pending`)
-    await markPending(message.id)
-    return { outcome: "pending", tokens: gateTokensSpent, aiCalled: false, gateAiCalled: gateAiUsed, usedCheapPath: false }
-  }
-  let { out, tokens } = ai
-  tokens += gateTokensSpent
-  const aiCalled = true
-
-  // Низкая уверенность fast-модели при наличии нескольких кандидатов — одна эскалация на premium.
-  if (tier === "fast" && out.confidence < 0.6 && openThreads.length > 1) {
-    try {
-      const escalated = await runAiAttribution({ companyId, message, window, candidateThreads: openThreads, tier: "premium" })
-      out = escalated.out
-      tokens += escalated.tokens
-    } catch (e) {
-      console.warn(`[salesradar/attribution] эскалация на premium не удалась (${(e as Error).message}), используем fast-результат`)
-    }
-  }
-
-  const modelVersion = tier
-
-  if (out.outcome === "small_talk") {
-    await db.update(ropMessages).set({ attributionStatus: "skipped" }).where(eq(ropMessages.id, message.id))
-    return { outcome: "small_talk", tokens, aiCalled, gateAiCalled: gateAiUsed, usedCheapPath: false }
-  }
-
-  if (out.outcome === "linked" && out.deal_thread_id && out.confidence >= NEW_DEAL_MIN_CONFIDENCE) {
-    const target = openThreads.find((t) => t.id === out.deal_thread_id)
-    if (target) {
-      await createLink({
-        companyId, messageId: message.id, dealThreadId: target.id, confidence: out.confidence,
-        method: "ai", modelVersion, evidence: out.evidence,
-      })
-      await patchThreadProfile(target.id, { ...out.profile_patch, lastSnippets: [message.text ?? ""].filter(Boolean) })
-      return { outcome: "linked", tokens, aiCalled, gateAiCalled: gateAiUsed, usedCheapPath: false }
-    }
-  }
-
-  if (out.outcome === "new_deal" && out.confidence >= NEW_DEAL_MIN_CONFIDENCE) {
-    const created = await createShadowThread({
-      companyId,
-      counterpartyId: message.counterpartyId,
-      title: out.proposed_title,
-      confidence: out.confidence,
-      profile: { ...out.profile_patch, lastSnippets: [message.text ?? ""].filter(Boolean) },
+/** Хвост уже размеченных сообщений треда — как контекст для следующего окна. */
+async function loadAttributedContext(
+  companyId: string,
+  threadKey: string,
+  beforeSentAt: Date,
+  labelById: Map<string, string>,
+  limit = CONTEXT_SIZE
+): Promise<string[]> {
+  const rows = await db
+    .select({
+      id: ropMessages.id,
+      sentAt: ropMessages.sentAt,
+      text: ropMessages.text,
+      authorName: ropMessages.authorName,
+      authorExternalId: ropMessages.authorExternalId,
+      isOurs: ropMessages.isOurs,
+      dealThreadId: ropMessageDealLinks.dealThreadId,
     })
-    await createLink({
-      companyId, messageId: message.id, dealThreadId: created.id, confidence: out.confidence,
-      method: "ai", modelVersion, evidence: out.evidence,
-    })
-    return { outcome: "new_deal", tokens, aiCalled, gateAiCalled: gateAiUsed, usedCheapPath: false }
-  }
+    .from(ropMessages)
+    .innerJoin(
+      ropMessageDealLinks,
+      and(eq(ropMessageDealLinks.messageId, ropMessages.id), sql`${ropMessageDealLinks.supersededById} IS NULL`)
+    )
+    .where(and(eq(ropMessages.companyId, companyId), eq(ropMessages.threadKey, threadKey), lt(ropMessages.sentAt, beforeSentAt)))
+    .orderBy(desc(ropMessages.sentAt))
+    .limit(limit)
 
-  // confidence < 0.5 (или 0.5-0.7 без уверенного linked/new_deal) — не создаём/не привязываем, ждём человека.
-  if (out.confidence < PENDING_MAX_CONFIDENCE || out.outcome === "unclear") {
-    await markPending(message.id)
-    return { outcome: "pending", tokens, aiCalled, gateAiCalled: gateAiUsed, usedCheapPath: false }
-  }
-
-  // 0.5..0.7 неоднозначный случай, консервативно — тоже pending (см. docblock).
-  await markPending(message.id)
-  return { outcome: "unclear", tokens, aiCalled, gateAiCalled: gateAiUsed, usedCheapPath: false }
+  const ordered = rows.reverse()
+  const masked = await Promise.all(ordered.map((r) => maskPIIFull(r.text ?? "")))
+  return ordered.map((r, i) => {
+    const who = r.isOurs ? "МЫ" : "КЛИЕНТ"
+    const name = r.authorName ? ` ${r.authorName}` : ""
+    const time = r.sentAt.toISOString().replace("T", " ").slice(5, 16)
+    const label = labelById.get(r.dealThreadId) ?? "?"
+    return `(${label}) [${time}] ${who}${name}: ${(masked[i] || "").slice(0, 200)}`
+  })
 }
 
 /**
- * Обработать пачку pending-сообщений одной компании, по threadKey и в
- * хронологическом порядке (каскад зависит от предыдущего сообщения треда).
+ * Признаки того, что окно может содержать НОВУЮ тему — тогда дешёвый путь
+ * «единственная открытая нить» неприменим и нужен AI.
+ */
+function windowLooksLikeNewTopic(windowMessages: RopMessage[], lastContextAt: Date | null, openThreads: RopDealThread[]): boolean {
+  if (!openThreads.length) return true
+  const known = new Set(
+    openThreads.flatMap((t) => threadProfile(t).participants.map(normalizeEntity))
+  )
+  for (const [i, m] of windowMessages.entries()) {
+    const text = m.text ?? ""
+    if (GREETING_RE.test(text)) return true
+    const who = normalizeEntity(m.authorName || m.authorExternalId || "")
+    if (!m.isOurs && who && known.size > 0 && !known.has(who)) return true
+    const prevAt = i === 0 ? lastContextAt : windowMessages[i - 1].sentAt
+    if (prevAt && (m.sentAt.getTime() - prevAt.getTime()) / 3_600_000 > NEW_TOPIC_PAUSE_HOURS) return true
+  }
+  return false
+}
+
+async function processWindow(args: {
+  companyId: string
+  counterpartyId: string
+  threadKey: string
+  windowMessages: RopMessage[]
+  lastContextAt: Date | null
+}): Promise<{ stats: WindowApplyStats; tokens: number; aiCalls: number; revisionCalls: number }> {
+  const { companyId, counterpartyId, threadKey, windowMessages } = args
+  const stats: WindowApplyStats = { linked: 0, newDeals: 0, smallTalk: 0, pending: 0 }
+  let tokens = 0
+  let aiCalls = 0
+  let revisionCalls = 0
+
+  const openThreads = await findOpenThreadsForCounterparty(companyId, counterpartyId)
+  const labelById = new Map<string, string>()
+  const labelToThreadId = new Map<string, string>()
+  openThreads.forEach((t, i) => {
+    const label = `T${i + 1}`
+    labelById.set(t.id, label)
+    labelToThreadId.set(label, t.id)
+  })
+
+  // Шаг 2-3: дешёвые детерминированные пути ДО AI.
+  const remaining: RopMessage[] = []
+  const cheapLinked = new Map<string, string>() // messageId → threadId (для контекста окна)
+  const singleThreadPath =
+    openThreads.length === 1 && !windowLooksLikeNewTopic(windowMessages, args.lastContextAt, openThreads)
+
+  for (const m of windowMessages) {
+    if (singleThreadPath) {
+      cheapLinked.set(m.id, openThreads[0].id)
+      continue
+    }
+    if (openThreads.length > 1) {
+      const hit = matchByEntities(m.text ?? "", openThreads)
+      if (hit) {
+        cheapLinked.set(m.id, hit.id)
+        continue
+      }
+    }
+    remaining.push(m)
+  }
+
+  for (const m of windowMessages) {
+    const cheap = cheapLinked.get(m.id)
+    if (!cheap) continue
+    await createLink({
+      companyId,
+      messageId: m.id,
+      dealThreadId: cheap,
+      confidence: 0.85,
+      method: "heuristic_single_open",
+    })
+    await enrichProfile(cheap, m)
+    stats.linked++
+  }
+
+  if (!remaining.length) return { stats, tokens, aiCalls, revisionCalls }
+
+  const contextLines = await loadAttributedContext(companyId, threadKey, remaining[0].sentAt, labelById)
+  const masked = await Promise.all(remaining.map((m) => maskPIIFull(m.text ?? "")))
+  const tier: "fast" | "premium" = openThreads.length > ESCALATE_THREAD_COUNT ? "premium" : "fast"
+
+  let result: { out: WindowOutput; tokens: number }
+  try {
+    result = await classifyWindow({
+      companyId,
+      contextLines,
+      windowMessages: remaining,
+      maskedWindow: masked,
+      openThreads,
+      labelById,
+      tier,
+      revision: false,
+    })
+    aiCalls++
+    tokens += result.tokens
+  } catch (e) {
+    console.warn(`[salesradar/attribution] разметка окна не удалась (${(e as Error).message}) → pending`)
+    for (const m of remaining) {
+      await markPending(m.id)
+      stats.pending++
+    }
+    return { stats, tokens, aiCalls, revisionCalls }
+  }
+
+  let assignments = normalizeAssignments(result.out, remaining.length)
+  let newDeals = declaredNewDeals(result.out)
+
+  // Страховка от «нерезолвимой» разметки: модель сослалась на метки, которых нет
+  // ни среди открытых нитей, ни среди объявленных new_deals (обрыв ответа,
+  // самопридуманные ярлыки). Молча это уронило бы всё окно в pending — вместо
+  // этого один повтор вызова с явным напоминанием про метки.
+  const unresolved = countUnresolvable(assignments, labelToThreadId, newDeals)
+  if (unresolved > remaining.length / 3) {
+    console.warn(
+      `[salesradar/attribution] окно ${threadKey}: ${unresolved}/${remaining.length} меток не резолвятся, повтор разметки`
+    )
+    try {
+      const retry = await classifyWindow({
+        companyId, contextLines, windowMessages: remaining, maskedWindow: masked,
+        openThreads, labelById, tier, revision: false,
+      })
+      aiCalls++
+      tokens += retry.tokens
+      const retryAssignments = normalizeAssignments(retry.out, remaining.length)
+      const retryNewDeals = declaredNewDeals(retry.out)
+      if (countUnresolvable(retryAssignments, labelToThreadId, retryNewDeals) < unresolved) {
+        assignments = retryAssignments
+        newDeals = retryNewDeals
+      }
+    } catch (e) {
+      console.warn(`[salesradar/attribution] повтор разметки окна не удался: ${(e as Error).message}`)
+    }
+  }
+
+  // Шаг 5: ревизия — если модель сама не уверена в нескольких сообщениях окна.
+  const weak = assignments.filter((a) => !a || a.confidence < REVISION_CONFIDENCE).length
+  if (weak >= REVISION_MIN_WEAK) {
+    try {
+      const revised = await classifyWindow({
+        companyId,
+        contextLines,
+        windowMessages: remaining,
+        maskedWindow: masked,
+        openThreads,
+        labelById,
+        tier: "premium",
+        revision: true,
+        previousLabels: assignments.map((a) => a?.deal ?? "?"),
+      })
+      revisionCalls++
+      tokens += revised.tokens
+      const revisedAssignments = normalizeAssignments(revised.out, remaining.length)
+      // Ревизия принимается только если она полная (по элементу на сообщение).
+      if (revisedAssignments.every(Boolean)) {
+        assignments = revisedAssignments
+        newDeals = new Map([...newDeals, ...declaredNewDeals(revised.out)])
+      }
+    } catch (e) {
+      console.warn(`[salesradar/attribution] ревизия окна не удалась (${(e as Error).message}), берём первый проход`)
+    }
+  }
+
+  const createdNew = new Map<string, string>()
+  for (const [i, m] of remaining.entries()) {
+    const a = assignments[i]
+    if (!a || a.confidence < PENDING_MAX_CONFIDENCE) {
+      await markPending(m.id)
+      stats.pending++
+      continue
+    }
+    const label = (a.deal ?? "").trim().toUpperCase()
+    if (label === "SMALL_TALK") {
+      await db.update(ropMessages).set({ attributionStatus: "skipped" }).where(eq(ropMessages.id, m.id))
+      stats.smallTalk++
+      continue
+    }
+    const { threadId, created } = await resolveDealLabel({
+      companyId,
+      counterpartyId,
+      label: a.deal,
+      labelToThreadId,
+      newDeals,
+      createdNew,
+      confidence: a.confidence,
+    })
+    if (!threadId) {
+      await markPending(m.id)
+      stats.pending++
+      continue
+    }
+    if (created) {
+      stats.newDeals++
+      // Новая нить должна быть доступна как кандидат следующим окнам.
+      const label2 = `T${labelById.size + 1}`
+      labelById.set(threadId, label2)
+      labelToThreadId.set(label2, threadId)
+    }
+    await createLink({
+      companyId,
+      messageId: m.id,
+      dealThreadId: threadId,
+      confidence: a.confidence,
+      method: "ai",
+      modelVersion: tier,
+      evidence: a.evidence ?? null,
+    })
+    await enrichProfile(threadId, m)
+    stats.linked++
+  }
+
+  return { stats, tokens, aiCalls, revisionCalls }
+}
+
+/** Разложить assignments модели по позициям окна (модель может путать порядок/пропускать). */
+function normalizeAssignments(out: WindowOutput, size: number): (WindowAssignment | null)[] {
+  const byIndex: (WindowAssignment | null)[] = Array.from({ length: size }, () => null)
+  for (const a of out.assignments ?? []) {
+    const n = Number(a?.n)
+    if (!Number.isFinite(n)) continue
+    const idx = n - 1
+    if (idx < 0 || idx >= size) continue
+    byIndex[idx] = { n, deal: String(a.deal ?? ""), confidence: Number(a.confidence ?? 0), evidence: a.evidence }
+  }
+  return byIndex
+}
+
+/** Сколько меток окна не сопоставимы ни с открытой нитью, ни с объявленной новой сделкой. */
+function countUnresolvable(
+  assignments: (WindowAssignment | null)[],
+  labelToThreadId: Map<string, string>,
+  newDeals: Map<string, NewDealDecl>
+): number {
+  let n = 0
+  for (const a of assignments) {
+    if (!a) {
+      n++
+      continue
+    }
+    const label = (a.deal ?? "").trim().toUpperCase()
+    if (!label) { n++; continue }
+    if (label === "SMALL_TALK") continue
+    if (labelToThreadId.has(label) || newDeals.has(label)) continue
+    n++
+  }
+  return n
+}
+
+function declaredNewDeals(out: WindowOutput): Map<string, NewDealDecl> {
+  const map = new Map<string, NewDealDecl>()
+  for (const d of out.new_deals ?? []) {
+    const key = (d?.key ?? "").trim().toUpperCase()
+    if (!key || !d.title) continue
+    map.set(key, d)
+  }
+  return map
+}
+
+/**
+ * Обработать пачку pending-сообщений одной компании: группировка по threadKey,
+ * внутри треда — окна по WINDOW_SIZE в хронологическом порядке.
  * budgetMs — мягкий таймбюджет для крона (по образцу ai-rop-import).
  */
 export async function attributeCompanyMessages(
   companyId: string,
-  opts: { limit?: number; budgetMs?: number } = {}
+  opts: { limit?: number; budgetMs?: number; windowSize?: number } = {}
 ): Promise<AttributionResult> {
   const limit = opts.limit ?? 200
   const budgetMs = opts.budgetMs ?? 40_000
+  const windowSize = opts.windowSize ?? WINDOW_SIZE
   const t0 = Date.now()
 
   const pending = await db
@@ -525,48 +736,93 @@ export async function attributeCompanyMessages(
     .orderBy(asc(ropMessages.threadKey), asc(ropMessages.sentAt))
     .limit(limit)
 
-  const result: AttributionResult = { processed: 0, linked: 0, newDeals: 0, smallTalk: 0, pending: 0, aiCalls: 0, gateAiCalls: 0, tokensSpent: 0 }
+  const result: AttributionResult = {
+    processed: 0, linked: 0, newDeals: 0, smallTalk: 0, pending: 0, aiCalls: 0, gateAiCalls: 0, tokensSpent: 0,
+  }
 
-  // Кэш «последней привязки по threadKey» в рамках этого прогона — не дёргаем БД
-  // повторно за уже обработанными в этом же батче сообщениями того же треда.
-  const stickyCache = new Map<string, CascadeState>()
+  // Группируем по треду — окно имеет смысл только внутри одного чата.
+  const byThread = new Map<string, RopMessage[]>()
+  for (const m of pending) {
+    const arr = byThread.get(m.threadKey) ?? []
+    arr.push(m)
+    byThread.set(m.threadKey, arr)
+  }
 
-  for (const message of pending) {
+  for (const [threadKey, messages] of byThread) {
     if (Date.now() - t0 > budgetMs) break
 
-    let state = stickyCache.get(message.threadKey)
-    if (!state) {
-      state = await loadLastLinkForThreadKey(companyId, message.threadKey, message.sentAt)
+    // Сообщения без опознанного контрагента каскад разобрать не может — ждём
+    // identity resolution (ingest.ts, зона другого агента).
+    const identified = messages.filter((m) => m.counterpartyId)
+    for (const m of messages) {
+      if (!m.counterpartyId) {
+        await markPending(m.id)
+        result.processed++
+        result.pending++
+      }
     }
+    if (!identified.length) continue
 
-    const r = await attributeMessage({ companyId, message, state })
-    result.processed++
-    result.tokensSpent += r.tokens
-    if (r.aiCalled) result.aiCalls++
-    if (r.gateAiCalled) result.gateAiCalls++
-    if (r.outcome === "linked") {
-      result.linked++
-    } else if (r.outcome === "new_deal") {
-      result.linked++
-      result.newDeals++
-    } else if (r.outcome === "small_talk") {
-      result.smallTalk++
-    } else {
-      result.pending++
-    }
-
-    // Обновляем sticky-состояние для следующего сообщения этого же threadKey.
-    const [freshLink] = await db
-      .select({ dealThreadId: ropMessageDealLinks.dealThreadId })
-      .from(ropMessageDealLinks)
-      .where(and(eq(ropMessageDealLinks.messageId, message.id), sql`${ropMessageDealLinks.supersededById} IS NULL`))
+    let lastContextAt: Date | null = null
+    const [prevRow] = await db
+      .select({ sentAt: ropMessages.sentAt })
+      .from(ropMessages)
+      .where(
+        and(
+          eq(ropMessages.companyId, companyId),
+          eq(ropMessages.threadKey, threadKey),
+          lte(ropMessages.sentAt, identified[0].sentAt),
+          eq(ropMessages.attributionStatus, "linked")
+        )
+      )
+      .orderBy(desc(ropMessages.sentAt))
       .limit(1)
-    stickyCache.set(message.threadKey, {
-      lastLinkedThreadId: freshLink?.dealThreadId ?? state.lastLinkedThreadId,
-      lastMessage: message,
-      consecutiveCheapLinks: r.usedCheapPath ? state.consecutiveCheapLinks + 1 : 0,
-    })
+    lastContextAt = prevRow?.sentAt ?? null
+
+    for (let i = 0; i < identified.length; i += windowSize) {
+      if (Date.now() - t0 > budgetMs) break
+      const windowMessages = identified.slice(i, i + windowSize)
+      // Контрагент внутри одного threadKey как правило один; берём его у первого
+      // сообщения окна, остальные сообщения окна с другим контрагентом
+      // обрабатываются следующим проходом крона (редчайший случай групповых чатов).
+      const counterpartyId = windowMessages[0].counterpartyId as string
+      const sameCp = windowMessages.filter((m) => m.counterpartyId === counterpartyId)
+
+      const r = await processWindow({ companyId, counterpartyId, threadKey, windowMessages: sameCp, lastContextAt })
+      result.processed += sameCp.length
+      result.linked += r.stats.linked
+      result.newDeals += r.stats.newDeals
+      result.smallTalk += r.stats.smallTalk
+      result.pending += r.stats.pending
+      result.aiCalls += r.aiCalls
+      result.gateAiCalls += r.revisionCalls
+      result.tokensSpent += r.tokens
+
+      lastContextAt = sameCp.at(-1)?.sentAt ?? lastContextAt
+    }
   }
 
   return result
+}
+
+// Экспортируется для будущей ручной переклассификации из UI (Ф2): гасит
+// актуальную привязку и ставит новую method='manual'.
+export async function reattributeMessageManually(args: {
+  companyId: string
+  messageId: string
+  dealThreadId: string
+}): Promise<void> {
+  const [created] = await db
+    .insert(ropMessageDealLinks)
+    .values({
+      companyId: args.companyId,
+      messageId: null, // временно null: сначала гасим старую, чтобы не нарушить partial unique
+      dealThreadId: args.dealThreadId,
+      confidence: "1",
+      method: "manual",
+    })
+    .returning({ id: ropMessageDealLinks.id })
+  await supersedeLink(args.messageId, created.id)
+  await db.update(ropMessageDealLinks).set({ messageId: args.messageId }).where(eq(ropMessageDealLinks.id, created.id))
+  await db.update(ropMessages).set({ attributionStatus: "linked" }).where(eq(ropMessages.id, args.messageId))
 }
