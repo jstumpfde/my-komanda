@@ -14,6 +14,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
+import { logAiCallFailure } from "@/lib/ai/failure-log"
 import type { ResumeScreenInput } from "@/lib/ai-screen-resume"
 import type { CandidateSpec } from "@/lib/core/spec/types"
 import { normalizeMustHave, normalizeNiceToHave, normalizeDealBreakers, dealBreakerPenalty } from "@/lib/core/spec/types"
@@ -195,7 +196,11 @@ ${wh || "  (детальная история не указана)"}
     raw = content.text.trim()
     if (process.env.AXIS_DEBUG) console.error("[axis raw]", raw.slice(0, 900))
   } catch (err) {
-    console.warn("[axis-scorer] API call failed:", err instanceof Error ? err.message : err)
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.warn("[axis-scorer] API call failed:", errMsg)
+    // Сторож найма (drizzle/0277): платформенный детектор массового сбоя AI —
+    // fire-and-forget, см. lib/ai-screen-resume.ts для того же паттерна.
+    void logAiCallFailure({ source: "axis-scorer", errorMessage: errMsg, vacancyId: vacancyId ?? null })
     return null
   }
 

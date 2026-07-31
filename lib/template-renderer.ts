@@ -90,6 +90,29 @@ const ALIASES: Record<string, string> = {
   "в_городе":                  "city_in",
   "В_городе":                  "city_in",
   "city_in":                   "city_in",
+  // ─── напоминания об интервью (задача editable-interview-reminder-texts,
+  //     14.07) — редактируемые тексты app/api/cron/interview-reminders.
+  //     when — переиспользует канонический interview_at (та же семантика:
+  //     дата/время интервью, уже отформатированное с часовым поясом) ───
+  "when":                      "interview_at",
+  "название":                  "event_title",
+  "Название":                  "event_title",
+  "тема":                      "event_title",
+  "title":                     "event_title",
+  "Title":                     "event_title",
+  "event_title":               "event_title",
+  "локация":                   "location",
+  "Локация":                   "location",
+  "место_встречи":             "location",
+  "location":                  "location",
+  "Location":                  "location",
+  // Готовый блок «Не получается в это время? Выберите другое: <ссылка>»
+  // (с переносами строк) или "" — считается кодом, не сырой URL (в отличие
+  // от schedule_link выше, который используется как голая ссылка в других
+  // точках отправки).
+  "ссылка_на_перезапись":      "reschedule_link",
+  "перезапись":                "reschedule_link",
+  "reschedule_link":           "reschedule_link",
 }
 
 // Регулярка единым проходом ловит:

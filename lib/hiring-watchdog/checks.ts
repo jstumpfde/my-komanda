@@ -13,6 +13,7 @@ import {
   candidates,
   followUpMessages,
   cronRuns,
+  aiCallFailures,
 } from "@/lib/db/schema"
 import { getValidToken } from "@/lib/hh-helpers"
 import {
@@ -23,10 +24,13 @@ import {
   classifyOldPublicationCleanup,
   classifyCronStale,
   classifyAiScoringStuck,
+  classifyAiOutageSpike,
+  classifyBlindInviteNoScore,
   hhTokenDeadDedupKey,
   minutesSince,
   type WatchdogIssue,
 } from "./classify"
+import { checkHhStageMismatch, HH_STAGE_MISMATCH_DEDUP_PREFIX } from "./hh-reconcile"
 
 const STUCK_QUEUE_HOURS = 4
 const SEND_FAILURES_WINDOW_MINUTES = 60
@@ -37,6 +41,11 @@ const IMPORT_STALE_THRESHOLD_MINUTES = 60
 const FOLLOW_UP_STALE_THRESHOLD_MINUTES = 30
 const PENDING_REJECTIONS_STALE_THRESHOLD_MINUTES = 120
 const FUNNEL_V2_TICK_STALE_THRESHOLD_MINUTES = 30
+const AI_OUTAGE_WINDOW_MINUTES = 15
+const AI_OUTAGE_THRESHOLD = 5
+const BLIND_INVITE_WINDOW_MIN_HOURS = 1   // не считаем совсем свежих — дай гейту шанс отработать нормально
+const BLIND_INVITE_WINDOW_MAX_HOURS = 48  // не тащим весь исторический шум
+const BLIND_INVITE_THRESHOLD = 5
 
 export interface WatchdogRunResult {
   issues: WatchdogIssue[]
@@ -342,6 +351,47 @@ async function checkAiScoringStuck(companyId: string): Promise<WatchdogIssue[]> 
   return issue ? [issue] : []
 }
 
+// ─── Проверка 7: массовый сбой AI-вызовов (платформенная, короткое окно) ───
+// Читает ai_call_failures (lib/ai/failure-log.ts) — структурированный лог
+// сбоев, добавленный 13.07 в screenResume/scoreResumeByAxes/scoreTestSubmission/
+// scoreCandidateV2/scoreDemoAnswers. В отличие от checkAiScoringStuck (per-
+// company, порог за 24ч, только для вакансий с настроенным входным гейтом) —
+// этот сигнал платформенный и быстрый (10-15 мин), чтобы поймать «лимит
+// Anthropic исчерпан» в течение одного тика крона, а не через часы простоя.
+async function checkAiOutageSpike(): Promise<WatchdogIssue[]> {
+  const since = new Date(Date.now() - AI_OUTAGE_WINDOW_MINUTES * 60_000)
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(aiCallFailures)
+    .where(gte(aiCallFailures.createdAt, since))
+  const issue = classifyAiOutageSpike(row?.c ?? 0, AI_OUTAGE_WINDOW_MINUTES, AI_OUTAGE_THRESHOLD)
+  return issue ? [issue] : []
+}
+
+// ─── Проверка 8: «слепой инвайт» без resume_score (платформенная) ──────────
+// Вакансии БЕЗ настроенного входного гейта при сбое AI-скоринга сохраняют
+// legacy-поведение — приглашение уходит без балла (см. комментарий «слепой
+// инвайт при сбое AI» в lib/hh/process-queue.ts). Такой кандидат НЕ получает
+// entry_gate_ai_scoring_stuck (та причина ставится только когда гейт
+// настроен) — невидим для checkAiScoringStuck. Грубый платформенный
+// индикатор по буквальному условию задачи: окно 1-48ч (не совсем свежие —
+// дать гейту время, не весь исторический шум).
+async function checkBlindInviteNoScore(): Promise<WatchdogIssue[]> {
+  const newerThan = new Date(Date.now() - BLIND_INVITE_WINDOW_MAX_HOURS * 60 * 60 * 1000)
+  const olderThan = new Date(Date.now() - BLIND_INVITE_WINDOW_MIN_HOURS * 60 * 60 * 1000)
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(candidates)
+    .where(and(
+      ne(candidates.stage, "new"),
+      sql`${candidates.resumeScore} IS NULL`,
+      lt(candidates.createdAt, olderThan),
+      gte(candidates.createdAt, newerThan),
+    ))
+  const issue = classifyBlindInviteNoScore(row?.c ?? 0, BLIND_INVITE_THRESHOLD)
+  return issue ? [issue] : []
+}
+
 // ─── Оркестрация одного полного прогона ────────────────────────────────────
 export async function runHiringWatchdog(): Promise<WatchdogRunResult> {
   const companiesList = await listCompaniesWithActiveHh()
@@ -357,6 +407,16 @@ export async function runHiringWatchdog(): Promise<WatchdogRunResult> {
   issues.push(...oldPub.issues)
 
   issues.push(...(await checkSendFailures()))
+
+  // Быстрый платформенный детектор массового сбоя AI (13.07) — короткое окно,
+  // должен бежать каждый тик независимо от компаний со включённым hh.
+  issues.push(...(await checkAiOutageSpike()))
+  issues.push(...(await checkBlindInviteNoScore()))
+
+  // Сверка «наша стадия vs реальная hh-папка» (13.07) — делает реальные
+  // HTTP-запросы к hh (до 20 кандидатов за прогон, anti-429 пауза между
+  // запросами), поэтому идёт последней в платформенном блоке.
+  issues.push(...(await checkHhStageMismatch()))
 
   // Per-company проверки: hh-токен + AI-скоринг.
   for (const { companyId } of companiesList) {
@@ -383,6 +443,9 @@ export const WATCHDOG_DEDUP_PREFIXES = [
   "send_failures:",
   "cron_stale:",
   "ai_scoring_stuck:",
+  "ai_outage_spike",
+  "blind_invite_no_score",
+  HH_STAGE_MISMATCH_DEDUP_PREFIX,
   // old_publication_cleanup — info, каждый прогон уникальный суффикс, в
   // авто-resolve не участвует (не остаётся "open" долго).
 ]

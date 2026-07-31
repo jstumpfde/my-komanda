@@ -233,7 +233,16 @@ export function TestClient({ token }: { token: string }) {
   const [gateError, setGateError] = useState("")
 
   useEffect(() => {
-    fetch(`/api/public/test/${token}`)
+    // Явный ?block=<id> (универсальная ссылка на блок, drizzle/0278): пробрасываем
+    // в GET — сервер валидирует принадлежность блока вакансии кандидата и отдаёт
+    // именно его. Без параметра — обычный запрос «боевого» теста без изменений.
+    const rawBlock = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("block")
+      : null
+    const blockParam = rawBlock && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawBlock)
+      ? rawBlock
+      : null
+    fetch(`/api/public/test/${token}${blockParam ? `?block=${encodeURIComponent(blockParam)}` : ""}`)
       .then(async (r) => {
         const json = await r.json().catch(() => null)
         if (!r.ok) { setErrorMsg(json?.error || "Тест недоступен"); setStatus("error"); return }

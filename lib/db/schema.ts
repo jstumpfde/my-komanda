@@ -248,6 +248,18 @@ export interface CompanyHiringDefaults {
     }>
     // Slug способа интервью, выбранного по умолчанию (additive).
     defaultInterviewMethod?: string
+    // Задача editable-interview-reminder-texts (14.07): редактируемые тексты
+    // напоминаний об интервью — 4 порога (24ч/утро/1ч/15мин) × 3 канала
+    // (кандидат/HR-канал/менеджер). Раньше были захардкожены в
+    // app/api/cron/interview-reminders/route.ts. Пусто/undefined на любом
+    // уровне → дефолт DEFAULT_REMINDER_TEXTS (байт-в-байт как старый хардкод,
+    // см. lib/hr/interview-reminder-texts.ts). Плейсхолдеры и их семантика —
+    // REMINDER_TEXT_VARS там же; рендер — общий lib/template-renderer.ts.
+    reminderTexts?: {
+      candidate?: Partial<Record<"24h" | "morning" | "1h" | "15m", string>>
+      hr?:        Partial<Record<"24h" | "morning" | "1h" | "15m", string>>
+      manager?:   Partial<Record<"24h" | "morning" | "1h" | "15m", string>>
+    }
   }
   stopFactorsDefaults?:      VacancyStopFactors
   // Мастер-тумблер: применять stopFactorsDefaults живьём ко ВСЕМ вакансиям
@@ -385,6 +397,21 @@ export interface CompanyHiringDefaults {
   // undefined/null → используется платформенный дефолт. 0 — зарезервировано
   // под «безлимит» на будущее, сейчас UI такого не предлагает.
   aiMonthlyTokenLimit?: number | null
+  // Задача 13.07 (координатор): кастомные стадии-фильтры на /hr/interviews —
+  // раньше жили в localStorage браузера (per-браузер, не per-компания — баг:
+  // у разных HR разные наборы, при смене браузера/устройства пропадали).
+  // Перенесены сюда, per-company. Форма Stage/StageCondition — на клиенте
+  // (app/(modules)/hr/interviews/page.tsx), здесь — минимально типизировано,
+  // чтобы не тащить клиентские типы в схему.
+  interviewStages?: Array<{
+    id: string; name: string; emoji: string; color: string; condition: string; isDefault: boolean
+  }>
+  // Ручные назначения кастомного тега на интервью для condition:"manual" —
+  // Record<stageId, interviewId[]>. Мердж на уровне ключа (см. NESTED_KEYS
+  // в hiring-defaults/route.ts), чтобы PATCH одной стадии не затирал остальные.
+  // Условие "outcome_passed" НЕ хранится здесь — читает существующее
+  // calendar_events.interview_decision (см. lib/interviews/stage-filters.ts).
+  interviewManualAssignments?: Record<string, string[]>
 }
 
 // ── CompanyLegalContact (drizzle/0177) ──
@@ -992,6 +1019,11 @@ export const vacancies = pgTable("vacancies", {
   // Пусто → используется DEFAULT_SCHEDULE_INVITE_TEXT (lib/messaging/schedule-invite.ts).
   // Плейсхолдеры: {{name}} {{vacancy}} {{company}} {{schedule_link}} {{manager}}.
   scheduleInviteText:     text("schedule_invite_text").notNull().default(""),
+  // Мягкое напоминание «пройдите Демо-3 до интервью» (drizzle/0279). Ставится
+  // записавшимся/переведённым в interview, кто НЕ прошёл последний демо-блок.
+  // Пусто → DEFAULT_DEMO3_BEFORE_INTERVIEW_TEXT (lib/messaging/demo3-before-interview.ts).
+  // Плейсхолдеры: {{name}} {{vacancy}} {{company}} {{manager}} {{demo3_link}}.
+  demo3BeforeInterviewText: text("demo3_before_interview_text").notNull().default(""),
   // #21: серия из до 3 первых сообщений с тумблерами и задержками.
   firstMessagesChain: jsonb("first_messages_chain")
     .$type<Array<{ enabled: boolean; delaySeconds: number; text: string }>>()
@@ -1439,6 +1471,13 @@ export const demos = pgTable("demos", {
   contentType: text("content_type").notNull().default("presentation"), // 'presentation' | 'test' | 'task'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  // Универсальная (обезличенная) ссылка на блок (миграция 0278): секрет для
+  // /start/[token] — публичной формы «Имя+Телефон», которая матчит/создаёт
+  // кандидата ВНУТРИ вакансии по телефону и редиректит на его персональный
+  // /demo или /test с ?block=<id этой же строки>. NULL пока HR не запросил
+  // ссылку («Скопировать общую ссылку» в конструкторе контент-блоков) —
+  // генерируется лениво. unique() допускает много NULL (как short_id).
+  publicToken: text("public_token").unique(),
 })
 
 // Ответы кандидатов на тестовое задание (публичная /test/[token]). Миграция 0144.
@@ -2696,6 +2735,18 @@ export const aiUsageLog = pgTable("ai_usage_log", {
   model:        text("model"),
   costUsd:      text("cost_usd").default("0"),
   createdAt:    timestamp("created_at").defaultNow(),
+})
+
+// Сторож найма — быстрый детектор массового сбоя AI-вызовов (drizzle/0277,
+// инцидент 13.07). Компактно, отдельно от ai_usage_log (там tenant_id NOT
+// NULL и это лог успешных вызовов) — см. lib/ai/failure-log.ts::logAiCallFailure.
+export const aiCallFailures = pgTable("ai_call_failures", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  source:       text("source").notNull(),  // 'screen-resume' | 'axis-scorer' | 'score-test' | 'score-candidate-v2' | 'score-answers'
+  companyId:    uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  vacancyId:    uuid("vacancy_id").references(() => vacancies.id, { onDelete: "cascade" }),
+  errorMessage: text("error_message"),
+  createdAt:    timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 })
 
 // Question logs: для агента аудита пробелов базы знаний
@@ -4821,7 +4872,7 @@ export const bigLifeCovers = pgTable("big_life_covers", {
 export type BigLifeCover    = typeof bigLifeCovers.$inferSelect
 export type NewBigLifeCover = typeof bigLifeCovers.$inferInsert
 
-// ─── AI-РОП (перенос call-agent, 0277) ──────────────────────────────────────
+// ─── AI-РОП (перенос call-agent, 0284) ──────────────────────────────────────
 // Модуль ai_rop (docs/architecture/AI-ROP-MODULE-PLAN-2026-07.md): перенос
 // продукта call-agent (Call-Pilot, БД `callagent` на радаре) внутрь
 // my-komanda как модуль. Оригинал на радаре НЕ трогаем — он продолжает
@@ -4939,7 +4990,7 @@ export const ropCalls = pgTable("rop_calls", {
   dealStageId:          text("deal_stage_id"),
   dealOpportunity:      numeric("deal_opportunity"),
   crmOutcomeSyncedAt:   timestamp("crm_outcome_synced_at", { withTimezone: true }),
-  // SalesRadar (Фаза 1, миграция 0278): денормализация лучшей привязки для
+  // SalesRadar (Фаза 1, миграция 0285): денормализация лучшей привязки для
   // быстрых выборок дашборда. Nullable — старые строки остаются NULL, ничего
   // не ломается. Таблицы объявлены ниже по файлу — closure в .references()
   // резолвится лениво, порядок объявления констант не важен.
@@ -5308,7 +5359,7 @@ export type RopReportShare    = typeof ropReportShares.$inferSelect
 export type NewRopReportShare = typeof ropReportShares.$inferInsert
 
 // ============================================================
-// SalesRadar — омниканальное расширение AI-РОП (Фаза 1, миграция 0278).
+// SalesRadar — омниканальное расширение AI-РОП (Фаза 1, миграция 0285).
 // Strangler-слой: новый код пишет в таблицы ниже, на границе конвертирует в
 // существующий контракт saveInteraction() → rop_calls остаётся «взаимодействием
 // /эпизодом» (см. новые nullable-колонки connectorId/counterpartyId/
@@ -5493,3 +5544,78 @@ export const ropDealFacts = pgTable("rop_deal_facts", {
 ])
 export type RopDealFact    = typeof ropDealFacts.$inferSelect
 export type NewRopDealFact = typeof ropDealFacts.$inferInsert
+// Бизнес-ассистент → Авиабилеты: лента находок из Telegram-каналов со
+// сливами дешёвых билетов. Платформенная таблица (БЕЗ company_id) — источник
+// публичный, не данные конкретного клиента. Наполняется кроном
+// flight-deals-ingest (см. отдельный план про Telegram-userbot). Миграция 0232.
+export const flightDeals = pgTable("flight_deals", {
+  id:               uuid("id").primaryKey().defaultRandom(),
+  routeFrom:        text("route_from").notNull(),
+  routeTo:          text("route_to").notNull(),
+  priceRub:         integer("price_rub").notNull(),
+  sourceChannel:    text("source_channel").notNull(),
+  sourceMessageUrl: text("source_message_url").notNull().unique(),
+  rawText:          text("raw_text").notNull(),
+  aiExtractedJson:  jsonb("ai_extracted_json"),
+  validUntil:       timestamp("valid_until", { withTimezone: true }),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("flight_deals_created_idx").on(t.createdAt),
+])
+export type FlightDeal    = typeof flightDeals.$inferSelect
+export type NewFlightDeal = typeof flightDeals.$inferInsert
+
+// Бизнес-ассистент → Авиабилеты → «Отслеживать цену»: сохранённый поиск
+// (маршрут+даты+класс+фильтры), который крон /api/cron/flight-price-watch
+// периодически перепрогоняет через ту же поисковую логику, что и ручной
+// поиск. Per-tenant + per-user (список "Мои отслеживания" — личный).
+// Миграция 0233.
+export interface FlightWatchFilters { [k: string]: unknown }
+export const flightPriceWatches = pgTable("flight_price_watches", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  companyId:       uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId:          uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  originIata:      text("origin_iata").notNull(),
+  destinationIata: text("destination_iata").notNull(),
+  dateMode:        text("date_mode").notNull().default("exact"),  // exact | range
+  departDate:      text("depart_date").notNull(),                  // YYYY-MM-DD
+  departDateTo:    text("depart_date_to"),                         // YYYY-MM-DD, режим диапазона
+  tripClass:       text("trip_class").notNull().default("economy"),
+  filtersJson:     jsonb("filters_json").$type<FlightWatchFilters>(),
+  targetPriceRub:  integer("target_price_rub"),                    // nullable — «уведомить при цене ниже X»
+  lastPriceRub:    integer("last_price_rub"),
+  lastCheckedAt:   timestamp("last_checked_at", { withTimezone: true }),
+  bestPriceRub:    integer("best_price_rub"),
+  bestPriceAt:     timestamp("best_price_at", { withTimezone: true }),
+  active:          boolean("active").notNull().default(true),
+  // Telegram-уведомление в личный чат (в дополнение к колокольчику) —
+  // chatId пользователь берёт сам, написав /start боту компании. Миграция 0234.
+  notifyTelegram:  boolean("notify_telegram").notNull().default(false),
+  telegramChatId:  text("telegram_chat_id"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("flight_price_watches_company_idx").on(t.companyId),
+  index("flight_price_watches_active_idx").on(t.active),
+])
+export type FlightPriceWatch    = typeof flightPriceWatches.$inferSelect
+export type NewFlightPriceWatch = typeof flightPriceWatches.$inferInsert
+
+// Привязка пользователя платформы к личному чату двустороннего Telegram-бота
+// @TiketCompany24bot (Авиабилеты). Один пользователь — одна привязка.
+// linkToken — одноразовая ссылка t.me/TiketCompany24bot?start=<token>,
+// chatId заполняется при /start <token> в вебхуке бота. Миграция 0235.
+export const userTelegramLinks = pgTable("user_telegram_links", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  userId:     uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  companyId:  uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  chatId:     text("chat_id"),                 // null, пока не привязан
+  linkToken:  text("link_token").notNull(),
+  linkedAt:   timestamp("linked_at", { withTimezone: true }),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("user_telegram_links_user_idx").on(t.userId),
+  uniqueIndex("user_telegram_links_chat_id_idx").on(t.chatId),
+  uniqueIndex("user_telegram_links_token_idx").on(t.linkToken),
+])
+export type UserTelegramLink    = typeof userTelegramLinks.$inferSelect
+export type NewUserTelegramLink = typeof userTelegramLinks.$inferInsert

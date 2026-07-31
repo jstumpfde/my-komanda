@@ -34,6 +34,11 @@ import {
   Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  buildDemoLink,
+  demoButtonLabel,
+  type DemoButtonBlock,
+} from "@/lib/demo/demo-quick-links"
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -47,9 +52,9 @@ export interface HhBroadcastItem {
   hasNoChat: boolean
   personalMessage: string
   testLink: string
-  // «Демо 2» активна только если кандидату уже открыта 2-я часть
-  // (override_content_block_id проставлен на карточке). Юрий 03.07.
-  hasSecondDemo: boolean
+  // ДЛИННЫЙ token кандидата — для персональных демо-ссылок
+  // /demo/{token}?block=<id> (не short_id: тот ловит реферальный bounce).
+  token: string
 }
 
 // «др. вакансия»: активная вакансия компании с hh-ссылкой (не текущая).
@@ -86,29 +91,35 @@ function pluralize(n: number, one: string, few: string, many: string): string {
   return many
 }
 
-// Тип ссылки кандидату (Юрий 03.07): тест/демо-1/демо-2 (персональная,
-// генерируется автоматически, демо-1 и демо-2 — ОДНА ссылка, разное содержимое
-// на стороне кандидата через override_content_block_id), сама вакансия hh,
-// др. вакансия компании (тоже hh, но другая запись) или интервью (вид —
-// отдельно в interviewMode).
-type LinkKind = "test" | "demo1" | "demo2" | "vacancy" | "other_vacancy" | "interview"
+// Тип ссылки кандидату: тест (персональная), демо-блок `demo${N}` (персональная,
+// ДИНАМИЧЕСКИ по реальным демо-блокам вакансии, единый формат
+// /demo/{token}?block=<id>), сама вакансия hh, др. вакансия компании (тоже hh,
+// но другая запись) или интервью (вид — отдельно в interviewMode).
+type LinkKind = "test" | "vacancy" | "other_vacancy" | "interview" | `demo${number}`
 type InterviewMode = "phone" | "zoom" | "office"
 
-// Ссылка кандидату по типу. Демо-1/демо-2/тест — один slug (роуты /test и
-// /demo резолвят shortId/token одинаково; демо-2 это ТА ЖЕ ссылка — контент
-// переключает override_content_block_id на кандидате), «Вакансия» — общий
-// hh-URL текущей вакансии, «др. вакансия» — hh-URL выбранной другой вакансии.
-function linkForKind(
-  testLink: string,
-  kind: LinkKind,
-  vacancyHhUrl: string,
-  otherVacancyHhUrl?: string,
-): string {
-  if (kind === "vacancy") return vacancyHhUrl
-  if (kind === "other_vacancy") return otherVacancyHhUrl ? `https://hh.ru/vacancy/${otherVacancyHhUrl}` : ""
-  if (kind === "interview") return testLink ? testLink.replace("/test/", "/schedule/") : ""
-  if (!testLink) return ""
-  return kind === "demo1" || kind === "demo2" ? testLink.replace("/test/", "/demo/") : testLink
+// Контекст текущего кандидата для сборки ссылки по типу.
+interface LinkContext {
+  testLink: string
+  // Готовые демо-ссылки по индексу блока (1-based): { 1: url, 2: url, ... }.
+  demoLinks: Record<number, string>
+  vacancyHhUrl: string
+  otherVacancyHhUrl?: string
+}
+
+// Ссылка кандидату по типу. `demo${N}` — персональная демо-ссылка на N-й блок
+// (единый формат /demo/{ДЛИННЫЙ token}?block=<id>), «Тест» — /test/{slug},
+// «Интервью» — /schedule/{slug}, «Вакансия» — общий hh-URL текущей вакансии,
+// «др. вакансия» — hh-URL выбранной другой вакансии.
+function linkForKind(kind: LinkKind, ctx: LinkContext): string {
+  if (kind === "vacancy") return ctx.vacancyHhUrl
+  if (kind === "other_vacancy") return ctx.otherVacancyHhUrl ? `https://hh.ru/vacancy/${ctx.otherVacancyHhUrl}` : ""
+  if (kind === "interview") return ctx.testLink ? ctx.testLink.replace("/test/", "/schedule/") : ""
+  if (kind.startsWith("demo")) {
+    const n = Number.parseInt(kind.slice(4), 10)
+    return ctx.demoLinks[n] ?? ""
+  }
+  return ctx.testLink
 }
 
 // Обратная подстановка: видимые значения текущего кандидата → плейсхолдеры,
@@ -157,6 +168,10 @@ export function HhBroadcastDialog({
   const [vacancyTitle, setVacancyTitle] = useState("")
   const [vacancyHhUrl, setVacancyHhUrl] = useState("")
   const [scheduleInviteText, setScheduleInviteText] = useState("")
+  // Демо-блоки вакансии (для динамических кнопок «Демо 1»…«Демо N») + базовый URL
+  // приложения — единый формат ссылки строим на клиенте из token кандидата.
+  const [demoBlocks, setDemoBlocks] = useState<DemoButtonBlock[]>([])
+  const [demoBaseUrl, setDemoBaseUrl] = useState("")
   // «др. вакансия» (Юрий 03.07): список активных вакансий компании с hh-ссылкой
   // (кроме текущей) + выбранная — ТОЛЬКО в state, НЕ в localStorage (выбор
   // одноразовый, под конкретную рассылку).
@@ -185,13 +200,16 @@ export function HhBroadcastDialog({
   const lastTplRef = useRef<string | null>(null)
   // Кого HR редактировал вручную — их авто-подстановка последнего выбора не трогает.
   const editedIdsRef = useRef<Set<string>>(new Set())
-  const LINK_KINDS: readonly LinkKind[] = ["test", "demo1", "demo2", "vacancy", "other_vacancy", "interview"]
+  const LINK_KINDS: readonly LinkKind[] = ["test", "vacancy", "other_vacancy", "interview"]
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem("hhbc:lastKind")
       if (raw) {
         const [kindPart, modePart] = raw.split(":")
-        if ((LINK_KINDS as string[]).includes(kindPart)) lastKindRef.current = kindPart as LinkKind
+        // `demo${N}` (динамический демо-блок) или один из фиксированных типов.
+        if ((LINK_KINDS as string[]).includes(kindPart) || /^demo\d+$/.test(kindPart)) {
+          lastKindRef.current = kindPart as LinkKind
+        }
         if (modePart === "phone" || modePart === "zoom" || modePart === "office") {
           lastInterviewModeRef.current = modePart
         }
@@ -223,6 +241,8 @@ export function HhBroadcastDialog({
     setTplName("")
     setOtherVacancies([])
     setSelectedOtherVacancyId("")
+    setDemoBlocks([])
+    setDemoBaseUrl("")
     editedIdsRef.current = new Set()
     try {
       const res = await fetch(
@@ -242,12 +262,16 @@ export function HhBroadcastDialog({
         vacancyTitle?: string
         vacancyHhUrl?: string
         otherVacancies?: OtherVacancy[]
+        demoBlocks?: DemoButtonBlock[]
+        demoBaseUrl?: string
       }
       setItems(data.items)
       setVacancyTitle(data.vacancyTitle ?? "")
       setVacancyHhUrl((data as { vacancyHhUrl?: string }).vacancyHhUrl ?? "")
       setScheduleInviteText((data as { scheduleInviteText?: string }).scheduleInviteText ?? "")
       setOtherVacancies(data.otherVacancies ?? [])
+      setDemoBlocks(data.demoBlocks ?? [])
+      setDemoBaseUrl(data.demoBaseUrl ?? "")
       // Предзаполняем тексты сообщений
       const msgs: Record<string, string> = {}
       for (const item of data.items) msgs[item.id] = item.personalMessage
@@ -318,9 +342,22 @@ export function HhBroadcastDialog({
     ? (interviewModeById[current.id] ?? lastInterviewModeRef.current ?? "phone")
     : "phone"
   const selectedOtherVacancy = otherVacancies.find((v) => v.id === selectedOtherVacancyId) ?? null
-  const currentLink = current
-    ? linkForKind(current.testLink, currentKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId)
-    : ""
+  // Готовые персональные демо-ссылки кандидата по индексу блока (единый формат).
+  const demoLinksForItem = useCallback((item: HhBroadcastItem): Record<number, string> => {
+    const map: Record<number, string> = {}
+    for (const b of demoBlocks) map[b.index] = buildDemoLink(demoBaseUrl, item.token, b.id)
+    return map
+  }, [demoBlocks, demoBaseUrl])
+  // Ссылка выбранного типа для кандидата — единая точка сборки (тест/демо/вакансия/…).
+  const linkFor = useCallback((kind: LinkKind, item: HhBroadcastItem): string => {
+    return linkForKind(kind, {
+      testLink: item.testLink,
+      demoLinks: demoLinksForItem(item),
+      vacancyHhUrl,
+      otherVacancyHhUrl: selectedOtherVacancy?.hhVacancyId,
+    })
+  }, [demoLinksForItem, vacancyHhUrl, selectedOtherVacancy])
+  const currentLink = current ? linkFor(currentKind, current) : ""
 
   // Авто-применить последний выбор (тип ссылки + шаблон) к новому кандидату —
   // если пользователь ещё НЕ трогал этого кандидата вручную (Юрий 03.07:
@@ -330,10 +367,14 @@ export function HhBroadcastDialog({
     // messages предзаполнены дефолтом в loadData — потому проверяем НЕ их, а
     // явную ручную правку (editedIdsRef) и явный выбор типа ссылки.
     if (editedIdsRef.current.has(current.id) || linkKindById[current.id] !== undefined) return
-    // «Демо 2» нельзя авто-применить кандидату, которому она ещё не открыта —
-    // тогда откатываемся на «Демо 1», чтобы не выставить disabled-состояние молча.
+    // Демо-блок из прошлого выбора мог исчезнуть/опустеть у ТЕКУЩЕЙ вакансии
+    // (у каждой вакансии свои блоки) — тогда не авто-применяем демо молча.
     let kind = lastKindRef.current
-    if (kind === "demo2" && !current.hasSecondDemo) kind = "demo1"
+    if (kind && kind.startsWith("demo")) {
+      const n = Number.parseInt(kind.slice(4), 10)
+      const blk = demoBlocks.find((b) => b.index === n)
+      if (!blk || !blk.hasContent) kind = null
+    }
     const tpl = lastTplRef.current ? templates.find((t) => t.id === lastTplRef.current) : null
     if (!kind && !tpl) return
     const effKind: LinkKind = kind ?? "test"
@@ -347,7 +388,7 @@ export function HhBroadcastDialog({
       setSelectedTplId(tpl.id)
       setTplName(tpl.name)
       const filled = fromTemplateText(tpl.text, {
-        link: linkForKind(current.testLink, effKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId),
+        link: linkFor(effKind, current),
         vacancy: vacancyTitle,
         firstName: current.firstName,
       })
@@ -388,14 +429,14 @@ export function HhBroadcastDialog({
       .catch(() => {})
   }, [vacancyId, onSent])
 
-  // Сменить тип прикреплённой ссылки (тест/демо-1/демо-2/вакансия/др.вакансия/
+  // Сменить тип прикреплённой ссылки (демо-блок/тест/вакансия/др.вакансия/
   // интервью) и заменить её прямо в тексте.
   const changeLinkKind = useCallback((newKind: LinkKind) => {
     if (!current) return
     const oldKind = linkKindById[current.id] ?? "test"
     if (oldKind === newKind) return
-    const oldLink = linkForKind(current.testLink, oldKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId)
-    const newLink = linkForKind(current.testLink, newKind, vacancyHhUrl, selectedOtherVacancy?.hhVacancyId)
+    const oldLink = linkFor(oldKind, current)
+    const newLink = linkFor(newKind, current)
     // «Интервью»: если HR ещё не правил текст этого кандидата — подставляем
     // целиком шаблон приглашения на интервью (настройка вакансии
     // scheduleInviteText / платформенный дефолт), с именем и ссылкой.
@@ -418,7 +459,7 @@ export function HhBroadcastDialog({
       const mode = newKind === "interview" ? (interviewModeById[current.id] ?? lastInterviewModeRef.current ?? "phone") : null
       window.localStorage.setItem("hhbc:lastKind", mode ? `${newKind}:${mode}` : newKind)
     } catch { /* noop */ }
-  }, [current, linkKindById, scheduleInviteText, vacancyTitle, selectedOtherVacancy, interviewModeById])
+  }, [current, linkKindById, scheduleInviteText, vacancyTitle, selectedOtherVacancy, interviewModeById, linkFor])
 
   // Сменить вид интервью (Звонок/Онлайн/В офис) — ссылка та же, меняется только
   // подстановка вида для кандидата и запоминание последнего выбора.
@@ -519,11 +560,11 @@ export function HhBroadcastDialog({
     if (!current) return ""
     const text = messages[current.id] ?? current.personalMessage
     return toTemplateText(text, {
-      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl, selectedOtherVacancy?.hhVacancyId),
+      link: linkFor(linkKindById[current.id] ?? "test", current),
       vacancy: vacancyTitle,
       firstName: current.firstName,
     })
-  }, [current, messages, vacancyTitle, linkKindById, vacancyHhUrl, selectedOtherVacancy])
+  }, [current, messages, vacancyTitle, linkKindById, linkFor])
 
   // Выбор шаблона из списка — подставить его текст (с раскрытыми плейсхолдерами)
   // в textarea и имя в поле названия. Пустое значение = «— Новый —».
@@ -540,12 +581,12 @@ export function HhBroadcastDialog({
     if (!tpl || !current) return
     setTplName(tpl.name)
     const filled = fromTemplateText(tpl.text, {
-      link: linkForKind(current.testLink, linkKindById[current.id] ?? "test", vacancyHhUrl, selectedOtherVacancy?.hhVacancyId),
+      link: linkFor(linkKindById[current.id] ?? "test", current),
       vacancy: vacancyTitle,
       firstName: current.firstName,
     })
     setMessages((prev) => ({ ...prev, [current.id]: filled }))
-  }, [templates, current, vacancyTitle, linkKindById, vacancyId, vacancyHhUrl, selectedOtherVacancy])
+  }, [templates, current, vacancyTitle, linkKindById, vacancyId, linkFor])
 
   // POST к менеджеру шаблонов; возвращает обновлённый список или null при ошибке.
   const postTemplate = useCallback(async (
@@ -741,39 +782,43 @@ export function HhBroadcastDialog({
               {/* Что прикреплено: тип ссылки можно переключить — она заменится
                   прямо в тексте. HR видит, что именно уйдёт кандидату. Ряд может
                   переноситься на 2 строки — это ок (Юрий 03.07). */}
-              {(current.testLink || vacancyHhUrl || otherVacancies.length > 0) ? (
+              {(current.testLink || vacancyHhUrl || otherVacancies.length > 0 || demoBlocks.length > 0) ? (
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                     <Paperclip className="size-3 shrink-0" />
                     <span className="shrink-0">Ссылка:</span>
                     <div className="inline-flex flex-wrap items-center gap-0.5">
                       {([
-                        ...(current.testLink ? [["demo1", "Демо 1"]] as const : []),
-                        ...(current.testLink ? [["demo2", "Демо 2"]] as const : []),
-                        ...(current.testLink ? [["test", "Тест"]] as const : []),
-                        ...(vacancyHhUrl ? [["vacancy", "Вакансия"]] as const : []),
-                        ...(otherVacancies.length > 0 ? [["other_vacancy", "др. вакансия"]] as const : []),
-                        ...(current.testLink ? [["interview", "Интервью"]] as const : []),
-                      ]).map(([k, label]) => {
-                        const disabled = k === "demo2" && !current.hasSecondDemo
-                        return (
-                          <button
-                            key={k}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => !disabled && changeLinkKind(k)}
-                            title={disabled ? "2-я часть ещё не открыта кандидату" : undefined}
-                            className={
-                              "rounded px-1.5 py-0.5 transition-colors " +
-                              (disabled
-                                ? "opacity-40 cursor-not-allowed bg-background text-muted-foreground"
-                                : currentKind === k
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background hover:bg-muted text-muted-foreground")
-                            }
-                          >{label}</button>
-                        )
-                      })}
+                        // Демо-кнопки — ДИНАМИЧЕСКИ по реальным демо-блокам вакансии
+                        // (по sort_order). Одно демо → «Демо», несколько → «Демо N».
+                        // disabled — если у блока нет контента.
+                        ...demoBlocks.map((b) => ({
+                          k: `demo${b.index}` as LinkKind,
+                          label: demoButtonLabel(b.index, demoBlocks.length),
+                          disabled: !b.hasContent,
+                          disabledTitle: "У этого демо-блока пока нет контента",
+                        })),
+                        ...(current.testLink ? [{ k: "test" as LinkKind, label: "Тест", disabled: false, disabledTitle: undefined }] : []),
+                        ...(vacancyHhUrl ? [{ k: "vacancy" as LinkKind, label: "Вакансия", disabled: false, disabledTitle: undefined }] : []),
+                        ...(otherVacancies.length > 0 ? [{ k: "other_vacancy" as LinkKind, label: "др. вакансия", disabled: false, disabledTitle: undefined }] : []),
+                        ...(current.testLink ? [{ k: "interview" as LinkKind, label: "Интервью", disabled: false, disabledTitle: undefined }] : []),
+                      ]).map(({ k, label, disabled, disabledTitle }) => (
+                        <button
+                          key={k}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => !disabled && changeLinkKind(k)}
+                          title={disabled ? disabledTitle : undefined}
+                          className={
+                            "rounded px-1.5 py-0.5 transition-colors " +
+                            (disabled
+                              ? "opacity-40 cursor-not-allowed bg-background text-muted-foreground"
+                              : currentKind === k
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background hover:bg-muted text-muted-foreground")
+                          }
+                        >{label}</button>
+                      ))}
                     </div>
                     {/* Интервью: вид сегмент-переключателем сразу за чипом, когда выбран. */}
                     {currentKind === "interview" && (
@@ -828,9 +873,9 @@ export function HhBroadcastDialog({
                         ? "Общая ссылка на выбранную вакансию hh — одинаковая для всех кандидатов."
                         : currentKind === "interview"
                           ? "Персональная ссылка на выбор времени интервью — генерируется автоматически."
-                          : currentKind === "demo2"
-                            ? "Кандидат увидит 2-ю часть демо по своей демо-ссылке."
-                            : "Для «Тест»/«Демо» персональная ссылка кандидата генерируется автоматически."}
+                          : currentKind.startsWith("demo")
+                            ? "Персональная демо-ссылка кандидата на выбранный блок — генерируется автоматически."
+                            : "Для «Тест» персональная ссылка кандидата генерируется автоматически."}
                   </p>
                 </div>
               ) : (

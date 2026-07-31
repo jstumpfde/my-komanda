@@ -1,11 +1,14 @@
 import { NextRequest } from "next/server"
 import { eq, and, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { candidates, vacancies, hhCandidates, hhResponses } from "@/lib/db/schema"
+import { candidates, vacancies } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { trySyncRejectToHh } from "@/lib/hh/sync-stage"
 import { logAudit, ipFromRequest } from "@/lib/audit/log"
 import { ALL_STAGE_SLUGS, LEGACY_STAGE_LABELS, type StageSlug } from "@/lib/stages"
+import { hardDeleteCandidatesByIds } from "@/lib/candidates/hard-delete-ids"
+import { scheduleInterviewInvite } from "@/lib/messaging/schedule-invite"
+import { maybeScheduleDemo3BeforeInterview } from "@/lib/messaging/demo3-before-interview"
 
 const HH_BULK_DELAY_MS = 500
 
@@ -75,6 +78,34 @@ const DELETE_ACTIONS = new Set<BulkAction>(["trash", "untrash", "hard_delete"])
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+// Приглашение записаться на интервью (ссылка /schedule/[token]) — bulk-параллель
+// одиночного пути (app/api/modules/hr/candidates/[id]/stage/route.ts:198-203).
+// Раньше bulk-actions "invite"/"set_stage" двигали candidates.stage напрямую,
+// минуя scheduleInterviewInvite — кандидат молча попадал в interview без
+// ссылки на выбор времени. scheduleInterviewInvite идемпотентен (дедуп
+// pending|sent schedule_invite), поэтому безопасно вызывать даже повторно;
+// previousStage-фильтр — чтобы не дёргать его для тех, кто и так уже был в
+// interview. Ошибка одного кандидата не должна ронять всю пачку — try/catch
+// per candidate, шлём последовательно (не параллелим hh-нагрузку).
+async function scheduleInterviewInvitesForBulk(
+  candidatesBefore: { id: string; stage: string | null; vacancyId: string }[],
+): Promise<void> {
+  for (const c of candidatesBefore) {
+    if (c.stage === "interview") continue
+    try {
+      await scheduleInterviewInvite({ candidateId: c.id, vacancyId: c.vacancyId })
+    } catch (err) {
+      console.warn(`[bulk] schedule invite failed for ${c.id}:`, err)
+    }
+    // Мягкое напоминание «пройдите Демо-3 до интервью» (14.07) — гейт/дедуп внутри.
+    try {
+      await maybeScheduleDemo3BeforeInterview({ candidateId: c.id, vacancyId: c.vacancyId })
+    } catch (err) {
+      console.warn(`[bulk] demo3 reminder failed for ${c.id}:`, err)
+    }
+  }
+}
+
 // Последовательно синхронизирует отказы с hh.ru.  Делается ПОСЛЕ
 // успешного db-апдейта; ошибки логируются, локальный стейдж не откатывается.
 // Задержка между запросами — anti-429 (hh ограничивает скорость negotiations).
@@ -113,6 +144,7 @@ export async function POST(req: NextRequest) {
         stage: candidates.stage,
         isFavorite: candidates.isFavorite,
         stageHistory: candidates.stageHistory,
+        vacancyId: candidates.vacancyId,
       })
       .from(candidates)
       .innerJoin(vacancies, eq(candidates.vacancyId, vacancies.id))
@@ -159,6 +191,9 @@ export async function POST(req: NextRequest) {
           return upd.length
         })
         affected = result
+        // Не блокируем ответ HR'у — приглашения шлются в фоне (см. try/catch
+        // per candidate внутри хелпера).
+        void scheduleInterviewInvitesForBulk(owned)
         break
       }
 
@@ -202,6 +237,9 @@ export async function POST(req: NextRequest) {
         affected = result
         if (stage === "rejected") {
           void syncBulkRejectToHh(ownedIds)
+        }
+        if (stage === "interview") {
+          void scheduleInterviewInvitesForBulk(owned)
         }
         break
       }
@@ -315,25 +353,10 @@ export async function POST(req: NextRequest) {
       }
 
       case "hard_delete": {
-        // Удалить навсегда. Порядок важен из-за FK:
-        //   1) обнуляем hh_responses.local_candidate_id (без FK, но чтобы не
-        //      оставлять висячую ссылку и не путать дедуп);
-        //   2) удаляем hh_candidates (FK без каскада — иначе delete упрётся);
-        //   3) удаляем candidates (cascade добьёт test_submissions /
-        //      qualification_answers / follow_up_messages; outbound → set null).
-        const result = await db.transaction(async (tx) => {
-          await tx
-            .update(hhResponses)
-            .set({ localCandidateId: null })
-            .where(inArray(hhResponses.localCandidateId, ownedIds))
-          await tx.delete(hhCandidates).where(inArray(hhCandidates.candidateId, ownedIds))
-          const del = await tx
-            .delete(candidates)
-            .where(inArray(candidates.id, ownedIds))
-            .returning({ id: candidates.id })
-          return del.length
-        })
-        affected = result
+        // Удалить навсегда — общая логика вынесена в hardDeleteCandidatesByIds
+        // (lib/candidates/hard-delete-ids.ts), её же использует крон
+        // ghost-candidate-cleanup для авто-очистки кандидатов-призраков.
+        affected = await hardDeleteCandidatesByIds(ownedIds)
         break
       }
 

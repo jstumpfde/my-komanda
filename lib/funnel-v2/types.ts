@@ -207,9 +207,90 @@ export interface FunnelV2Stage {
   _questionnaireTemplateId?: string | null
 }
 
+// ── Нативные поля Стадии 1 «Отклик → приглашение» (перенос из Портрета, 14.07) ──
+// Стадия 1 = Портрет и НЕ входит в stages[] (её отдельная стадия убрана 13.07),
+// поэтому её поведенческие поля живут на уровне конфига. Здесь — ТОЛЬКО те
+// поведения, что дизайн переносит в рантайм: задержка первого сообщения,
+// нерабочее время, текст авто-отказа и задержка отказа. Пороги/авто-приглашение
+// по баллу и текст приглашения остаются в Портрете (модель скоринга) / в
+// сообщениях первой реальной стадии. Все поля опциональны: отсутствие = «ещё не
+// настроено нативно» (рантайм берёт дефолт; UI предзаполнит из Портрета один раз).
+export interface FunnelV2Stage1 {
+  /** Задержка «человеческой» паузы перед первым сообщением, сек. */
+  inviteDelaySeconds?: number
+  /** Слать ли мягкое подтверждение в нерабочее время (иначе откладываем до утра). */
+  offHoursEnabled?: boolean
+  /** Пауза перед мягким подтверждением в нерабочее время, сек. */
+  offHoursDelaySeconds?: number
+  /** Текст мягкого подтверждения в нерабочее время. Пусто → дефолт компании. */
+  offHoursText?: string
+  /** Текст письма авто-отказа по баллу резюме. Пусто → дефолт вакансии/платформы. */
+  rejectLetter?: string
+  /** Задержка авто-отказа, минуты. */
+  rejectionDelayMinutes?: number
+}
+
+// ── Нативные поля Стадии 2 «Демо 1-я часть → переход на 2-ю часть» ──────────────
+// Зеркало spec.anketaPassInvite (Портрет). Гейт срабатывает на сабмите анкеты
+// демо; хранится на уровне конфига (не в конкретной стадии), т.к. триггер не
+// привязан к id стадии. При включённом движке v2 рантайм читает эти поля вместо
+// spec.anketaPassInvite (см. lib/funnel-v2/native-config.ts).
+export interface FunnelV2Stage2 {
+  /** Включён ли переход на 2-ю часть. */
+  enabled?: boolean
+  /** Порог объективного балла (вопросы-выбора), 0–100. */
+  passThreshold?: number
+  /** Порог AI-оценки ответов анкеты, 0–100 (ИЛИ-гейт с passThreshold). */
+  aiEvalThreshold?: number
+  /** Как переводить: seamless / message / both. */
+  transferMode?: "seamless" | "message" | "both"
+  /** id контент-блока «2-я часть» (demos.id). null = боевой блок. */
+  contentBlockId?: string | null
+  /** Плашка-поздравление сверху блока 2 (для прошедших). */
+  passScreenTitle?: string
+  passScreenText?: string
+  /** Текст письма-приглашения на 2-ю часть + задержка перед отправкой, сек. */
+  messageText?: string
+  delaySeconds?: number
+  /** Экран «Спасибо» для НЕ прошедших гейт. */
+  failScreenTitle?: string
+  failScreenText?: string
+  /** Действие с не прошедшим гейт: none / pending_manual / pending_rejection. */
+  failAction?: "none" | "pending_manual" | "pending_rejection"
+  /** Задержка авто-отказа не прошедших, минуты. */
+  failRejectDelayMinutes?: number
+}
+
+// ── Коммуникации воронки v2 (общий слой, не per-stage) ─────────────────────────
+// ТОЛЬКО настройки, сегодня привязанные к Портрету: TG-уведомления о подходящих
+// кандидатах и «горячий кандидат стынет». Стоп-слова и FAQ здесь НЕ хранятся —
+// они уже режимо-независимы (AutoResponderSettings + vacancies.stop_words_json),
+// секция коммуникаций переиспользует их существующий редактор.
+export interface FunnelV2Communications {
+  /** Telegram: подходящие кандидаты в канал компании. */
+  tgAlerts?: {
+    enabled: boolean
+    minResumeScore: number | null
+    minAnswersScore: number | null
+    onGatePassed: boolean
+  }
+  /** «Горячий кандидат стынет»: высокий балл, открыл демо, 0 блоков. */
+  hotCandidate?: {
+    enabled: boolean
+    threshold: number
+    staleAfterHours: number
+  }
+}
+
 export interface FunnelV2Config {
   enabled: boolean
   stages: FunnelV2Stage[]   // стадии 2…N (стадия 1 = Портрет, рендерится отдельно)
+  /** Нативные поля Стадии 1 (перенос из Портрета). undefined = ещё не настроено. */
+  stage1?: FunnelV2Stage1
+  /** Нативные поля Стадии 2 (переход на 2-ю часть). undefined = ещё не настроено. */
+  stage2?: FunnelV2Stage2
+  /** Коммуникации (TG-уведомления, горячий кандидат). undefined = ещё не настроено. */
+  communications?: FunnelV2Communications
 }
 
 export const DEFAULT_REJECT_DELAY_MIN = 60
@@ -329,7 +410,76 @@ export function normalizeFunnelV2(raw: unknown): FunnelV2Config {
         dozhim: (["off", "soft", "standard", "strong"] as DozhimPreset[]).includes(st.dozhim) ? st.dozhim : "standard",
       }
     }),
+    stage1: normalizeStage1(r.stage1),
+    stage2: normalizeStage2(r.stage2),
+    communications: normalizeCommunications(r.communications),
   }
+}
+
+// ── Нормализация нативных полей (терпимо к мусору; отсутствие → undefined) ──────
+const clamp100 = (n: unknown): number | undefined =>
+  typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : undefined
+const posInt = (n: unknown): number | undefined =>
+  typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.round(n)) : undefined
+const str = (s: unknown): string | undefined => (typeof s === "string" ? s : undefined)
+
+function normalizeStage1(raw: unknown): FunnelV2Stage1 | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const s = raw as Record<string, unknown>
+  const out: FunnelV2Stage1 = {}
+  if (posInt(s.inviteDelaySeconds) !== undefined) out.inviteDelaySeconds = posInt(s.inviteDelaySeconds)
+  if (typeof s.offHoursEnabled === "boolean") out.offHoursEnabled = s.offHoursEnabled
+  if (posInt(s.offHoursDelaySeconds) !== undefined) out.offHoursDelaySeconds = posInt(s.offHoursDelaySeconds)
+  if (str(s.offHoursText) !== undefined) out.offHoursText = str(s.offHoursText)
+  if (str(s.rejectLetter) !== undefined) out.rejectLetter = str(s.rejectLetter)
+  if (posInt(s.rejectionDelayMinutes) !== undefined) out.rejectionDelayMinutes = posInt(s.rejectionDelayMinutes)
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function normalizeStage2(raw: unknown): FunnelV2Stage2 | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const s = raw as Record<string, unknown>
+  const out: FunnelV2Stage2 = {}
+  if (typeof s.enabled === "boolean") out.enabled = s.enabled
+  if (clamp100(s.passThreshold) !== undefined) out.passThreshold = clamp100(s.passThreshold)
+  if (clamp100(s.aiEvalThreshold) !== undefined) out.aiEvalThreshold = clamp100(s.aiEvalThreshold)
+  if (s.transferMode === "seamless" || s.transferMode === "message" || s.transferMode === "both") out.transferMode = s.transferMode
+  if (typeof s.contentBlockId === "string") out.contentBlockId = s.contentBlockId
+  else if (s.contentBlockId === null) out.contentBlockId = null
+  if (str(s.passScreenTitle) !== undefined) out.passScreenTitle = str(s.passScreenTitle)
+  if (str(s.passScreenText) !== undefined) out.passScreenText = str(s.passScreenText)
+  if (str(s.messageText) !== undefined) out.messageText = str(s.messageText)
+  if (posInt(s.delaySeconds) !== undefined) out.delaySeconds = posInt(s.delaySeconds)
+  if (str(s.failScreenTitle) !== undefined) out.failScreenTitle = str(s.failScreenTitle)
+  if (str(s.failScreenText) !== undefined) out.failScreenText = str(s.failScreenText)
+  if (s.failAction === "none" || s.failAction === "pending_manual" || s.failAction === "pending_rejection") out.failAction = s.failAction
+  if (posInt(s.failRejectDelayMinutes) !== undefined) out.failRejectDelayMinutes = posInt(s.failRejectDelayMinutes)
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function normalizeCommunications(raw: unknown): FunnelV2Communications | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const c = raw as Record<string, unknown>
+  const out: FunnelV2Communications = {}
+  if (c.tgAlerts && typeof c.tgAlerts === "object") {
+    const t = c.tgAlerts as Record<string, unknown>
+    out.tgAlerts = {
+      enabled: t.enabled === true,
+      minResumeScore: clamp100(t.minResumeScore) ?? null,
+      minAnswersScore: clamp100(t.minAnswersScore) ?? null,
+      onGatePassed: t.onGatePassed !== false,
+    }
+  }
+  if (c.hotCandidate && typeof c.hotCandidate === "object") {
+    const h = c.hotCandidate as Record<string, unknown>
+    out.hotCandidate = {
+      enabled: h.enabled === true,
+      threshold: clamp100(h.threshold) ?? 70,
+      staleAfterHours: typeof h.staleAfterHours === "number" && Number.isFinite(h.staleAfterHours)
+        ? Math.max(1, Math.min(72, Math.round(h.staleAfterHours))) : 3,
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 // ── Дефолт-шаблон воронки v2 (инициализация пустой воронки) ───────────────────

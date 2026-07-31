@@ -48,6 +48,8 @@ const FINALIST_STAGES = new Set([
   "offer", "proposal", "negotiation", "won",
   "interview", "interviewed", "phone_interview", "scheduled",
   "decision", "final_decision", "preboarding",
+  // B9-фикс 14.07: канонические слаги v2-движка
+  "offer_sent", "reference_check",
 ])
 // Стадии «новый / первичный контакт».
 const NEW_STAGES = new Set(["new", "primary_contact", "primary", "imported"])

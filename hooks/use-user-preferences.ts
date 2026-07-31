@@ -11,15 +11,40 @@ export interface ListSortPref {
 
 export interface UserPreferences {
   viewMode: CandidatesViewMode
-  columns: Record<string, boolean>
+  // Личный override колонок списка кандидатов (Портрет/Демо/Анкета/…) поверх
+  // company-default (hiring-defaults.candidateColumns) — решение владельца
+  // 17.07: тумблеры активны у ВСЕХ ролей, не только у директора (было B5
+  // 10.06 — read-only для не-директоров). Partial — храним только реально
+  // изменённые пользователем ключи, остальное наследуется от company-default.
+  candidateColumns: Partial<Record<string, boolean>>
   // null — нет сохранённого выбора. Page инжектит дефолт при первом визите.
   listSort: ListSortPref | null
 }
 
 const DEFAULT_PREFS: UserPreferences = {
   viewMode: "list",
-  columns: {},
+  candidateColumns: {},
   listSort: null,
+}
+
+// Whitelist ключей candidateColumns — должен совпадать с CardDisplaySettings
+// (components/dashboard/card-settings.tsx) и серверным ALLOWED_CANDIDATE_COLUMN_KEYS
+// (app/api/user/preferences/route.ts). Не импортируем сам тип, чтобы не тянуть
+// UI-компонент в этот общий хук (по аналогии с ALLOWED_LIST_SORT_KEYS выше).
+const ALLOWED_CANDIDATE_COLUMN_KEYS = new Set([
+  "showSalary", "showSalaryFull", "showScore", "showResumeScore", "showPortraitScore",
+  "showAnswersScore", "showTestScore", "showNextInterview", "showAge", "showSource",
+  "showCity", "showExperience", "showSkills", "showActions", "showProgress",
+  "showResponseDate", "showNameWarning",
+])
+
+function normalizeCandidateColumns(raw: unknown): Partial<Record<string, boolean>> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {}
+  const out: Partial<Record<string, boolean>> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (ALLOWED_CANDIDATE_COLUMN_KEYS.has(k) && typeof v === "boolean") out[k] = v
+  }
+  return out
 }
 
 const ALLOWED_MODES: CandidatesViewMode[] = ["funnel", "list", "kanban", "tiles"]
@@ -41,15 +66,12 @@ function normalizeListSort(raw: unknown): ListSortPref | null {
 
 function normalize(raw: unknown): UserPreferences {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_PREFS }
-  const r = raw as { viewMode?: unknown; columns?: unknown; listSort?: unknown }
+  const r = raw as { viewMode?: unknown; candidateColumns?: unknown; listSort?: unknown }
   const viewMode = ALLOWED_MODES.includes(r.viewMode as CandidatesViewMode)
     ? (r.viewMode as CandidatesViewMode)
     : "list"
-  const columns =
-    r.columns && typeof r.columns === "object" && !Array.isArray(r.columns)
-      ? (r.columns as Record<string, boolean>)
-      : {}
-  return { viewMode, columns, listSort: normalizeListSort(r.listSort) }
+  const candidateColumns = normalizeCandidateColumns(r.candidateColumns)
+  return { viewMode, candidateColumns, listSort: normalizeListSort(r.listSort) }
 }
 
 /**
@@ -79,7 +101,7 @@ export function useUserPreferences() {
 
   const persist = useCallback((patch: {
     viewMode?: CandidatesViewMode
-    columns?: Record<string, boolean>
+    candidateColumns?: Partial<Record<string, boolean>>
     listSort?: ListSortPref | null
   }) => {
     inflight.current?.abort()
@@ -101,10 +123,10 @@ export function useUserPreferences() {
     [persist],
   )
 
-  const setColumns = useCallback(
-    (columns: Record<string, boolean>) => {
-      setPrefs((p) => ({ ...p, columns }))
-      persist({ columns })
+  const setCandidateColumns = useCallback(
+    (candidateColumns: Partial<Record<string, boolean>>) => {
+      setPrefs((p) => ({ ...p, candidateColumns }))
+      persist({ candidateColumns })
     },
     [persist],
   )
@@ -117,5 +139,5 @@ export function useUserPreferences() {
     [persist],
   )
 
-  return { prefs, loaded, setViewMode, setColumns, setListSort }
+  return { prefs, loaded, setViewMode, setCandidateColumns, setListSort }
 }

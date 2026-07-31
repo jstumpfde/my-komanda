@@ -1,5 +1,5 @@
 // E-commerce: убран из меню, планируется позже
-export type ModuleId = 'hr' | 'knowledge' | 'learning' | 'tasks' | 'marketing' | 'sales' | 'b2b' | 'warehouse' | 'logistics' | 'booking' | 'dialer' | 'qc' | 'email_marketing' | 'price_monitor' | 'ai_rop'
+export type ModuleId = 'hr' | 'knowledge' | 'learning' | 'tasks' | 'marketing' | 'sales' | 'b2b' | 'warehouse' | 'logistics' | 'booking' | 'dialer' | 'qc' | 'email_marketing' | 'price_monitor' | 'business_assistant' | 'ai_rop'
 
 export interface MenuItem {
   label: string

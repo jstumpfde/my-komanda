@@ -334,6 +334,11 @@ export async function executeStageEntry(
   candidate: CandidateForExecutor,
   vacancy: VacancyForExecutor,
   stage: FunnelV2Stage,
+  // Off-hours «мягкое подтверждение»: если задан непустой текст — исполнитель
+  // шлёт ТОЛЬКО его (зеркало legacy offHoursSoftMode), не выполняя обычное
+  // действие стадии. Передаётся из process-queue при входе НОВОГО кандидата в
+  // нерабочее время. Для автопродвижения/крона не задаётся (обычное поведение).
+  opts?: { offHoursSoftText?: string | null },
 ): Promise<StageEntryResult> {
   const companyId = vacancy.companyId ?? ""
   const { firstName } = await getCandidateFirstName(candidate.id)
@@ -349,6 +354,39 @@ export async function executeStageEntry(
     vacancy:   vacancy.title ?? "",
     company:   companyName,
     demo_link: demoUrl,
+  }
+
+  // ── Off-hours «мягкое подтверждение» (зеркало legacy offHoursSoftMode) ──────
+  // В нерабочее время process-queue не откладывает кандидата до утра, а просит
+  // отправить ОДНО мягкое подтверждение получения (текст, который HR написал
+  // для вечера/ночи) ВМЕСТО полноценного приглашения стадии — БЕЗ демо/тест-
+  // ссылки и БЕЗ запуска дожима/автопродвижения. HR продолжит диалог утром.
+  // Ссылку НЕ форс-аппендим: уходит ровно то, что HR задал в off-hours-тексте
+  // (если он сам вписал {{demo_link}} — подставится; нет — сообщение без ссылки).
+  // hh-папку двигаем как обычно (stage.hhStatus) — это первый контакт.
+  const offHoursSoftText = (opts?.offHoursSoftText ?? "").trim()
+  if (offHoursSoftText) {
+    const softText = renderTemplate(offHoursSoftText, baseVars)
+    const sentSoft = await sendHhMessageToCandidate(candidate.id, companyId, softText, stage.hhStatus)
+    if (!sentSoft) {
+      console.warn("[funnel-v2/executor] off-hours мягкое подтверждение не отправлено", {
+        candidateId: candidate.id, stageId: stage.id,
+      })
+    }
+    const softResult: StageEntryResult = {
+      action:      "message_sent",
+      description: `Off-hours: мягкое подтверждение кандидату ${candidate.id} на стадии ${stage.id} (без ссылки/дожима)`,
+    }
+    console.log("[funnel-v2/executor]", JSON.stringify({
+      tag:         "funnel-v2/stage-entry",
+      candidateId: candidate.id,
+      vacancyId:   candidate.vacancyId,
+      stageId:     stage.id,
+      action:      stage.action,
+      result:      softResult.action,
+      offHours:    true,
+    }))
+    return softResult
   }
 
   let result: StageEntryResult

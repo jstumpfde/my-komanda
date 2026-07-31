@@ -5,12 +5,14 @@ import {
   Phone, Mail, MapPin, Briefcase, GraduationCap, Globe2, Plane,
   DollarSign, Calendar, ExternalLink, Languages, Wrench,
   Car, Award, Link2, Clock, Send, MessageSquare,
-  Lock, Train, Globe, FileBadge, BadgeCheck, AtSign,
+  Lock, Train, Globe, FileBadge, BadgeCheck, AtSign, FileText,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { extractAllContacts, type ExtractedContact } from "@/lib/hh/extract-resume-fields"
+import { ResumePdfPanel } from "@/components/candidates/resume-pdf-panel"
+import { PhoneMessengerLinks } from "@/components/candidates/phone-messenger-links"
 
 // ─── Types — описывают только нужные поля сырого hh resume ────────────────────
 //
@@ -178,6 +180,15 @@ interface HhRawData {
 
 interface HhResumeInfoProps {
   rawData: unknown
+  // Id кандидата в нашей БД — нужен только для ссылки «Скачать PDF»
+  // (/api/modules/hr/candidates/[id]/resume-pdf). Опционален для обратной
+  // совместимости со старыми вызовами компонента без этого пропа.
+  candidateId?: string
+  // Флаг доступности PDF из GET /api/modules/hr/candidates/[id]
+  // (hasResumePdf) — ЕДИНЫЙ источник правды с роутом resume-pdf (тот же
+  // резолвер lib/hh/resolve-resume-id.ts). НЕ выводить из alternate_url:
+  // у легаси-кандидатов PDF бывает доступен и без него, и наоборот.
+  hasResumePdf?: boolean
   // Fallback на наши собственные поля кандидата
   fallback: {
     phone: string | null
@@ -433,6 +444,7 @@ function iconForContactType(typeId: string): React.ComponentType<{ className?: s
 // под контактом (критично для HR, чтобы не звонили «не туда»).
 function ContactEntryRow({ contact }: { contact: ExtractedContact }) {
   const Icon = iconForContactType(contact.typeId)
+  const isPhone = contact.typeId === "cell" || contact.typeId === "home" || contact.typeId === "work"
   const content = (
     <>
       <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -455,6 +467,8 @@ function ContactEntryRow({ contact }: { contact: ExtractedContact }) {
         ) : (
           <div className="flex items-center gap-2 text-muted-foreground">{content}</div>
         )}
+        {/* Значки мессенджеров по номеру (как на hh.ru) — только для телефонных контактов */}
+        {isPhone && <PhoneMessengerLinks phone={contact.display} />}
         {contact.preferred && (
           <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-medium px-1.5 py-0 h-4">
             Предпочтительный
@@ -547,7 +561,11 @@ function ExperienceCard({ exp }: { exp: HhExperience }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
+export function HhResumeInfo({ rawData, candidateId, hasResumePdf, fallback }: HhResumeInfoProps) {
+  // Панель просмотра PDF резюме — открывается ПОВЕРХ карточки кандидата
+  // (боковой Sheet), больше не новой вкладкой (заявка Юрия 15.07).
+  const [resumePdfOpen, setResumePdfOpen] = useState(false)
+
   const raw = (rawData && typeof rawData === "object" ? rawData : {}) as HhRawData
   // Иногда raw_data — это сам resume (без вложенного ключа resume).
   const resume: HhResume | undefined = raw.resume
@@ -688,7 +706,7 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
     : []
 
   // ── Booleans для управления секциями ───────────────────────────────────────
-  const hasPersonal = !!(fullName || age || gender || desiredPosition || salary || citizenship.length > 0 || workTicket.length > 0 || resume?.alternate_url)
+  const hasPersonal = !!(fullName || age || gender || desiredPosition || salary || citizenship.length > 0 || workTicket.length > 0 || resume?.alternate_url || hasResumePdf)
   const hasContacts = !!(
     allContacts.length > 0 || fallbackPhone || fallbackEmail ||
     phoneHidden || emailHidden || city
@@ -745,16 +763,47 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
               <span className="text-foreground">{workTicket.join(", ")}</span>
             </Row>
           )}
-          {resume?.alternate_url && (
-            <a
-              href={resume.alternate_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Резюме на hh.ru
-            </a>
+          {(resume?.alternate_url || (hasResumePdf && candidateId)) && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              {resume?.alternate_url && (
+                <a
+                  href={resume.alternate_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Резюме на hh.ru
+                </a>
+              )}
+              {/* PDF резюме напрямую с hh.ru — для HR без доступа к личному
+                  кабинету hh. Роут сам резолвит resume_id и токен компании.
+                  Гейт — hasResumePdf из API карточки (тот же резолвер, что
+                  у роута), НЕ alternate_url: у легаси-кандидатов PDF бывает
+                  доступен и без него.
+                  15.07: открывается панелью поверх карточки (ResumePdfPanel),
+                  а не новой вкладкой — там же сохранить/распечатать/на весь
+                  экран, ветку «disabled» ниже (нет резюме) НЕ трогаем. */}
+              {hasResumePdf && candidateId ? (
+                <button
+                  type="button"
+                  onClick={() => setResumePdfOpen(true)}
+                  title="Откроется в панели — сохранить и распечатать можно там"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <FileText className="w-3 h-3" />
+                  Открыть PDF
+                </button>
+              ) : candidateId ? (
+                <span
+                  title="У кандидата нет привязки к резюме hh.ru — PDF недоступен"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground opacity-60 cursor-not-allowed select-none"
+                >
+                  <FileText className="w-3 h-3" />
+                  Открыть PDF
+                </span>
+              ) : null}
+            </div>
           )}
         </section>
       )}
@@ -781,13 +830,16 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
           {/* Fallback на наши поля кандидата — только если hh вообще не отдал
               contact[] (напр. resume-preview из /negotiations). */}
           {fallbackPhone && (
-            <a
-              href={`tel:${fallbackPhone}`}
-              className="flex items-center gap-2 text-sm hover:text-primary transition-colors break-all"
-            >
-              <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              {fallbackPhone}
-            </a>
+            <div className="flex items-center gap-2 text-sm flex-wrap">
+              <a
+                href={`tel:${fallbackPhone}`}
+                className="flex items-center gap-2 hover:text-primary transition-colors break-all"
+              >
+                <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                {fallbackPhone}
+              </a>
+              <PhoneMessengerLinks phone={fallbackPhone} />
+            </div>
           )}
           {fallbackEmail && (
             <a
@@ -1120,6 +1172,14 @@ export function HhResumeInfo({ rawData, fallback }: HhResumeInfoProps) {
             </div>
           )}
         </section>
+      )}
+      {hasResumePdf && candidateId && (
+        <ResumePdfPanel
+          candidateId={candidateId}
+          candidateName={fullName || null}
+          open={resumePdfOpen}
+          onOpenChange={setResumePdfOpen}
+        />
       )}
     </div>
   )

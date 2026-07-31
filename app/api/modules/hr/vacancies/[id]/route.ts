@@ -76,6 +76,9 @@ export async function PUT(
       // кандидата — «Сохранить изменения в шаблоне»). Плейсхолдеры
       // {{name}}/{{vacancy}}/{{schedule_link}}.
       schedule_invite_text?: string
+      // Текст мягкого напоминания «пройдите Демо-3 до интервью». Плейсхолдеры
+      // {{name}}/{{vacancy}}/{{company}}/{{manager}}/{{demo3_link}}.
+      demo3_before_interview_text?: string
       // M3: какие каналы откликов слушает вакансия (['hh'] / ['hh','avito']).
       channel_sources?: Array<"hh" | "avito">
       // Уровень 3 интеграций: per-vacancy override webhooks/bitrix.
@@ -132,6 +135,10 @@ export async function PUT(
     // Текст приглашения на интервью (шаблон вакансии).
     if (typeof body.schedule_invite_text === "string") {
       updates.scheduleInviteText = body.schedule_invite_text
+    }
+    // Текст напоминания «пройдите Демо-3 до интервью» (drizzle/0279).
+    if (typeof body.demo3_before_interview_text === "string") {
+      updates.demo3BeforeInterviewText = body.demo3_before_interview_text
     }
     // Уровень 3 интеграций: per-vacancy override webhooks/bitrix.
     if (body.integrations_override !== undefined) {

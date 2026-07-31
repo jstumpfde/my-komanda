@@ -51,6 +51,7 @@ import {
   Play,
   RotateCcw,
   Pencil,
+  Link as LinkIcon,
   Trash2,
   EyeOff,
   Eye,
@@ -63,6 +64,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  FileText,
 } from "lucide-react"
 import {
   Dialog,
@@ -103,8 +105,12 @@ import type { Lesson, Block } from "@/lib/course-types"
 import { AnswersTab } from "./answers-tab"
 import { TestTab } from "./test-tab"
 import { HhResumeInfo } from "./hh-resume-info"
+import { PhoneMessengerLinks } from "./phone-messenger-links"
+import { ResumePdfPanel } from "./resume-pdf-panel"
 import { AiMatchCardV2 } from "./ai-match-card-v2"
 import { getBlockScore } from "@/lib/demo/block-scores"
+import { buildFunnelLinkButtons, type DemoButtonBlock, type FunnelLinkExtras } from "@/lib/demo/demo-quick-links"
+import { linkifyText } from "@/lib/linkify"
 import {
   generateCriteriaFromSpec,
   computeAutoScore,
@@ -345,7 +351,10 @@ function SurveyContactsBlock({ contacts: sc }: { contacts: SurveyContacts }) {
         {fullName && <SurveyRow label="Имя">{fullName}</SurveyRow>}
         {sc.phone && (
           <SurveyRow label="Телефон">
-            <a href={`tel:${sc.phone}`} className="hover:text-primary">{sc.phone}</a>
+            <span className="inline-flex items-center gap-2 flex-wrap">
+              <a href={`tel:${sc.phone}`} className="hover:text-primary">{sc.phone}</a>
+              <PhoneMessengerLinks phone={sc.phone} />
+            </span>
           </SurveyRow>
         )}
         {sc.email && (
@@ -886,6 +895,10 @@ export function CandidateDrawer({
 }: CandidateDrawerProps) {
   const { user } = useAuth()
   const [sheetExpanded, setSheetExpanded] = useState(false)
+  // Панель просмотра PDF резюме (легаси-кандидаты без hhRawData, см. ветку
+  // ниже) — открывается поверх карточки, а не новой вкладкой (заявка Юрия
+  // 15.07). Кандидатов с hhRawData обслуживает своя копия в HhResumeInfo.
+  const [resumePdfOpen, setResumePdfOpen] = useState(false)
   const [candidate, setCandidate] = useState<ApiCandidate | null>(null)
   // Notes хранятся в demo_progress_json у самого кандидата — отдельный
   // /notes-запрос сделал бы тот же select, поэтому держим notes как локальное
@@ -1046,6 +1059,28 @@ export function CandidateDrawer({
   const hhFetchRef = useRef<string | null>(null)
   const hhListRef = useRef<HTMLDivElement | null>(null)
   const hhInputRef = useRef<HTMLTextAreaElement | null>(null)
+  // Быстрая вставка ссылок воронки: демо-блоки (динамически) + Тест/Вакансия/
+  // Интервью по наличию. Полный набор кнопок строит buildFunnelLinkButtons.
+  const [demoQuickBlocks, setDemoQuickBlocks] = useState<DemoButtonBlock[]>([])
+  const [demoQuickBaseUrl, setDemoQuickBaseUrl] = useState("")
+  const [funnelExtras, setFunnelExtras] = useState<FunnelLinkExtras>({ hasTest: false, vacancyUrl: null, hasSchedule: false })
+  // Вставить фрагмент (ссылку) в поле «Написать кандидату» — в позицию курсора,
+  // иначе в конец. Курсор ставим после вставленного текста.
+  const insertIntoHhDraft = useCallback((snippet: string) => {
+    const el = hhInputRef.current
+    setHhDraft((prev) => {
+      if (!el) return prev ? `${prev.trimEnd()} ${snippet}` : snippet
+      const start = el.selectionStart ?? prev.length
+      const end = el.selectionEnd ?? prev.length
+      const next = prev.slice(0, start) + snippet + prev.slice(end)
+      requestAnimationFrame(() => {
+        el.focus()
+        const pos = start + snippet.length
+        el.setSelectionRange(pos, pos)
+      })
+      return next
+    })
+  }, [])
   // «Изменить» отправленное: hh API НЕ даёт редактировать сообщение —
   // единственный честный способ — отправить поправку вдогонку. Клик по «Изменить»
   // подставляет корректирующий шаблон в поле ввода и ставит фокус; HR дополняет и шлёт.
@@ -1278,6 +1313,34 @@ export function CandidateDrawer({
       })
       .finally(() => setScorecardLoading(false))
   }, [candidate, candidateId])
+
+  // Ссылки воронки для быстрых кнопок в чате кандидата: демо-блоки «Демо 1»…«Демо N»
+  // + наличие Тест/Вакансия/Интервью. Тянем при открытии карточки/смене вакансии;
+  // источник и формат — как в диалоге «Рассылка через hh» (общий помощник).
+  useEffect(() => {
+    const vacancyId = candidate?.vacancyId
+    const reset = () => {
+      setDemoQuickBlocks([])
+      setDemoQuickBaseUrl("")
+      setFunnelExtras({ hasTest: false, vacancyUrl: null, hasSchedule: false })
+    }
+    if (!open || !vacancyId) { reset(); return }
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/demo-blocks`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: ({ demoBlocks?: DemoButtonBlock[]; baseUrl?: string } & Partial<FunnelLinkExtras>) | null) => {
+        if (cancelled) return
+        setDemoQuickBlocks(Array.isArray(data?.demoBlocks) ? data!.demoBlocks : [])
+        setDemoQuickBaseUrl(typeof data?.baseUrl === "string" ? data!.baseUrl : "")
+        setFunnelExtras({
+          hasTest: data?.hasTest === true,
+          vacancyUrl: typeof data?.vacancyUrl === "string" ? data!.vacancyUrl : null,
+          hasSchedule: data?.hasSchedule === true,
+        })
+      })
+      .catch(() => { if (!cancelled) reset() })
+    return () => { cancelled = true }
+  }, [open, candidate?.vacancyId])
 
   // Автосейв на каждый тап критерия — пересчитывает autoScore на клиенте
   // (для мгновенного отклика UI) И отправляет на сервер (источник правды —
@@ -2224,6 +2287,8 @@ export function CandidateDrawer({
                 {candidate.hhRawData ? (
                   <HhResumeInfo
                     rawData={candidate.hhRawData}
+                    candidateId={candidate.id}
+                    hasResumePdf={candidate.hasResumePdf ?? false}
                     fallback={{
                       phone: candidate.phone,
                       email: candidate.email,
@@ -2240,10 +2305,13 @@ export function CandidateDrawer({
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Контакты</h3>
                       <div className="space-y-1.5">
                         {candidate.phone && (
-                          <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
-                            <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            {candidate.phone}
-                          </a>
+                          <div className="flex items-center gap-2 text-sm flex-wrap">
+                            <a href={`tel:${candidate.phone}`} className="flex items-center gap-2 hover:text-primary transition-colors">
+                              <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              {candidate.phone}
+                            </a>
+                            <PhoneMessengerLinks phone={candidate.phone} />
+                          </div>
                         )}
                         {candidate.email && (
                           <a href={`mailto:${candidate.email}`} className="flex items-center gap-2 text-sm hover:text-primary transition-colors">
@@ -2313,6 +2381,29 @@ export function CandidateDrawer({
                       )}
                     </section>
                   ) : null
+                )}
+
+                {/* Ветка без hhRawData (нет hh_responses): у легаси-кандидатов
+                    (hh_candidates.hh_resume_id без hh_responses — старый
+                    HHClient.importApplications) PDF всё равно доступен —
+                    hasResumePdf из API карточки считает ТЕМ ЖЕ резолвером,
+                    что и роут resume-pdf (predeploy-guard 14.07). Кандидатам
+                    вовсе без hh-связки (ручные/Avito/рефералы) ничего не
+                    рисуем — вечная disabled-кнопка была бы шумом
+                    (minor второго guard-прогона).
+                    15.07: открывается панелью поверх карточки (ResumePdfPanel),
+                    а не новой вкладкой — там же сохранить/распечатать/на весь
+                    экран. */}
+                {!candidate.hhRawData && candidate.hasResumePdf && (
+                  <button
+                    type="button"
+                    onClick={() => setResumePdfOpen(true)}
+                    title="Откроется в панели — сохранить и распечатать можно там"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <FileText className="w-3 h-3" />
+                    Открыть PDF
+                  </button>
                 )}
 
                 {(candidate.source || candidate.referredByShortId) && (
@@ -2699,7 +2790,7 @@ export function CandidateDrawer({
                                             : "bg-muted/60 text-foreground border border-border/40"
                                         )}
                                       >
-                                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                                        <p className="whitespace-pre-wrap break-words">{linkifyText(m.text)}</p>
                                         <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
                                           <span>
                                             {m.createdAt
@@ -2762,6 +2853,34 @@ export function CandidateDrawer({
                       {/* Поле ввода при живом hh, иначе — плашка «не подключён» */}
                       {hhConnected ? (
                       <div className="pt-2 mt-1 border-t border-border/40 space-y-2">
+                        {/* Быстрая вставка персональных ссылок ВОРОНКИ: Демо 1..N
+                            (/demo/{длинный token}?block=<id>) + Тест (/test/{token}),
+                            Вакансия (hh-ссылка), Интервью (/schedule/{token}).
+                            Пункт показываем ТОЛЬКО если этап есть у вакансии
+                            (владелец: «если нет — скрываем»); пустой демо-блок серый. */}
+                        {candidate?.token && (() => {
+                          const linkButtons = buildFunnelLinkButtons(demoQuickBlocks, funnelExtras, candidate.token, demoQuickBaseUrl)
+                          if (linkButtons.length === 0) return null
+                          return (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">
+                                <LinkIcon className="w-3 h-3" /> Ссылка:
+                              </span>
+                              {linkButtons.map((b) => (
+                                <button
+                                  key={b.key}
+                                  type="button"
+                                  disabled={hhSending || b.disabled}
+                                  onClick={() => insertIntoHhDraft(b.url)}
+                                  title={b.disabled ? "У этого демо-блока пока нет контента" : `Вставить ссылку: ${b.url}`}
+                                  className="text-[10px] px-2 py-0.5 rounded-full border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  {b.label}
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                         {/* «Поправка»: удалить сообщение в hh нельзя — отправляем корректирующее вдогонку */}
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[10px] text-muted-foreground mr-0.5 inline-flex items-center gap-1">
@@ -3876,6 +3995,17 @@ export function CandidateDrawer({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Панель PDF резюме для легаси-ветки без hhRawData (кнопка выше).
+          Кандидатам с hhRawData панель рендерит сам HhResumeInfo. */}
+      {candidate && (
+        <ResumePdfPanel
+          candidateId={candidate.id}
+          candidateName={candidate.name}
+          open={resumePdfOpen}
+          onOpenChange={setResumePdfOpen}
+        />
+      )}
     </Sheet>
   )
 }

@@ -13,11 +13,16 @@ import type { CompanyHiringDefaults } from "@/lib/db/schema"
 import type { SchedulePageData, MethodConfig, SlotDay } from "@/lib/schedule-interview-types"
 import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
 import { createNotification } from "@/lib/notifications"
+import { maybeScheduleDemo3BeforeInterview } from "@/lib/messaging/demo3-before-interview"
 import { resolveDaySchedule, resolveVacancyDaySchedule, generateSlotsForWindows, JS_TO_DAY_ID } from "@/lib/schedule/day-windows"
 import { isNonWorkingDay } from "@/lib/schedule/holidays"
 import { getHolidaysForCountry } from "@/lib/holidays"
 import { normalizeFunnelV2, type InterviewMode } from "@/lib/funnel-v2/types"
 import { METHOD_DEFAULT_DURATIONS, DEFAULT_METHOD_BUFFER } from "@/lib/hiring/interview-methods"
+import {
+  DEFAULT_INTERVIEW_BOOKED_TITLE as DEFAULT_BOOKED_TITLE,
+  DEFAULT_INTERVIEW_BOOKED_TEXT as DEFAULT_BOOKED_TEXT,
+} from "@/lib/hh/default-messages"
 
 export type { SchedulePageData, MethodConfig, SlotDay }
 
@@ -51,9 +56,9 @@ const METHOD_LABELS: Record<string, string> = {
 
 // #26.4: платформенный дефолт текстов экрана "Вы записаны" — переопределяется
 // per-вакансия через descriptionJson.interviewBookedScreen {title, text}.
-// {{дата, время}} подставляется из подтверждённого слота.
-const DEFAULT_BOOKED_TITLE = "Вы записаны на интервью!"
-const DEFAULT_BOOKED_TEXT  = "Ждём вас {{дата, время}}. Мы напомним вам накануне и за 2 часа до встречи. Если планы изменятся — просто выберите другое время по этой же ссылке."
+// {{дата, время}} подставляется из подтверждённого слота. Константы —
+// DEFAULT_INTERVIEW_BOOKED_TITLE/TEXT (lib/hh/default-messages.ts), единый
+// источник с UI-редактором (interview-booked-screen-settings.tsx, 14.07).
 
 function buildBookedScreenTexts(
   descriptionJson: unknown,
@@ -334,6 +339,13 @@ export async function GET(
       .where(and(
         eq(calendarEvents.companyId, row.companyId),
         eq(calendarEvents.type, "interview"),
+        // Только ПОДТВЕРЖДЁННЫЕ занимают слот. Раньше фильтра по статусу не было
+        // и отменённое будущее интервью (status='cancelled' — самозапись
+        // перезаписалась, менеджер отменил, кандидат отменил) держало слот
+        // занятым, и никто не мог записаться на это время. Бронирование в
+        // POST-транзакции ниже уже считает занятость только по confirmed —
+        // приводим генерацию сетки к той же семантике.
+        eq(calendarEvents.status, "confirmed"),
         gte(calendarEvents.startAt, now),
         lte(calendarEvents.startAt, limit),
       ))
@@ -763,7 +775,7 @@ export async function POST(
       .set({ stage: "scheduled", updatedAt: new Date() })
       .where(and(
         eq(candidates.id, candidate.id),
-        sql`${candidates.stage} NOT IN ('scheduled','interview','interviewed','final_decision','offer','hired','rejected')`,
+        sql`${candidates.stage} NOT IN ('scheduled','interview','interviewed','final_decision','offer','offer_sent','reference_check','hired','rejected')`,
       ))
 
     // 8. #3.2 Уведомление HR: надёжное in-app (аудит 10.07 — раньше был только
@@ -792,6 +804,13 @@ export async function POST(
       `📍 Способ: ${methodLabel}` +
       (location ? `\n🏢 Адрес: ${escapeTgHtml(location)}` : ""),
     ).catch(() => {})
+
+    // 8.5 Мягкое напоминание «пройдите Демо-3 до интервью» (14.07): кандидат
+    // записался, но мог НЕ пройти последний демо-блок — ставим одно напоминание
+    // (гейт/дедуп/настраиваемый текст — внутри). Fire-and-forget, ошибка не
+    // влияет на ответ. Срабатывает только на НОВОЙ брони (alreadyBooked вышел раньше).
+    void maybeScheduleDemo3BeforeInterview({ candidateId: candidate.id, vacancyId: candidate.vacancyId })
+      .catch((err) => console.warn(`[schedule POST] demo3 reminder failed for ${candidate.id}:`, err))
 
     // 9. #26.4 Настраиваемые тексты экрана "Вы записаны" (platform-дефолт в коде,
     // переопределяется per-вакансия через descriptionJson.interviewBookedScreen).

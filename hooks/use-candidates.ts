@@ -14,6 +14,13 @@ export interface ApiCandidate {
   city: string | null
   source: string | null
   stage: string | null
+  // Момент первого открытия /demo/<shortId> кандидатом (candidates.demo_opened_at,
+  // schema.ts:1767). NULL = ещё не открывал. Заявка Юрия 15.07: колонка «Демо»
+  // в списке кандидатов различает по нему «ссылка отправлена, не открыл» от
+  // «сам ещё не открывал» — раньше оба состояния выглядели как «—»
+  // (components/dashboard/list-view.tsx, колонка id="progress"). Имя поля
+  // ФИКСИРОВАНО — по нему рисует колонка.
+  demoOpenedAt: string | null
   score: number | null
   salaryMin: number | null
   salaryMax: number | null
@@ -98,6 +105,10 @@ export interface ApiCandidate {
   updatedAt: string | null
   hhResponseId?: string | null
   hhRawData?: unknown
+  // Кандидату доступно скачивание PDF резюме с hh (резолвится resume_id по
+  // hh_candidates/hh_responses — lib/hh/resolve-resume-id.ts). Отдаётся ТОЛЬКО
+  // пер-кандидатным GET /api/modules/hr/candidates/[id] (не списками).
+  hasResumePdf?: boolean
   demoLessons?: unknown
   stageHistory?: unknown
   shortId?: string | null
@@ -134,6 +145,20 @@ export interface ApiCandidate {
   // скоркарте интервью для бейджа «Решение: Отказ (запланирован)».
   pendingRejectionAt?: string | null
   pendingRejectionReason?: string | null
+  // Разведка 14.07: авто-обработка кандидата остановлена (низкий AI-балл,
+  // rejectAction/midRangeAction переведён в ручной режим) — candidates.
+  // auto_processing_stopped_reason. Значение "below_threshold_manual_review" →
+  // бейдж «На ручной проверке» (components/dashboard/list-view.tsx), не
+  // путать с pendingRejectionReason (ведёт к отдельному бейджу «Предвар. отказ»).
+  autoProcessingStoppedReason?: string | null
+  // Задача 4 (14.07, корректировка v2): номера ВСЕХ полностью пройденных
+  // демо-блоков (1-based, по возрастанию) — бейдж-комбинация «Д1+2»
+  // (formatDemoBlockBadge). [] = ничего не пройдено, бейдж не рисуется.
+  // См. lib/demo/block-completion.ts. demoBlockTooltip — готовый текст
+  // построчной детализации («Д1 «Презентация» — пройден, балл 72\n…»),
+  // null если у вакансии ≤1 демо-блока.
+  completedDemoBlockIndexes?: number[]
+  demoBlockTooltip?: string | null
   // F7: Telegram-бот для кандидатов
   telegramChatId?: string | null
   telegramUsername?: string | null
@@ -204,6 +229,9 @@ export interface CandidatesFilters {
    *  demo_answers_score IS NOT NULL AND second_demo_invited_at IS NULL И не в
    *  отказе (ни 'rejected', ни 'preliminary_reject'). Только видимость. */
   reviewQueue?: boolean
+  /** Задача 4 (14.07): «Демо: ДN / не проходил». Значения — "1","2","3",...
+   *  (номер демо-блока) или "none" (ни один не пройден). Множественный выбор. */
+  demoBlock?: string[]
 }
 
 export interface CandidatesSortParams {
@@ -312,6 +340,7 @@ export function useCandidates(
         if (filters.ctaClicked) params.set("ctaClicked", "1")
         if (filters.hhPublication) params.set("hhPublication", filters.hhPublication)
         if (filters.reviewQueue) params.set("reviewQueue", "true")
+        if (filters.demoBlock && filters.demoBlock.length > 0) params.set("demoBlock", filters.demoBlock.join(","))
       }
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)
       if (!res.ok) {
@@ -552,6 +581,9 @@ export function usePaginatedCandidates({
         // SQL (см. route.ts: pre-fetch demoTotalBlocks → SQL WHERE с COUNT
         // подзапросом). count(*) корректен — фильтр в WHERE, а не post-fetch.
         if (filters.demoProgress?.length) params.set("demoProgress", filters.demoProgress.join(","))
+        // Задача 4 (14.07): «Демо: ДN» — тоже в SQL WHERE (route.ts,
+        // пер-вакансионная ветка), count(*) корректен в paginated режиме.
+        if (filters.demoBlock?.length) params.set("demoBlock", filters.demoBlock.join(","))
       }
 
       const res = await fetch(`/api/modules/hr/candidates?${params.toString()}`)

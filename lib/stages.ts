@@ -613,20 +613,61 @@ export interface FunnelV2StageLite {
 }
 
 /**
- * Маппинг action стадии воронки v2 → legacy StageSlug.
- * Зеркалит mapActionToLegacyStage() из lib/funnel-v2/advance-stage.ts, но
- * возвращает только slug'и, присутствующие в PLATFORM_STAGES (для дропдауна/
- * фильтра, где значения — StageSlug). offer → decision (в advance-stage это
- * legacy 'final_decision', но для UI-списка используем канонический decision).
+ * Маппинг action стадии воронки v2 → канонический StageSlug (legacy-поле
+ * candidates.stage). ЕДИНЫЙ ИСТОЧНИК для ДВУХ потребителей:
+ *   - lib/funnel-v2/advance-stage.ts::mapActionToLegacyStage — что писать в
+ *     БД при продвижении кандидата (В4, синхронный dual-write);
+ *   - resolveVacancyStageOptions ниже — из чего строить список стадий для
+ *     дропдауна/фильтра вакансии.
+ * Раньше это были ДВЕ независимые копии значений, которые разошлись (offer
+ * и reference_check тут уже были канонические, но mapActionToLegacyStage
+ * писал в БД старые legacy-значения final_decision/interview) — рассинхрон
+ * «кандидат физически на стадии X, а candidates.stage — другое», из-за
+ * которого воронка v2 на кандидатской карточке/фильтре могла не совпадать с
+ * колонкой канбана. Фикс B9 (14.07): держим ОДНУ карту, advance-stage.ts
+ * импортирует её напрямую вместо своей копии.
+ *
+ * decision        → decision (1:1, «Финальное решение по кандидату»).
+ * offer           → offer_sent (1:1 канонический слаг оффера; раньше
+ *   advance-stage.ts писал legacy 'final_decision' — расходилось с этой
+ *   картой и с большинством читателей, которые final_decision трактуют как
+ *   «около decision», не «около offer»).
+ * reference_check → reference_check (1:1, было ошибочно 'interview' в
+ *   advance-stage.ts — терялась разница с security_check).
+ * security_check  → reference_check — отдельного канон-слага «СБ-проверка»
+ *   нет (см. docs/architecture/FUNNEL-V2.md §4 «Стадия N — Проверки (СБ +
+ *   реф-чек)» — доку сам группирует их в ОДНУ стадию). НЕ decision: живой
+ *   легаси-путь app/api/public/demo/[token]/answer/route.ts (F2.B,
+ *   stageReason="demo_completed") пишет 'decision' как «демо пройдено»
+ *   (РАННЯЯ стадия, sortOrder по факту около 3-4 — так же трактует и
+ *   lib/column-config.ts, лейбл «Демо пройдено», байки колонки sortOrder=4
+ *   ИЗ ДЕВЯТИ) — это расходится с описанием PLATFORM_STAGES.decision здесь
+ *   («Финальное решение», sortOrder=11) и является ОТДЕЛЬНЫМ, уже
+ *   существующим B9-расхождением (см. lib/db/schema.ts, не в этом фиксе).
+ *   Если бы security_check→decision, кандидат ПОСЛЕ интервью (поздняя
+ *   стадия) отображался бы легаси-читателями как «только прошёл демо»
+ *   (ранняя) — новый, более грубый рассинхрон, чем текущий. reference_check
+ *   такой коллизии не имеет (используется последовательно везде), поэтому
+ *   security_check присоединяем к нему — в результате обе «проверочные»
+ *   стадии отличаются от 'interview' (был баг), даже если не отличаются
+ *   друг от друга (нет отдельного слага «СБ» — задокументированный компромисс).
+ * message/prequalification → primary_contact — ОСОЗНАННО оставлено без
+ *   изменений (аудит 14.07, B9-фикс): это самый общий «есть контакт с
+ *   кандидатом» сигнал, соответствует дефолтному месту этих action (первая
+ *   стадия воронки, см. defaultFunnelV2Stages в lib/funnel-v2/types.ts).
+ *   Точная привязка потребовала бы учитывать ПОЗИЦИЮ стадии в воронке (оба
+ *   action можно вставить куда угодно, напр. prequalification как «2-я часть
+ *   демо» в дефолт-шаблоне) — отдельная задача, не в этом фиксе.
  */
-const FUNNEL_V2_ACTION_TO_SLUG: Record<string, StageSlug> = {
+export const FUNNEL_V2_ACTION_TO_SLUG: Record<string, StageSlug> = {
   prequalification: "primary_contact",
   message:          "primary_contact",
   demo:             "demo_opened",
   test:             "test_task_sent",
   task:             "test_task_sent",
   interview:        "interview",
-  security_check:   "interview",
+  decision:         "decision",
+  security_check:   "reference_check",
   reference_check:  "reference_check",
   offer:            "offer_sent",
   hired:            "hired",

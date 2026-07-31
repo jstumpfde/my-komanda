@@ -288,14 +288,21 @@ export async function POST(
 
     // Дедупликация: тот же человек мог уже быть импортирован
     // с hh, но открыл публичную демо-ссылку другим путём. Прежде чем
-    // создавать новую карточку — ищем существующую по нормализованным
-    // (vacancy_id, phone) ИЛИ (vacancy_id, email).
-    const phoneNorm = normalizePhone(body.phone)
+    // создавать новую карточку — ищем существующую ТОЛЬКО по
+    // (vacancy_id, email). Телефон намеренно исключён — см. блок ⚠ IDOR
+    // ниже и memory apply-fallback-idor-p0.
     const emailNorm = normalizeEmail(body.email)
     const dupConds = []
-    if (phoneNorm) {
-      dupConds.push(sql`regexp_replace(coalesce(${candidates.phone}, ''), '\D', '', 'g') = ${phoneNorm}`)
-    }
+    // ⚠ IDOR (predeploy-guard 14.07, blocker): этот fallback при совпадении
+    // ПЕРЕЗАПИСЫВАЕТ PII найденного кандидата данными из формы и возвращает его
+    // внутренний UUID неаутентифицированному вызывающему (→ ?c=-bounce на чужую
+    // личную страницу). Телефон/почта — НЕ секрет, значит матч по ним = дыра.
+    // Дедуп по ТЕЛЕФОНУ здесь НЕ включаем (раньше он молча не работал из-за
+    // '\D'-готчи; чинить его = расширять IDOR). Почтовый матч оставлен как был
+    // на проде (не расширяем и не сужаем этим деплоем). Полное закрытие —
+    // отдельная P0-задача: перевести весь fallback на безопасную модель /start
+    // (нейтральный ответ, без перезаписи и без выдачи id). Безопасная
+    // самоидентификация кандидата теперь есть в /api/public/start/[token].
     if (emailNorm) {
       dupConds.push(sql`lower(trim(coalesce(${candidates.email}, ''))) = ${emailNorm}`)
     }

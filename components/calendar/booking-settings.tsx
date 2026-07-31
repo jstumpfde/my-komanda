@@ -33,6 +33,15 @@ import {
 } from "@/lib/hiring/interview-methods"
 import { resolveDaySchedule, type DayId, type DaySchedule } from "@/lib/schedule/day-windows"
 import { ManagerReminderBotCard } from "@/components/telegram/manager-reminder-bot-card"
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
+import {
+  DEFAULT_REMINDER_TEXTS,
+  REMINDER_KINDS,
+  REMINDER_KIND_LABELS,
+  REMINDER_TEXT_VARS,
+  type ReminderChannel,
+  type ReminderKind,
+} from "@/lib/hr/interview-reminder-texts"
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -158,6 +167,78 @@ function ZoomStatusPlate() {
   )
 }
 
+// ─── Тексты напоминаний (задача editable-interview-reminder-texts, 14.07) ──
+// Одно поле = один порог (24ч/утро/1ч/15мин) одного канала. Пусто → поле
+// показывает стандартный текст плейсхолдером и сервер рендерит его же
+// (см. lib/hr/interview-reminder-texts.ts DEFAULT_REMINDER_TEXTS).
+
+function ReminderTextField({
+  channel, kind, value, onChange,
+}: {
+  channel: ReminderChannel
+  kind: ReminderKind
+  value: string
+  onChange: (value: string) => void
+}) {
+  const defaultText = DEFAULT_REMINDER_TEXTS[channel][kind]
+  const isCustom = value.trim().length > 0
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs font-medium text-muted-foreground">{REMINDER_KIND_LABELS[kind]}</Label>
+        {isCustom && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange("")}
+            className="h-6 text-[11px] px-1.5 text-muted-foreground"
+          >
+            Сбросить к стандартному
+          </Button>
+        )}
+      </div>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={defaultText}
+        rows={3}
+        className="text-xs font-mono resize-y"
+      />
+    </div>
+  )
+}
+
+function ReminderTextsChannelSection({
+  channel, texts, onFieldChange,
+}: {
+  channel: ReminderChannel
+  texts: Partial<Record<ReminderKind, string>> | undefined
+  onFieldChange: (kind: ReminderKind, value: string) => void
+}) {
+  const vars = REMINDER_TEXT_VARS.filter((v) => v.channels.includes(channel))
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {vars.map((v) => (
+          <Badge key={v.token} variant="outline" title={v.description} className="text-[10px] font-mono cursor-help">
+            {v.token}
+          </Badge>
+        ))}
+      </div>
+      {REMINDER_KINDS.map((kind) => (
+        <ReminderTextField
+          key={kind}
+          channel={channel}
+          kind={kind}
+          value={texts?.[kind] ?? ""}
+          onChange={(value) => onFieldChange(kind, value)}
+        />
+      ))}
+    </div>
+  )
+}
+
 // ─── Обёртка с самозагрузкой ────────────────────────────────────────────────
 // В отличие от страницы «Настройки HR» (грузит defaults для всех секций),
 // шестерёнка календаря загружает hiring-defaults сама при открытии Sheet.
@@ -251,6 +332,20 @@ function BookingSettingsForm({
   const [remindMorning, setRemindMorning] = useState<boolean>(schedule.remindMorning ?? true)
   const [remind1h, setRemind1h] = useState<boolean>(schedule.remind1h ?? true)
   const [remind15m, setRemind15m] = useState<boolean>(schedule.remind15m ?? true)
+
+  // ── Тексты напоминаний (задача editable-interview-reminder-texts, 14.07) ──
+  // Пустая строка/undefined на поле → placeholder показывает эффективный
+  // дефолт (DEFAULT_REMINDER_TEXTS), сервер при пустом значении рендерит его
+  // же — «сбросить» просто очищает поле, ничего не «залипает» намертво.
+  const [reminderTexts, setReminderTexts] = useState<NonNullable<CompanyHiringDefaults["schedule"]>["reminderTexts"]>(
+    () => schedule.reminderTexts ?? {}
+  )
+  function setReminderTextField(channel: ReminderChannel, kind: ReminderKind, value: string) {
+    setReminderTexts(prev => ({
+      ...prev,
+      [channel]: { ...(prev?.[channel] ?? {}), [kind]: value },
+    }))
+  }
 
   // ── Флаг platform admin (для блока интеграций) ──
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
@@ -414,6 +509,8 @@ function BookingSettingsForm({
           remindMorning,
           remind1h,
           remind15m,
+          // тексты напоминаний (пусто на поле → дефолт, см. lib/hr/interview-reminder-texts.ts)
+          reminderTexts,
           // способ интервью по умолчанию
           defaultInterviewMethod: defaultMethod,
         },
@@ -949,6 +1046,42 @@ function BookingSettingsForm({
             </div>
             <Switch checked={remind15m} onCheckedChange={setRemind15m} />
           </div>
+
+          {/* Тексты напоминаний — кандидату (основное), HR/менеджер — второй секцией */}
+          <div className="pt-3 border-t">
+            <p className="text-sm font-medium mb-1">Тексты — кандидату</p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Сообщение в hh-чат кандидату на каждый порог. Пусто — используется стандартный текст (виден подсказкой в поле).
+            </p>
+            <ReminderTextsChannelSection
+              channel="candidate"
+              texts={reminderTexts?.candidate}
+              onFieldChange={(kind, value) => setReminderTextField("candidate", kind, value)}
+            />
+          </div>
+
+          <Accordion type="single" collapsible className="pt-1">
+            <AccordionItem value="hr">
+              <AccordionTrigger className="text-sm font-medium py-2">Тексты — HR-каналу (необязательно)</AccordionTrigger>
+              <AccordionContent>
+                <ReminderTextsChannelSection
+                  channel="hr"
+                  texts={reminderTexts?.hr}
+                  onFieldChange={(kind, value) => setReminderTextField("hr", kind, value)}
+                />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="manager">
+              <AccordionTrigger className="text-sm font-medium py-2">Тексты — менеджеру (необязательно)</AccordionTrigger>
+              <AccordionContent>
+                <ReminderTextsChannelSection
+                  channel="manager"
+                  texts={reminderTexts?.manager}
+                  onFieldChange={(kind, value) => setReminderTextField("manager", kind, value)}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
 

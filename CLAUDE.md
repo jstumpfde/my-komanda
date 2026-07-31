@@ -350,6 +350,28 @@ Cron авто-удаления — /api/cron/trash-cleanup (раз в сутки
 ```
 (00:00 UTC = 03:00 МСК; логируется в cron_runs.)
 
+## Кандидаты-призраки (демо-визиты)
+
+`/api/public/demo/[token]/visit` — bounce-роут, создающий кандидата на
+анонимный визит по referral-ссылке (нет валидной куки myk_candidate_uuid под
+уже существующего кандидата). Два механизма против мусора (13.07, 35 строк
+вычищено вручную на проде):
+- **Staff preview** — если запрос залогинен в платформу под сотрудником
+  компании-владельца вакансии (или платформенным админом), кандидат НЕ
+  создаётся вовсе — редирект на read-only `?as=hr` preview
+  (lib/public/staff-preview.ts).
+- **Авто-очистка** остального (боты/брошенные визиты) — крон
+  /api/cron/ghost-candidate-cleanup, критерий lib/candidates/ghost-cleanup.ts,
+  удаление — lib/candidates/hard-delete-ids.ts (та же логика, что bulk
+  hard_delete у HR).
+
+Cron — раз в сутки, следом за trash-cleanup (00:30 UTC = 03:30 МСК):
+```
+30 0 * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+  https://company24.pro/api/cron/ghost-candidate-cleanup \
+  >> /var/log/ghost-candidate-cleanup.log 2>&1
+```
+
 ## Отчёт по найму (/hr/report)
 
 Сводная аналитика по вакансиям компании. Агрегация — lib/hr/build-report.ts

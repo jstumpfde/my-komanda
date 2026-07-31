@@ -5,8 +5,12 @@
 // (действие, сообщение/контент, правило прохода+куда зовёт, цепочка дожима,
 // hh-статус, интервью). Над списком — тонкая read-only врезка «входной скан
 // резюме из Портрета» (НЕ пронумерована, это не стадия воронки); нумерация
-// реальных стадий начинается с 1. Конструктор без рантайма. Видно только
-// владельцу (гейт на странице + 404 на API).
+// реальных стадий начинается с 1.
+// Доступ (фикс 13.07): вкладка и сам конструктор (config/стадии) видны и
+// РЕДАКТИРУЕМЫ любым пользователем компании (изоляция по companyId в роуте).
+// Owner-only — только ВКЛючение рантайма движка (runtimeEnabled: true, 403
+// не-владельцу); ВЫКЛючение (false) и правка стадий доступны всем.
+// См. lib/funnel-v2/authz.ts + app/api/modules/hr/vacancies/[id]/funnel-v2/route.ts.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -45,11 +49,14 @@ import {
   type FunnelV2Config, type FunnelV2Stage, type StageActionType,
   type DozhimPreset, type InterviewMode, type DozhimTouch,
   type ScoreGate, type ScoreGateType, type ScoreGateFailAction,
+  type FunnelV2Stage1, type FunnelV2Stage2, type FunnelV2Communications,
 } from "@/lib/funnel-v2/types"
+import { resolveStage1, prefillNativeFromSpec, DEFAULT_HOT_CANDIDATE_THRESHOLD } from "@/lib/funnel-v2/native-config"
 import { STAGE_COLOR_CLASSES, type StageColor } from "@/lib/stages"
 import type { DripTemplates } from "@/lib/db/schema"
 import { renderTemplate } from "@/lib/template-renderer"
 import { guardOutgoingMessage } from "@/lib/messaging/outgoing-guard"
+import { AutoResponderSettings } from "@/components/vacancies/auto-responder-settings"
 
 // Предпросмотр: тестовые данные для подстановки переменных (как увидит кандидат).
 const PREVIEW_VARS: Record<string, string> = {
@@ -274,19 +281,31 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
         <SheetBody className="flex-1 overflow-y-auto px-5 py-4">
         <div className="mx-auto w-full max-w-5xl space-y-5">
 
-          {/* Тип этой стадии */}
+          {/* Тип этой стадии — компактный Select, не ряд кнопок (UX-фикс 13.07:
+              ряд из 11 pill-кнопок визуально путался с левым списком стадий воронки —
+              оба выглядели как навигация, хотя тип стадии почти всегда задаётся один
+              раз при создании через «+ Добавить стадию», сеточный выбор там не трогаем). */}
           <section className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Тип этой стадии</Label>
-            <p className="text-[11px] text-muted-foreground/70 -mt-0.5">Стадия — один шаг пути кандидата. Тип задаёт, что кандидат делает на этом шаге. Последовательность шагов — в списке слева.</p>
-            <div className="flex flex-wrap gap-1">
-              {STAGE_ACTIONS.map(a => {
-                const active = a.type === stage.action
-                return (
-                  <button key={a.type} type="button"
-                    onClick={() => patch(a.type === "interview" ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, messages: stage.messages, title: stage.title, hhStatus: stage.hhStatus } : { action: a.type, dozhimChain: dozhimChainFor(stage.dozhim, a.type, dripTemplates), dozhimChainOpened: dozhimChainForOpened(stage.dozhim, a.type, dripTemplates) })}
-                    className={cn("text-[11px] px-2 py-1 rounded-md border transition-colors", active ? "bg-blue-500/10 border-blue-400 text-blue-700 dark:text-blue-300 font-medium" : "border-border text-muted-foreground hover:bg-muted/50")}>{a.label}</button>
-                )
-              })}
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs text-muted-foreground">Тип стадии</Label>
+              <Select
+                value={stage.action}
+                onValueChange={(v) => {
+                  const a = v as StageActionType
+                  patch(a === "interview"
+                    ? { ...makeStage("interview", stage.id.slice(3)), id: stage.id, action: "interview", messagePresetId: stage.messagePresetId, messages: stage.messages, title: stage.title, hhStatus: stage.hhStatus }
+                    : { action: a, dozhimChain: dozhimChainFor(stage.dozhim, a, dripTemplates), dozhimChainOpened: dozhimChainForOpened(stage.dozhim, a, dripTemplates) })
+                }}
+              >
+                <SelectTrigger className="h-7 w-auto text-xs gap-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAGE_ACTIONS.map(a => (
+                    <SelectItem key={a.type} value={a.type} className="text-xs">{a.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <p className="text-[11px] text-muted-foreground/80">{meta.desc}</p>
           </section>
@@ -631,32 +650,276 @@ function StageSheet({ stage, index, allStages, content, onChange, onClose, dripT
 // ── Врезка «до стадий»: входной скан резюме из Портрета (read-only, НЕ стадия
 // воронки — без номера, тонкая строка-справка, чтобы не сливаться с реальной
 // стадией 1 «Отклик — скан резюме» ниже) ────────────────────────────────────
-interface SpecSummary { upper?: number; lower?: number; rejectAction?: "none" | "pending_manual" | "pending_rejection"; autoInvite?: boolean; stops: string[]; criteriaCount: number }
-function PortraitStageCard({ summary, loading, onOpen }: { summary: SpecSummary | null; loading: boolean; onOpen?: () => void }) {
-  const empty = !loading && summary && summary.criteriaCount === 0 && summary.stops.length === 0
+interface SpecSummary { upper?: number; lower?: number; rejectAction?: "none" | "pending_manual" | "pending_rejection"; autoInvite?: boolean; stops: string[]; criteriaCount: number; inviteDelaySeconds?: number; offHoursEnabled?: boolean; offHoursDelaySeconds?: number }
+// «180» → «3 мин», «15» → «15 сек», «90» → «1 мин 30 сек».
+function fmtDelay(sec: number): string {
+  if (sec <= 0) return "без задержки"
+  if (sec < 60) return `${sec} сек`
+  const m = Math.floor(sec / 60), s = sec % 60
+  return s === 0 ? `${m} мин` : `${m} мин ${s} сек`
+}
+
+// ── Панель Стадии 1 «Отклик → приглашение» (нативные редактируемые поля) ──────
+// Заменяет вчерашние read-only бэджи задержки/нерабочего времени: теперь это
+// собственные поля funnelV2.stage1, а не чтение из Портрета. Пороги отбора по
+// баллу и авто-приглашение остаются в Портрете (модель скоринга) — показываем
+// их read-only строкой со ссылкой «Открыть Портрет».
+function Stage1Card({ stage1, summary, loading, onChange, onOpenPortrait }: {
+  stage1: FunnelV2Stage1
+  summary: SpecSummary | null
+  loading: boolean
+  onChange: (s: FunnelV2Stage1) => void
+  onOpenPortrait?: () => void
+}) {
+  const patch = (p: Partial<FunnelV2Stage1>) => onChange({ ...stage1, ...p })
+  const inviteDelay = stage1.inviteDelaySeconds ?? 180
+  const offEnabled = stage1.offHoursEnabled ?? true
+  const offDelay = stage1.offHoursDelaySeconds ?? 15
+  const rejectDelay = stage1.rejectionDelayMinutes ?? 60
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-1 text-muted-foreground/80">
-      <Target className="w-3.5 h-3.5 shrink-0" />
-      <span className="text-xs">Входной скан резюме настраивается в Портрете</span>
-      {onOpen && <button onClick={onOpen} className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>}
-      <span className="flex flex-wrap gap-1 ml-auto">
-        {loading ? <span className="text-[11px] inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> загрузка…</span>
+    <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <Target className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium">Стадия 1 · Отклик → приглашение на демо</span>
+        <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground ml-auto">входной скан</span>
+      </div>
+
+      {/* Пороги/авто-приглашение — read-only из Портрета (модель скоринга) */}
+      <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground/80">
+        <span className="text-[11px]">Пороги балла и авто-приглашение — в Портрете</span>
+        {onOpenPortrait && <button onClick={onOpenPortrait} className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">Открыть Портрет <ExternalLink className="w-3 h-3" /></button>}
+        {loading ? <span className="text-[11px] inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> …</span>
           : summary ? (<>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">пороги &lt;{summary.lower ?? 40} / {summary.lower ?? 40}–{(summary.upper ?? 75) - 1} / ≥{summary.upper ?? 75}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">зона отказа: {summary.rejectAction === "pending_rejection" ? "авто-отказ" : summary.rejectAction === "pending_manual" ? "ручной разбор" : "выкл"}</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
-            {summary.stops.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/80">стоп: {summary.stops.join(", ")}</span>}
-            {empty && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/60">пусто → 100% проходят дальше</span>}
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">пороги &lt;{summary.lower ?? 40} / ≥{summary.upper ?? 75}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">зона отказа: {summary.rejectAction === "pending_rejection" ? "авто-отказ" : summary.rejectAction === "pending_manual" ? "ручной разбор" : "выкл"}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">авто-приглашение {summary.autoInvite ? "вкл" : "выкл"}</span>
+            {summary.stops.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60">стоп: {summary.stops.join(", ")}</span>}
           </>) : <span className="text-[10px] text-muted-foreground/60">Портрет не настроен → проходят все</span>}
-      </span>
+      </div>
+
+      {/* Нативные редактируемые поля тайминга/текстов */}
+      <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+        <FieldRow label="Задержка первого сообщения, сек">
+          <div className="flex items-center gap-1.5">
+            <Input type="number" min={0} value={inviteDelay} onChange={e => patch({ inviteDelaySeconds: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+            <span className="text-[11px] text-muted-foreground">{fmtDelay(inviteDelay)}</span>
+          </div>
+        </FieldRow>
+        <FieldRow label="Слать в нерабочее время">
+          <Switch checked={offEnabled} onCheckedChange={v => patch({ offHoursEnabled: v })} />
+        </FieldRow>
+        {offEnabled && (
+          <>
+            <FieldRow label="Задержка в нерабочее время, сек">
+              <div className="flex items-center gap-1.5">
+                <Input type="number" min={0} value={offDelay} onChange={e => patch({ offHoursDelaySeconds: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+                <span className="text-[11px] text-muted-foreground">{fmtDelay(offDelay)}</span>
+              </div>
+            </FieldRow>
+            <FieldRow label="Текст в нерабочее время" align="top">
+              <Textarea value={stage1.offHoursText ?? ""} onChange={e => patch({ offHoursText: e.target.value })} placeholder="Мягкое подтверждение: «{{name}}, спасибо за отклик! Ответим утром.»" className="min-h-[80px] text-base md:text-base" />
+            </FieldRow>
+          </>
+        )}
+        <FieldRow label="Текст авто-отказа" align="top">
+          <Textarea value={stage1.rejectLetter ?? ""} onChange={e => patch({ rejectLetter: e.target.value })} placeholder="Пусто → стандартный мягкий текст отказа" className="min-h-[80px] text-base md:text-base" />
+        </FieldRow>
+        <FieldRow label="Задержка отказа, мин">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={0} value={rejectDelay} onChange={e => patch({ rejectionDelayMinutes: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+            {rejectDelay >= 60 && <span className="text-[11px] text-muted-foreground">= {Math.floor(rejectDelay / 60)} ч{rejectDelay % 60 ? ` ${rejectDelay % 60} мин` : ""}</span>}
+          </div>
+        </FieldRow>
+      </div>
+    </div>
+  )
+}
+
+// ── Панель Стадии 2 «Демо 1-я часть → переход на 2-ю часть» (нативные поля) ────
+// Зеркало spec.anketaPassInvite. Гейт срабатывает на сабмите анкеты демо; при
+// включённом движке v2 рантайм читает эти поля (см. native-config.ts).
+const STAGE2_TRANSFER_OPTS: Array<{ v: "seamless" | "message" | "both"; label: string }> = [
+  { v: "both", label: "Бесшовно + письмо (рекомендуется)" },
+  { v: "seamless", label: "Только бесшовно (на странице)" },
+  { v: "message", label: "Только письмом" },
+]
+const STAGE2_FAIL_OPTS: Array<{ v: "none" | "pending_manual" | "pending_rejection"; label: string }> = [
+  { v: "none", label: "Ничего (мягкий экран «Спасибо»)" },
+  { v: "pending_manual", label: "Ручной разбор HR" },
+  { v: "pending_rejection", label: "Отложенный авто-отказ" },
+]
+function Stage2Card({ stage2, content, onChange }: {
+  stage2: FunnelV2Stage2
+  content: ContentBlock[]
+  onChange: (s: FunnelV2Stage2) => void
+}) {
+  const patch = (p: Partial<FunnelV2Stage2>) => onChange({ ...stage2, ...p })
+  const enabled = stage2.enabled ?? false
+  const transferMode = stage2.transferMode ?? "both"
+  const failAction = stage2.failAction ?? "none"
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <Route className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium">Стадия 2 · Переход на 2-ю часть демо</span>
+        <Switch checked={enabled} onCheckedChange={v => patch({ enabled: v })} className="ml-auto" />
+      </div>
+      {enabled && (
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+          <FieldRow label="Порог правильных ответов">
+            <div className="flex items-center gap-1.5">
+              <Input type="number" min={0} max={100} value={stage2.passThreshold ?? 35} onChange={e => patch({ passThreshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" />
+              <span className="text-[11px] text-muted-foreground w-8">%</span>
+            </div>
+          </FieldRow>
+          <FieldRow label="Порог AI-оценки ответов">
+            <div className="flex items-center gap-1.5">
+              <Input type="number" min={0} max={100} value={stage2.aiEvalThreshold ?? 45} onChange={e => patch({ aiEvalThreshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-20 h-10 text-base" />
+              <span className="text-[11px] text-muted-foreground w-8">из 100</span>
+            </div>
+          </FieldRow>
+          <p className="text-[11px] text-muted-foreground/80">Проходит во 2-ю часть, если взят <b>любой</b> из двух порогов (ИЛИ-гейт).</p>
+          <FieldRow label="Блок «2-я часть»">
+            <Select value={stage2.contentBlockId ?? "none"} onValueChange={v => patch({ contentBlockId: v === "none" ? null : v })}>
+              <SelectTrigger className="h-11 text-base"><SelectValue placeholder="боевой блок" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— боевой блок —</SelectItem>
+                {content.map(c => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </FieldRow>
+          <FieldRow label="Способ перевода">
+            <Select value={transferMode} onValueChange={v => patch({ transferMode: v as "seamless" | "message" | "both" })}>
+              <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
+              <SelectContent>{STAGE2_TRANSFER_OPTS.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </FieldRow>
+          {(transferMode === "seamless" || transferMode === "both") && (
+            <>
+              <FieldRow label="Плашка: заголовок">
+                <Input value={stage2.passScreenTitle ?? ""} onChange={e => patch({ passScreenTitle: e.target.value })} placeholder="Вы молодец!" className="h-11 text-base" />
+              </FieldRow>
+              <FieldRow label="Плашка: текст" align="top">
+                <Textarea value={stage2.passScreenText ?? ""} onChange={e => patch({ passScreenText: e.target.value })} placeholder="Вы прошли первую часть. Продолжим — впереди 2-я часть демо." className="min-h-[70px] text-base md:text-base" />
+              </FieldRow>
+            </>
+          )}
+          {(transferMode === "message" || transferMode === "both") && (
+            <>
+              <FieldRow label="Письмо-приглашение" align="top">
+                <Textarea value={stage2.messageText ?? ""} onChange={e => patch({ messageText: e.target.value })} placeholder="{{name}}, отлично — вы прошли первую часть! Следующий шаг: {{demo_link}}" className="min-h-[80px] text-base md:text-base" />
+              </FieldRow>
+              <FieldRow label="Задержка письма, сек">
+                <div className="flex items-center gap-1.5">
+                  <Input type="number" min={0} value={stage2.delaySeconds ?? 900} onChange={e => patch({ delaySeconds: Math.max(0, Number(e.target.value) || 0) })} className="w-24 h-10 text-base" />
+                  <span className="text-[11px] text-muted-foreground">{fmtDelay(stage2.delaySeconds ?? 900)}</span>
+                </div>
+              </FieldRow>
+            </>
+          )}
+          <div className="rounded-lg bg-muted/40 p-3 space-y-2.5">
+            <span className="text-xs font-medium text-rose-700 dark:text-rose-400">Не прошёл гейт →</span>
+            <FieldRow label="Экран «Спасибо»: заголовок">
+              <Input value={stage2.failScreenTitle ?? ""} onChange={e => patch({ failScreenTitle: e.target.value })} placeholder="Спасибо!" className="h-11 text-base" />
+            </FieldRow>
+            <FieldRow label="Экран «Спасибо»: текст" align="top">
+              <Textarea value={stage2.failScreenText ?? ""} onChange={e => patch({ failScreenText: e.target.value })} placeholder="Пусто → стандартный финальный экран демо" className="min-h-[70px] text-base md:text-base" />
+            </FieldRow>
+            <FieldRow label="Действие">
+              <Select value={failAction} onValueChange={v => patch({ failAction: v as "none" | "pending_manual" | "pending_rejection" })}>
+                <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
+                <SelectContent>{STAGE2_FAIL_OPTS.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </FieldRow>
+            {failAction === "pending_rejection" && (
+              <FieldRow label="Задержка отказа, мин">
+                <Input type="number" min={1} value={stage2.failRejectDelayMinutes ?? 60} onChange={e => patch({ failRejectDelayMinutes: Math.max(1, Number(e.target.value) || 60) })} className="w-24 h-10 text-base" />
+              </FieldRow>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Секция «Коммуникации воронки» ─────────────────────────────────────────────
+// Нативные поля funnelV2.communications: TG-уведомления о подходящих кандидатах
+// и «горячий кандидат стынет» (перенос из Портрета). Стоп-слова и FAQ — через
+// встроенный AutoResponderSettings (общее режимо-независимое хранилище).
+function CommunicationsCard({ vacancyId, comms, onChange }: {
+  vacancyId: string
+  comms: FunnelV2Communications
+  onChange: (c: FunnelV2Communications) => void
+}) {
+  const tg = comms.tgAlerts ?? { enabled: false, minResumeScore: null, minAnswersScore: null, onGatePassed: true }
+  const hot = comms.hotCandidate ?? { enabled: false, threshold: DEFAULT_HOT_CANDIDATE_THRESHOLD, staleAfterHours: 3 }
+  const patchTg = (p: Partial<typeof tg>) => onChange({ ...comms, tgAlerts: { ...tg, ...p } })
+  const patchHot = (p: Partial<typeof hot>) => onChange({ ...comms, hotCandidate: { ...hot, ...p } })
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 space-y-4">
+      <div className="flex items-center gap-2">
+        <MessageSquare className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium">Коммуникации воронки</span>
+      </div>
+
+      {/* Стоп-слова + частые вопросы (общее хранилище, работает во всех режимах) */}
+      <AutoResponderSettings vacancyId={vacancyId} />
+
+      {/* Telegram: подходящие кандидаты */}
+      <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="text-xs font-medium">Telegram: подходящие кандидаты</span>
+            <p className="text-[11px] text-muted-foreground/80">Карточка кандидата в канал компании, когда он проходит пороги.</p>
+          </div>
+          <Switch checked={tg.enabled} onCheckedChange={v => patchTg({ enabled: v })} className="shrink-0" />
+        </div>
+        {tg.enabled && (
+          <>
+            <FieldRow label="Мин. балл резюме">
+              <Input type="number" min={0} max={100} value={tg.minResumeScore ?? ""} placeholder="—" onChange={e => patchTg({ minResumeScore: e.target.value === "" ? null : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+            <FieldRow label="Мин. балл ответов">
+              <Input type="number" min={0} max={100} value={tg.minAnswersScore ?? ""} placeholder="—" onChange={e => patchTg({ minAnswersScore: e.target.value === "" ? null : Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+            <FieldRow label="Слать при прохождении гейта">
+              <Switch checked={tg.onGatePassed} onCheckedChange={v => patchTg({ onGatePassed: v })} />
+            </FieldRow>
+          </>
+        )}
+      </div>
+
+      {/* Горячий кандидат стынет */}
+      <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="text-xs font-medium">Горячий кандидат стынет</span>
+            <p className="text-[11px] text-muted-foreground/80">Уведомить HR, если кандидат с высоким баллом открыл демо и застыл.</p>
+          </div>
+          <Switch checked={hot.enabled} onCheckedChange={v => patchHot({ enabled: v })} className="shrink-0" />
+        </div>
+        {hot.enabled && (
+          <>
+            <FieldRow label="Порог «высокого» балла">
+              <Input type="number" min={0} max={100} value={hot.threshold} onChange={e => patchHot({ threshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+            <FieldRow label="Часов бездействия до алерта">
+              <Input type="number" min={1} max={72} value={hot.staleAfterHours} onChange={e => patchHot({ staleAfterHours: Math.max(1, Math.min(72, Number(e.target.value) || 1)) })} className="w-24 h-10 text-base" />
+            </FieldRow>
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
 // ── Главный конструктор ──────────────────────────────────────────────────────
-export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { vacancyId: string; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
+export function FunnelV2Builder({ vacancyId, isOwner = false, onOpenPortrait, onOpenChatbot }: { vacancyId: string; isOwner?: boolean; onOpenPortrait?: () => void; onOpenChatbot?: () => void }) {
   const [config, setConfig] = useState<FunnelV2Config | null>(null)
   const [summary, setSummary] = useState<SpecSummary | null>(null)
+  const [rawSpec, setRawSpec] = useState<Record<string, unknown> | null>(null)
+  const prefilledRef = useRef(false)
   const [content, setContent] = useState<ContentBlock[]>([])
   const [specLoading, setSpecLoading] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -790,6 +1053,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
       .then((d: { spec?: Record<string, unknown> } | null) => {
         if (cancelled) return
         const spec = d?.spec; if (!spec) { setSummary(null); return }
+        setRawSpec(spec)
         const rt = (spec.resumeThresholds ?? {}) as Record<string, unknown>
         const sf = (spec.stopFactors ?? {}) as Record<string, unknown>
         const STOP_LABELS: Record<string, string> = { city: "город", format: "формат", age: "возраст", experience: "опыт", documents: "документы", citizenship: "гражданство", salaryExpectation: "зарплата" }
@@ -797,7 +1061,7 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
         const nice = Array.isArray(spec.niceToHave) ? spec.niceToHave.length : 0
         const must = Array.isArray(spec.mustHave) ? spec.mustHave.length : 0
         const deal = Array.isArray(spec.dealBreakers) ? spec.dealBreakers.length : 0
-        setSummary({ upper: typeof rt.upperThreshold === "number" ? rt.upperThreshold : undefined, lower: typeof rt.lowerThreshold === "number" ? rt.lowerThreshold : undefined, rejectAction: rt.rejectAction === "pending_manual" || rt.rejectAction === "pending_rejection" ? rt.rejectAction as "pending_manual" | "pending_rejection" : rt.autoRejectEnabled === true ? "pending_rejection" : "none", autoInvite: rt.autoInviteEnabled === true, stops, criteriaCount: nice + must + deal })
+        setSummary({ upper: typeof rt.upperThreshold === "number" ? rt.upperThreshold : undefined, lower: typeof rt.lowerThreshold === "number" ? rt.lowerThreshold : undefined, rejectAction: rt.rejectAction === "pending_manual" || rt.rejectAction === "pending_rejection" ? rt.rejectAction as "pending_manual" | "pending_rejection" : rt.autoRejectEnabled === true ? "pending_rejection" : "none", autoInvite: rt.autoInviteEnabled === true, stops, criteriaCount: nice + must + deal, inviteDelaySeconds: typeof rt.inviteDelaySeconds === "number" ? rt.inviteDelaySeconds : undefined, offHoursEnabled: rt.offHoursEnabled !== false, offHoursDelaySeconds: typeof rt.offHoursDelaySeconds === "number" ? rt.offHoursDelaySeconds : undefined })
       })
       .catch(() => { if (!cancelled) setSummary(null) })
       .finally(() => { if (!cancelled) setSpecLoading(false) })
@@ -817,6 +1081,19 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
   }, [vacancyId])
   const update = useCallback((next: FunnelV2Config) => { setConfig(next); persist(next) }, [persist])
 
+  // Однократное предзаполнение нативных полей копией Портрета при первом открытии
+  // конструктора. Срабатывает, когда загружены и config, и spec, и хотя бы один
+  // из блоков stage1/stage2/communications ещё не сохранён. Persist снапшота
+  // фиксирует независимость: дальше изменения в Портрете на воронку не влияют.
+  useEffect(() => {
+    if (prefilledRef.current) return
+    if (!config || !rawSpec) return
+    if (config.stage1 && config.stage2 && config.communications) { prefilledRef.current = true; return }
+    const { changed, config: filled } = prefillNativeFromSpec(config, rawSpec)
+    prefilledRef.current = true
+    if (changed) { setConfig(filled); persist(filled) }
+  }, [config, rawSpec, persist])
+
   const stages = config?.stages ?? []
   const stageIds = useMemo(() => stages.map(s => s.id), [stages])
   const editing = stages.find(s => s.id === editingId) ?? null
@@ -824,6 +1101,9 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
 
   const addStage = (action: StageActionType) => { if (!config) return; const st = makeStage(action, `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`); update({ ...config, stages: [...config.stages, st] }); setEditingId(st.id) }
   const changeStage = (s: FunnelV2Stage) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === s.id ? s : x) }) }
+  const changeStage1 = (s1: FunnelV2Stage1) => { if (!config) return; update({ ...config, stage1: s1 }) }
+  const changeStage2 = (s2: FunnelV2Stage2) => { if (!config) return; update({ ...config, stage2: s2 }) }
+  const changeCommunications = (c: FunnelV2Communications) => { if (!config) return; update({ ...config, communications: c }) }
   const toggleStageEnabled = (id: string, val: boolean) => { if (!config) return; update({ ...config, stages: config.stages.map(x => x.id === id ? { ...x, enabled: val } as FunnelV2Stage : x) }) }
   // «Загрузить типовую воронку» — заполнить пустую воронку дефолт-шаблоном пути продаж.
   const loadDefault = () => {
@@ -874,9 +1154,12 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
       </div>
 
       {/* Тумблер движка v2: включает рантайм для ЭТОЙ вакансии. По умолчанию
-          выключен — кандидаты идут по легаси-пути. Включение = живая автоматика. */}
+          выключен — кандидаты идут по легаси-пути. Включение = живая автоматика.
+          Направленный гейт (паритет с бэкендом canApplyFunnelV2Update): ВКЛючить
+          может только владелец и только при наличии стадий; ВЫКЛючить (напр.
+          аварийно, если владелец включил и ушёл) — любой пользователь компании. */}
       <div className={cn("rounded-xl border p-3 flex items-start gap-3", runtimeEnabled ? "border-emerald-300/60 bg-emerald-500/5" : "border-border bg-muted/30")}>
-        <Switch checked={runtimeEnabled} onCheckedChange={toggleRuntime} disabled={runtimeBusy || stages.length === 0} className="mt-0.5" />
+        <Switch checked={runtimeEnabled} onCheckedChange={toggleRuntime} disabled={runtimeBusy || (!runtimeEnabled && (stages.length === 0 || !isOwner))} className="mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Движок воронки v2</span>
@@ -886,16 +1169,20 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
               : <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">выключен</span>}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {stages.length === 0
-              ? "Добавьте хотя бы одну стадию, чтобы включить движок."
-              : runtimeEnabled
-                ? "Новые кандидаты этой вакансии идут по воронке v2 — авто-сообщения, движение по стадиям и дожим выполняются автоматически. Существующие кандидаты остаются на легаси-пути."
-                : "Кандидаты идут по легаси-пути. Включите, чтобы НОВЫЕ кандидаты этой вакансии пошли по воронке v2. Это живая автоматика — сообщения уходят кандидатам."}
+            {!isOwner
+              ? runtimeEnabled
+                ? "Движок включён владельцем платформы — новые кандидаты идут по воронке v2. В экстренном случае вы можете его выключить; включить обратно сможет только владелец."
+                : "Включение движка доступно только владельцу платформы. Стадии воронки вы можете настраивать и сохранять — они применятся, когда движок включат."
+              : stages.length === 0
+                ? "Добавьте хотя бы одну стадию, чтобы включить движок."
+                : runtimeEnabled
+                  ? "Новые кандидаты этой вакансии идут по воронке v2 — авто-сообщения, движение по стадиям и дожим выполняются автоматически. Существующие кандидаты остаются на легаси-пути."
+                  : "Кандидаты идут по легаси-пути. Включите, чтобы НОВЫЕ кандидаты этой вакансии пошли по воронке v2. Это живая автоматика — сообщения уходят кандидатам."}
           </p>
         </div>
       </div>
 
-      <PortraitStageCard summary={summary} loading={specLoading} onOpen={onOpenPortrait} />
+      <Stage1Card stage1={config?.stage1 ?? {}} summary={summary} loading={specLoading} onChange={changeStage1} onOpenPortrait={onOpenPortrait} />
 
       {/* Сквозной слой: AI чат-бот. Не стадия — работает поверх ВСЕХ стадий
           (отвечает кандидатам на любом шаге). Тумблер тут же; промпт/фильтры/
@@ -940,6 +1227,10 @@ export function FunnelV2Builder({ vacancyId, onOpenPortrait, onOpenChatbot }: { 
           </div>
         </SortableContext>
       </DndContext>
+
+      <Stage2Card stage2={config?.stage2 ?? {}} content={content} onChange={changeStage2} />
+
+      <CommunicationsCard vacancyId={vacancyId} comms={config?.communications ?? {}} onChange={changeCommunications} />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

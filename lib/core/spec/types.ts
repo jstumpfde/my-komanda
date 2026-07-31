@@ -144,18 +144,27 @@ const ResumeThresholdsObjectSchema = z.object({
    * На какую стадию воронки hh переводить кандидата при авто-приглашении
    * (по одной чистой метке, см. UI):
    *   phone_interview — «Первичный контакт» на hh (ДЕФОЛТ)
-   *   consider        — «Подумать» на hh
    *   interview       — Собеседование
    *   assessment      — Тестовое задание
    * Маппится на действие changeNegotiationState в lib/hh/process-queue.ts
    * (phone_interview → "invitation", остальные 1:1).
    *
-   * Отложенный фикс 29.06 (влит 11.07, HANDOFF-funnel-hh): семантика по hh API —
-   * phone_interview = «Первичный контакт», consider = «Подумать». Старые подписи
-   * были перепутаны, и дефолт consider отправлял приглашённых в «Подумать» —
-   * выглядело как игнор и снижало индекс вежливости работодателя.
+   * ИСТОРИЯ: «consider» (синоним «Подумать» на hh) был ошибочно установлен дефолтом
+   * и использовался в старых вакансиях. Инцидент 13.07: старые Spec'и с
+   * inviteHhStage="consider" отправляли приглашённых в hh-папку «Подумать»
+   * вместо корректной «Первичный контакт», что выглядело как игнор. Фикс 13.07:
+   * значение "consider" исключено из enum'а (валидация на уровне схемы) — UI
+   * больше не может ОТПРАВИТЬ "consider". Старые записи в БД, у которых оно уже
+   * сохранено, схема сама по себе НЕ чинит (Zod либо принимает валидное значение,
+   * либо отказывает целиком). Нормализация "consider"→"phone_interview" сделана
+   * ОТДЕЛЬНО в normalizeLegacyInviteHhStage() (см. ниже) и вызывается на ЧТЕНИИ,
+   * в store.ts::getSpec(), ДО safeParse — иначе такие записи проваливали бы
+   * safeParse и откатывались на сырой fallback, а последующий PUT с тем же
+   * непонятым значением падал бы 400 на ЛЮБОЕ поле Портрета этой вакансии.
+   * См. также: Отложенный фикс 29.06 (влит 11.07, HANDOFF-funnel-hh), сам
+   * маппинг семантики hh API всё ещё корректен.
    */
-  inviteHhStage: z.enum(["phone_interview", "consider", "interview", "assessment"]).default("phone_interview"),
+  inviteHhStage: z.enum(["phone_interview", "interview", "assessment"]).default("phone_interview"),
   /**
    * Какой контент-блок показать приглашённому кандидату (id строки demos,
    * kind='block:<id>'). null = «боевой» блок вакансии (kind='demo'/'test',
@@ -875,6 +884,40 @@ export const CandidateSpecSchema = z.object({
 })
 
 export type CandidateSpec = z.infer<typeof CandidateSpecSchema>
+
+/**
+ * БАГФИКС 13.07 (инцидент consider→phone_interview, Task 1 плана
+ * funnel-v2-hardening — см. подробный комментарий над полем inviteHhStage
+ * выше): защитная нормализация устаревшего значения
+ * resumeThresholds.inviteHhStage="consider" ПЕРЕД прогоном через
+ * CandidateSpecSchema.safeParse(). Часть вакансий на проде успела сохранить
+ * "consider" ДО того, как значение убрали из enum'а (коммит 6c7a1734) —
+ * без этой нормализации такие записи проваливают safeParse целиком, и
+ * store.ts::getSpec() откатывается на сырой fallback с непонятым значением,
+ * которое затем ломает валидацию ЛЮБОГО следующего PUT (см. store.ts).
+ *
+ * Вынесена в чистую функцию (без DB-импортов), чтобы:
+ *   1. Не мутировать вход (возвращает новый объект только если нашла что чинить).
+ *   2. Быть тестируемой изолированно, без мока БД (см. types.test.ts).
+ *
+ * Принимает `unknown`, т.к. вызывается ДО валидации — на этом этапе форма
+ * объекта из БД не гарантирована. Любая неожиданная форма (не объект, нет
+ * resumeThresholds, другое значение inviteHhStage) — возвращается как есть,
+ * никаких исключений.
+ */
+export function normalizeLegacyInviteHhStage(spec: unknown): unknown {
+  if (!spec || typeof spec !== "object") return spec
+  const rt = (spec as Record<string, unknown>).resumeThresholds
+  if (!rt || typeof rt !== "object") return spec
+  if ((rt as Record<string, unknown>).inviteHhStage !== "consider") return spec
+  return {
+    ...(spec as Record<string, unknown>),
+    resumeThresholds: {
+      ...(rt as Record<string, unknown>),
+      inviteHhStage: "phone_interview",
+    },
+  }
+}
 
 /**
  * Ответ API GET /api/core/spec/[vacancyId].

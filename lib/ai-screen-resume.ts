@@ -14,6 +14,7 @@ import { AI_SAFETY_PROMPT } from "@/lib/ai-safety"
 import { getClaudeApiUrl } from "@/lib/claude-proxy"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { logAiCall } from "@/lib/ai/usage-log"
+import { logAiCallFailure } from "@/lib/ai/failure-log"
 import { AI_MODEL_FAST } from "@/lib/ai/models"
 import { formatWorkHistory } from "@/lib/hh/extract-resume-fields"
 
@@ -257,7 +258,12 @@ ${buildWeightsSection(v.aiWeights)}` + AI_SAFETY_PROMPT
     }
     raw = content.text.trim()
   } catch (err) {
-    console.warn("[screen-resume] API call failed:", err instanceof Error ? err.message : err)
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.warn("[screen-resume] API call failed:", errMsg)
+    // Сторож найма (drizzle/0277): платформенный детектор массового сбоя AI
+    // (checkAiOutageSpike) читает этот лог за скользящее окно 10-15 мин —
+    // fire-and-forget, не блокирует и не может провалить скоринг.
+    void logAiCallFailure({ source: "screen-resume", errorMessage: errMsg, vacancyId: vacancyId ?? null })
     return null
   }
 

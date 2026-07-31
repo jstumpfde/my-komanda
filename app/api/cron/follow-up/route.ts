@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { eq, and, lte, gte, ne, isNotNull, inArray, sql, desc } from "drizzle-orm"
+import { eq, and, lte, gte, ne, isNotNull, inArray, sql, desc, or, like } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies, candidates, followUpMessages, followUpCampaigns, hhResponses, companies, users, testSubmissions, vacancySpecs } from "@/lib/db/schema"
+import { vacancies, candidates, demos, followUpMessages, followUpCampaigns, hhResponses, companies, users, testSubmissions, vacancySpecs } from "@/lib/db/schema"
+import { decideDemo3BeforeInterview } from "@/lib/messaging/demo3-gate"
 import { changeNegotiationState, sendNegotiationMessage } from "@/lib/hh-api"
 import { getValidToken } from "@/lib/hh-helpers"
 import { shouldStopFollowUp } from "@/lib/followup/should-stop"
@@ -451,10 +452,24 @@ async function processOneTouch(
   // стоп-триггеры и rate-limit, рабочее окно соблюдаем. Содержит {{demo_link}},
   // указывающий на override-блок кандидата.
   const isSecondDemoInvite = msg.branch === "second_demo_invite"
+  // branch='demo3_invite' — адресная кампания «Демо-3» (scripts/send-demo3-invite.ts):
+  // приглашение пройти конкретный демо-блок по прямой ссылке /demo/<token>?block=<id>.
+  // Одиночное транзакционное касание (не дожим): пропускаем стоп-триггеры, дневной
+  // rate-limit и портрет-гейт дожимов. Ссылка подставлена скриптом при создании
+  // строки; штатные {{переменные}} ({{имя}} и т.п.) рендерит cron как обычно.
+  // Собственная страховка на момент отправки — блок isDemo3Invite ниже.
+  const isDemo3Invite = msg.branch === "demo3_invite"
+  // branch='demo3_before_interview' — мягкое напоминание «пройдите Демо-3 до
+  // интервью» (lib/messaging/demo3-before-interview.ts): ставится записавшимся/
+  // переведённым в interview, кто не прошёл последний демо-блок. Одноразовое
+  // транзакционное касание: без стоп-триггеров дожима и дневного rate-limit,
+  // рабочее окно соблюдаем. Ссылка /demo/<token>?block=<id> подставлена при
+  // создании строки; собственная страховка на отправке — блок ниже.
+  const isDemo3BeforeInterview = msg.branch === "demo3_before_interview"
   const isOneOffPostAnketa =
     msg.branch === "anketa_confirmation" || msg.branch === "anketa_auto_reply"
     || isChainStep || isOffHoursFirst || isTestAfterMessage || isTestInvite || isTestReminder || isTestFollowup
-    || isScheduleInvite || isSecondDemoInvite
+    || isScheduleInvite || isSecondDemoInvite || isDemo3Invite || isDemo3BeforeInterview
   if (!isOneOffPostAnketa) {
     // Стоп-триггеры (вакансия закрыта / демо пройдено / отказ /
     // автоматизация остановлена) — только для обычной цепочки дожима.
@@ -515,6 +530,31 @@ async function processOneTouch(
     }
   }
 
+  // demo3_invite: страховка на момент отправки — между созданием строки скриптом
+  // и cron-тиком кандидат мог уйти в отказ/найм или попросить остановить
+  // автоматику (automation_paused / auto_processing_stopped). Стадии interview+
+  // НЕ отменяем — владелец явно включил «пропустивших Демо-2» на интервью в
+  // когорту кампании (14.07).
+  if (isDemo3Invite) {
+    const [cand] = await db
+      .select({
+        stage:            candidates.stage,
+        autoStopped:      candidates.autoProcessingStopped,
+        automationPaused: candidates.automationPaused,
+      })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!cand) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    if (cand.stage === "rejected" || cand.stage === "hired" || cand.autoStopped || cand.automationPaused) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "stage_terminal" }
+    }
+  }
+
   // Тест-дожим: отменяем напоминание, если кандидат уже СДАЛ тест
   // (test_submissions.submitted_at задан) или ушёл в отказ/найм/авто-стоп.
   if (isTestReminder) {
@@ -539,7 +579,7 @@ async function processOneTouch(
     // Поздние стадии (интервью и дальше) = HR уже принял решение вручную —
     // напоминание про тест неактуально (Юрий 03.07: ручная смена стадии
     // отменяет автосообщения прошлых этапов).
-    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer"].includes(cand.stage ?? "") || cand.autoStopped) {
+    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer", "offer_sent", "reference_check"].includes(cand.stage ?? "") || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "stage_terminal" }
     }
@@ -590,7 +630,7 @@ async function processOneTouch(
       return { outcome: "cancelled", reason: "test_opened" }
     }
     // Поздние стадии — как в isTestReminder: ручное решение HR отменяет дожим.
-    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer"].includes(cand.stage ?? "") || cand.autoStopped) {
+    if (["rejected", "hired", "interview", "scheduled", "interviewed", "final_decision", "offer", "offer_sent", "reference_check"].includes(cand.stage ?? "") || cand.autoStopped) {
       await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: "stage_terminal" }
     }
@@ -636,6 +676,47 @@ async function processOneTouch(
     return { outcome: "cancelled", reason: "vacancy_missing" }
   }
 
+  // demo3_before_interview: страховка на момент отправки. Между постановкой
+  // напоминания (при брони/переводе в interview) и cron-тиком кандидат мог уйти
+  // в отказ/найм, попросить стоп-автоматику ИЛИ УЖЕ пройти Демо-3 — тогда
+  // напоминание неактуально, отменяем (тот же чистый гейт, что при постановке).
+  if (isDemo3BeforeInterview) {
+    const [c3] = await db
+      .select({
+        stage:            candidates.stage,
+        autoStopped:      candidates.autoProcessingStopped,
+        automationPaused: candidates.automationPaused,
+        demoBlockScores:  candidates.demoBlockScores,
+      })
+      .from(candidates)
+      .where(eq(candidates.id, msg.candidateId))
+      .limit(1)
+    if (!c3) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "candidate_missing" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "candidate_missing" }
+    }
+    if (c3.stage === "rejected" || c3.stage === "hired" || c3.autoStopped || c3.automationPaused) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_terminal" }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: "stage_terminal" }
+    }
+    const demo3Rows = await db
+      .select({ id: demos.id, title: demos.title, lessonsJson: demos.lessonsJson })
+      .from(demos)
+      .where(and(
+        eq(demos.vacancyId, campaign.vacancyId),
+        or(eq(demos.kind, "demo"), like(demos.kind, "block:%")),
+      ))
+      .orderBy(demos.sortOrder, demos.createdAt)
+    const demo3Decision = decideDemo3BeforeInterview({
+      demoRows: demo3Rows,
+      demoBlockScores: c3.demoBlockScores as Record<string, { score?: number }> | null,
+    })
+    if (!demo3Decision.shouldRemind) {
+      await db.update(followUpMessages).set({ status: "cancelled", errorMessage: `demo3_${demo3Decision.reason}` }).where(eq(followUpMessages.id, msg.id))
+      return { outcome: "cancelled", reason: `demo3_${demo3Decision.reason}` }
+    }
+  }
+
   // Гейт «не дожимать кандидатов с Портретом ниже N» (drizzle/0259, инцидент
   // 06.07). Дефолт ВЫКЛ (minPortraitScoreEnabled=false) → поведение байт-в-байт
   // как раньше. Применяется ТОЛЬКО к реальным дожимным касаниям — не трогаем
@@ -658,6 +739,19 @@ async function processOneTouch(
       console.info(`[cron/follow-up] ${msg.candidateId} skip_low_portrait score=${scoreRow?.resumeScore} threshold=${campaign.minPortraitScore} branch=${msg.branch}`)
       // Не отменяем (кандидат может быть пересчитан позже) — держим pending,
       // следующий тик перепроверит. Симметрично с outbound_paused/mutex skip.
+      //
+      // Инцидент 11-14.07 (head-of-line blocking): раньше scheduled_at тут НЕ
+      // менялся → одна и та же порция обречённых pending-строк (ORDER BY
+      // scheduled_at ASC LIMIT 200, см. processCampaignTouches) заново
+      // попадала в выборку каждый тик и съедала всё окно LIMIT — до нуля
+      // отправок падало вообще всё, включая касания вроде schedule_invite/
+      // second_demo_invite, которых этот гейт не касается (они просто не
+      // долетали до SELECT). Балл может подняться после рескора — переносим
+      // scheduled_at на +6ч, чтобы строка ушла из головы очереди, но тик её
+      // ещё раз переоценил.
+      await db.update(followUpMessages)
+        .set({ scheduledAt: new Date(now.getTime() + 6 * 60 * 60 * 1000) })
+        .where(eq(followUpMessages.id, msg.id))
       return { outcome: "skipped", reason: gateDecision.reason }
     }
   }
@@ -675,13 +769,40 @@ async function processOneTouch(
       }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "cancelled", reason: mutex.reason }
     }
-    // action === "skip" — оставляем pending, следующий cron перепроверит.
+    // action === "skip" — оставляем pending (не отменяем).
+    //
+    // Инцидент 11-14.07 (head-of-line blocking, см. комментарий у гейта
+    // Портрета выше): scheduled_at раньше не двигался → legacy-хвост
+    // вакансий, переведённых на v2, вечно торчал в голове очереди (ORDER BY
+    // scheduled_at ASC LIMIT 200) и съедал весь LIMIT каждый тик. Переносим
+    // на +24ч с маркером в errorMessage; при ВЫКЛючении рантайма v2 PUT
+    // funnel-v2 сбрасывает такие строки на now — отправка возобновляется
+    // ближайшим тиком, а не через сутки.
+    await db.update(followUpMessages)
+      .set({
+        scheduledAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        errorMessage: "deferred_legacy_superseded_by_v2",
+      })
+      .where(eq(followUpMessages.id, msg.id))
     return { outcome: "skipped", reason: mutex.reason }
   }
 
   // Пауза исходящей очереди: если HR приостановил отправки на вакансии —
-  // оставляем сообщение pending (не отменяем), следующий cron проверит снова.
+  // оставляем сообщение pending (не отменяем).
+  //
+  // Инцидент 11-14.07 (head-of-line blocking, см. комментарий у гейта
+  // Портрета выше): пауза — ручной тумблер без авто-снятия, её pending-хвост
+  // так же вечно торчал бы в голове очереди и съедал LIMIT у всех компаний.
+  // Переносим scheduled_at на +6ч с маркером в errorMessage; снятие паузы
+  // (POST message-queue/pause {paused:false}) сбрасывает такие строки на
+  // now — отправка возобновляется ближайшим тиком, как HR и ожидает.
   if (vacancy.outboundPaused) {
+    await db.update(followUpMessages)
+      .set({
+        scheduledAt: new Date(now.getTime() + 6 * 60 * 60 * 1000),
+        errorMessage: "deferred_outbound_paused",
+      })
+      .where(eq(followUpMessages.id, msg.id))
     return { outcome: "skipped", reason: "outbound_paused" }
   }
 
@@ -690,7 +811,10 @@ async function processOneTouch(
   // Исключение (#3.1): schedule_invite — транзакционное приглашение записаться
   // на интервью (HR перевёл кандидата в стадию interview). Его шлём даже при
   // активном чат-боте, иначе кандидат не получит ссылку на выбор времени.
-  if (vacancy.aiChatbotEnabled === true && !isScheduleInvite) {
+  // Такое же исключение (14.07): demo3_before_interview — транзакционное
+  // напоминание пройти последний демо-блок перед интервью (одна ссылка, которую
+  // чат-бот сам не пришлёт); без исключения оно бы гасло у чат-бот-вакансий.
+  if (vacancy.aiChatbotEnabled === true && !isScheduleInvite && !isDemo3BeforeInterview) {
     await db.update(followUpMessages).set({
       status: "cancelled",
       errorMessage: "ai_chatbot_active",
@@ -872,7 +996,7 @@ async function processOneTouch(
           .from(candidates)
           .where(eq(candidates.id, msg.candidateId))
           .limit(1)
-        const LATE_STAGES = new Set(["interview", "scheduled", "interviewed", "final_decision", "offer", "hired", "rejected"])
+        const LATE_STAGES = new Set(["interview", "scheduled", "interviewed", "final_decision", "offer", "offer_sent", "reference_check", "hired", "rejected"])
         if (!c0 || c0.autoStopped || LATE_STAGES.has(c0.stage ?? "")) {
           await db.update(followUpMessages).set({ status: "cancelled", errorMessage: "stage_advanced" }).where(eq(followUpMessages.id, msg.id))
           return { outcome: "cancelled", reason: "stage_advanced" }
@@ -921,7 +1045,7 @@ async function processOneTouch(
       }
       // drizzle/0276: sentText — реально ушедший текст (literal ИЛИ AI-адаптированный),
       // aiAdapted — переписан ли comms-agent'ом (см. adapted.safe выше).
-      await db.update(followUpMessages).set({ status: "sent", sentAt: new Date(), sentText: finalText, aiAdapted }).where(eq(followUpMessages.id, msg.id))
+      await db.update(followUpMessages).set({ status: "sent", sentAt: new Date(), sentText: finalText, aiAdapted, errorMessage: null }).where(eq(followUpMessages.id, msg.id))
       return { outcome: "sent", delayMs }
     }
 
@@ -953,6 +1077,7 @@ async function processOneTouch(
       sentAt: new Date(),
       sentText: finalText,
       aiAdapted,
+      errorMessage: null, // затираем транзитный deferred_*-маркер, если был
     }).where(eq(followUpMessages.id, msg.id))
     return { outcome: "sent", delayMs }
   } catch (err) {

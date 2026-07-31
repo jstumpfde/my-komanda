@@ -96,7 +96,7 @@ async function run_(_req: NextRequest) {
       // оффер) — отказ НЕ исполняем, pending снимаем. Иначе ручное решение
       // HR перечёркивалось бы таймером (03.07). Прочие reason'ы не трогаем.
       if (row.reason === "anketa_gate_failed" &&
-          ["test_task_sent", "interview", "decision", "offer", "hired"].includes(row.stage ?? "")) {
+          ["test_task_sent", "interview", "decision", "offer", "offer_sent", "reference_check", "hired"].includes(row.stage ?? "")) {
         await cancelScheduledRejection(row.candidateId).catch(() => {})
         continue
       }

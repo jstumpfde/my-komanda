@@ -58,11 +58,16 @@ export interface ScheduleInviteResult {
  * Ставит в очередь приглашение записаться на интервью (ссылка /schedule/[token]).
  * @param messageText — кастомный текст с плейсхолдером {{schedule_link}};
  *        если не задан — DEFAULT_SCHEDULE_INVITE_TEXT.
+ * @param allowResend — досылка напоминания (14.07): дедуп проверяет ТОЛЬКО
+ *        pending-строки, ранее отправленные (sent) не блокируют создание
+ *        новой. По умолчанию false — поведение байт-в-байт как раньше
+ *        (дедуп по pending|sent).
  */
 export async function scheduleInterviewInvite(args: {
   candidateId: string
   vacancyId:   string
   messageText?: string
+  allowResend?: boolean
 }): Promise<ScheduleInviteResult> {
   try {
     // 1. Проверяем, что вакансия существует, и заодно читаем настроенный HR-ом
@@ -86,14 +91,18 @@ export async function scheduleInterviewInvite(args: {
       } catch { return null }
     })()
 
-    // 2. Дедуп: уже есть pending|sent schedule_invite для этого кандидата.
+    // 2. Дедуп: по умолчанию блокируем на pending|sent schedule_invite для
+    //    этого кандидата. С allowResend=true (досылка напоминания, 14.07)
+    //    блокирует только pending — уже отправленные (sent) не мешают
+    //    поставить новую строку в очередь.
+    const dedupStatuses = args.allowResend ? (["pending"] as const) : (["pending", "sent"] as const)
     const [existing] = await db
       .select({ id: followUpMessages.id })
       .from(followUpMessages)
       .where(and(
         eq(followUpMessages.candidateId, args.candidateId),
         eq(followUpMessages.branch, SCHEDULE_INVITE_BRANCH),
-        inArray(followUpMessages.status, ["pending", "sent"]),
+        inArray(followUpMessages.status, dedupStatuses),
       ))
       .limit(1)
     if (existing) return { scheduled: false, reason: "already_scheduled" }

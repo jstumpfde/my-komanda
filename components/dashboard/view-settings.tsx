@@ -58,11 +58,14 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
   // Виды Воронка/Канбан/Плитки пока обкатываются — показываем только владельцу-
   // полигону (по email). Остальным — только «Список».
   const showAllViews = isOwnerEmail(user?.email)
-  // B5: колонки настраивает только директор/platform_admin; остальные HR — read-only.
+  // Решение владельца 17.07: тумблеры активны у ВСЕХ ролей (было B5 10.06 —
+  // read-only для не-директоров). canEditColumns теперь определяет НЕ доступ
+  // к тумблерам, а КУДА уходит сохранение: директор/platform_admin меняют
+  // company-default (hiring-defaults, видно всей компании), остальные роли —
+  // свой личный override (см. onSettingsChange в page.tsx — там же ветвление).
   const canEditColumns = ["director", "client", "platform_admin", "admin"].includes(role)
 
   const handleToggle = (key: keyof CardDisplaySettings) => {
-    if (!canEditColumns) return
     // undefined трактуем как «включено» (см. checked выше), поэтому переключаем
     // от отображаемого состояния: false → true, иначе → false.
     const next = { ...settings, [key]: settings[key] === false }
@@ -158,23 +161,19 @@ export function ViewSettings({ settings, onSettingsChange, viewMode, onViewModeC
             </div>
             {!canEditColumns && (
               <p className="text-[11px] text-muted-foreground">
-                Колонки настраивает директор компании
+                Ваш личный вид; общий для компании задаёт директор
               </p>
             )}
             <div className="space-y-2.5">
               {visibleToggles.map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
-                  <Label
-                    htmlFor={`vs-${key}`}
-                    className={cn("text-sm font-normal", canEditColumns ? "cursor-pointer" : "cursor-default opacity-60")}
-                  >
+                  <Label htmlFor={`vs-${key}`} className="text-sm font-normal cursor-pointer">
                     {label}
                   </Label>
                   <Switch
                     id={`vs-${key}`}
                     checked={settings[key] !== false}
                     onCheckedChange={() => handleToggle(key)}
-                    disabled={!canEditColumns}
                   />
                 </div>
               ))}

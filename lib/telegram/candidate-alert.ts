@@ -50,7 +50,20 @@ export async function maybeSendCandidateAlert(params: MaybeSendCandidateAlertPar
   const { candidateId, vacancyId, trigger } = params
 
   const spec = await getSpec(vacancyId)
-  const cfg = spec?.tgCandidateAlerts
+  // Коммуникации воронки v2: при включённом движке TG-уведомления берём из
+  // funnelV2.communications.tgAlerts (перенос из Портрета 14.07), иначе — Портрет.
+  const { resolveTgAlerts } = await import("@/lib/funnel-v2/native-config")
+  const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
+  const [vacRow] = await db
+    .select({ runtimeEnabled: vacancies.funnelV2RuntimeEnabled, descriptionJson: vacancies.descriptionJson })
+    .from(vacancies)
+    .where(eq(vacancies.id, vacancyId))
+    .limit(1)
+  const cfg = resolveTgAlerts(
+    (spec?.tgCandidateAlerts ?? null) as Record<string, unknown> | null,
+    normalizeFunnelV2((vacRow?.descriptionJson as Record<string, unknown> | null)?.funnelV2),
+    vacRow?.runtimeEnabled === true,
+  )
   if (!cfg?.enabled) return
 
   if (trigger === "gate_passed" && cfg.onGatePassed !== true) return

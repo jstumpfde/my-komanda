@@ -226,10 +226,31 @@ export function hasAnsweredAllRequired(
     return true
   }
 
-  // У вакансии может быть НЕСКОЛЬКО альтернативных демо (напр. «Презентация» и
-  // «Путь менеджера»). Кандидат проходит ОДНО из них. Поэтому «пройдено по
-  // ответам» = он ответил на все обязательные вопросы ХОТЯ БЫ ОДНОГО демо,
-  // а не сразу всех (иначе с двумя демо признак никогда не срабатывал).
+  // Разведка 14.07 (Revoluterra, «12/12 · 1/2»): у вакансии может быть либо
+  // ОДНО демо (обычный случай), либо НЕСКОЛЬКО ПОСЛЕДОВАТЕЛЬНЫХ частей
+  // («Презентация» → «Путь менеджера», конструктор воронки, kind='block:%') —
+  // кандидат обязан пройти ВСЕ по порядку (см. lib/demo/score-answers.ts,
+  // anketaPartsTotal/anketaPartsAnswered — та же «N частей» уже читается в
+  // колонке «Анкета» списка кандидатов). Старое поведение («ответил на все
+  // обязательные вопросы ХОТЯ БЫ ОДНОГО демо» — было рассчитано на
+  // взаимоисключающие альтернативные демо) при ≥2 частей с обязательными
+  // вопросами ложно показывало «демо пройдено на 100%» (зелёная «12/12» в
+  // колонке «Демо») сразу после части 1, даже если часть 2 кандидат ещё не
+  // открывал — притом что честный индикатор частей рядом верно писал «1/2».
+  // Фикс: если частей с обязательными вопросами ≥2 — требуем пройти ВСЕ;
+  // если 0 или 1 — прежнее поведение (тривиально совпадает с одной частью).
+  const partsWithRequired = allLessonsJsons.filter((lessonsJson) => {
+    const resolver = buildBlockResolver([lessonsJson])
+    for (const block of resolver.values()) {
+      if (block.questions.some((q) => q.required)) return true
+    }
+    return false
+  })
+
+  if (partsWithRequired.length >= 2) {
+    return partsWithRequired.every((lessonsJson) => demoFullyAnswered(lessonsJson))
+  }
+
   for (const lessonsJson of allLessonsJsons) {
     if (demoFullyAnswered(lessonsJson)) return true
   }

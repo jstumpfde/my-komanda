@@ -36,6 +36,7 @@ import {
 } from "@/lib/demo/resolve-questions"
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { logAiCall } from "@/lib/ai/usage-log"
+import { logAiCallFailure } from "@/lib/ai/failure-log"
 import { AI_MODEL_MAIN } from "@/lib/ai/models"
 import { computeUnifiedAnketaScore } from "@/lib/demo/unified-score"
 
@@ -324,12 +325,21 @@ ${questionsBlock}
 
 Итоговый балл будет посчитан как сумма awarded / сумма max × 100. Будь объективен и строг.`
 
-  const msg = await anthropic.messages.create({
-    model:      AI_MODEL_MAIN,
-    thinking: { type: "disabled" },
-    max_tokens: 1500,
-    messages:   [{ role: "user", content: prompt }],
-  })
+  let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
+  try {
+    msg = await anthropic.messages.create({
+      model:      AI_MODEL_MAIN,
+      thinking: { type: "disabled" },
+      max_tokens: 1500,
+      messages:   [{ role: "user", content: prompt }],
+    })
+  } catch (err) {
+    // Сторож найма (drizzle/0277): платформенный детектор массового сбоя AI —
+    // логируем и пробрасываем дальше (поведение вызова не меняем).
+    const errMsg = err instanceof Error ? err.message : String(err)
+    void logAiCallFailure({ source: "score-answers", errorMessage: errMsg, companyId: tenantId ?? null, vacancyId })
+    throw err
+  }
   void addVacancyTokens(vacancyId, msg.usage)
   if (tenantId) {
     void logAiCall({

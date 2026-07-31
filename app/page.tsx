@@ -94,6 +94,7 @@ function AuthenticatedDashboard() {
     activeNow: false,
     reviewQueue: false,
     demoProgress: [],
+    demoBlock: [],
     dateRange: "",
     dateFrom: "",
     dateTo: "",

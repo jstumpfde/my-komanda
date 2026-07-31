@@ -15,7 +15,10 @@ import { auth } from "@/auth"
 import { db } from "@/lib/db"
 import { candidates, vacancies } from "@/lib/db/schema"
 import { and, eq, sql, type SQL } from "drizzle-orm"
-import { IN_PROGRESS_STAGE_SLUGS, DEMO_OPENED_STAGE_SLUGS } from "@/lib/stages"
+import {
+  IN_PROGRESS_STAGE_SLUGS, DEMO_OPENED_STAGE_SLUGS,
+  ALL_STAGE_SLUGS, PLATFORM_STAGES,
+} from "@/lib/stages"
 
 export const dynamic = "force-dynamic"
 
@@ -80,17 +83,70 @@ export async function GET(
   const inProgress = IN_PROGRESS_STAGE_SLUGS.reduce((a, s) => a + sc(s), 0)
   const demoOpened = DEMO_OPENED_STAGE_SLUGS.reduce((a, s) => a + sc(s), 0)
 
-  // Воронка — те же стадии/метки/цвета, что строил клиентский код из columns
-  // (lib/column-config: new/demo/decision/interview/final_decision/hired),
-  // с тем же кумулятивным счётом «дошли до этапа и дальше».
-  const afterDecision = sc("interview") + sc("final_decision") + sc("hired")
+  // ── Воронка (пересобрана 15.07: диагностика координатора) ──
+  // ДО этого фикса воронка строилась на словаре канбан-колонок
+  // (lib/column-config: new/demo/decision/interview/final_decision/hired), а
+  // считала при этом сырые candidates.stage — а там лежат КАНОНИЧЕСКИЕ слаги
+  // lib/stages.ts (PLATFORM_STAGES). Словари почти не пересекаются →
+  // «Нанято» всегда 0 (слага "hired" в канбан-словаре не было в подсчёте
+  // sc("hired") напрямую... на деле было хуже — final_decision, на который
+  // опиралась половина строк, в каноне не существует вовсе, строка «Финальное
+  // решение» была мертва по построению), «Демо» тащило за собой все отказы,
+  // «Интервью» не видело test_task_sent/offer_sent/started_work. Живые цифры
+  // одной вакансии на проде (954 кандидата): demo_opened 570, rejected 146,
+  // primary_contact 134, interview 37, test_task_sent 33, new 12, offer_sent
+  // 10, decision 9, started_work 5 — стадий hired/final_decision в данных
+  // НЕТ ВООБЩЕ.
+  //
+  // Теперь воронка кумулятивная («дошёл до стадии X или дальше») на
+  // КАНОНИЧЕСКИХ sortOrder из PLATFORM_STAGES — один источник правды с
+  // канбаном/фильтром вакансии, вместо своего параллельного словаря.
+  //
+  // Пороги — по sortOrder стадии, с которой начинается соответствующий блок
+  // воронки (см. lib/stages.ts). Не хардкодим числа россыпью — если кто-то
+  // сдвинет sortOrder в PLATFORM_STAGES, воронка сама пересчитается.
+  const FUNNEL_THRESHOLDS = {
+    contact: PLATFORM_STAGES.primary_contact.sortOrder,  // 2
+    demo: PLATFORM_STAGES.demo_opened.sortOrder,          // 3
+    anketa: PLATFORM_STAGES.anketa_filled.sortOrder,      // 4
+    interview: PLATFORM_STAGES.scheduled.sortOrder,       // 8 («Интервью наз.» — начало интервью-блока)
+    decision: PLATFORM_STAGES.decision.sortOrder,         // 11
+    offer: PLATFORM_STAGES.offer_sent.sortOrder,          // 12
+    hiredOrStarted: PLATFORM_STAGES.hired.sortOrder,      // 13 (hired + started_work=14)
+  } as const
+
+  // Кумулятивный счёт «дошли до порога или дальше». rejected(99) и
+  // preliminary_reject(98) исключены явно — иначе наивное sortOrder>=N
+  // зачло бы ВСЕ отказы в КАЖДУЮ строку воронки, вплоть до «Нанят/Вышел»
+  // (rejected.sortOrder=99 «всегда последний» — старший из всех).
+  //
+  // Легаси-слаги (demo/interviewed/final_decision/offer/preboarding/
+  // wants_contact/talent_pool/pending — см. LEGACY_STAGE_LABELS в
+  // lib/stages.ts) не входят в PLATFORM_STAGES, поэтому не участвуют в
+  // сумме ни по одному порогу — они учтены только в total («Новый», устье
+  // воронки), но не размазываются по прогрессивным строкам 2-8. Это
+  // осознанный выбор: гадать sortOrder для легаси-алиасов (особенно
+  // final_decision, у которого уже есть задокументированный B9-разнобой
+  // прямо в lib/stages.ts) добавило бы ещё один источник рассинхрона, а не
+  // убрало бы его.
+  function cumulativeCount(threshold: number): number {
+    let sum = 0
+    for (const slug of ALL_STAGE_SLUGS) {
+      if (slug === "rejected" || slug === "preliminary_reject") continue
+      if (PLATFORM_STAGES[slug].sortOrder >= threshold) sum += sc(slug)
+    }
+    return sum
+  }
+
   const funnelStages = [
     { stage: "Новый", count: total, color: "#94a3b8" },
-    { stage: "Демо", count: total - sc("new"), color: "#3b82f6" },
-    { stage: "Решение", count: sc("decision") + afterDecision, color: "#ef4444" },
-    { stage: "Интервью", count: sc("interview") + sc("final_decision") + sc("hired"), color: "#8b5cf6" },
-    { stage: "Финальное решение", count: sc("final_decision") + sc("hired"), color: "#f97316" },
-    { stage: "Нанято", count: sc("hired"), color: "#22c55e" },
+    { stage: "Пер. контакт", count: cumulativeCount(FUNNEL_THRESHOLDS.contact), color: "#60a5fa" },
+    { stage: "Демо", count: cumulativeCount(FUNNEL_THRESHOLDS.demo), color: "#3b82f6" },
+    { stage: "Анкета/Скрининг", count: cumulativeCount(FUNNEL_THRESHOLDS.anketa), color: "#6366f1" },
+    { stage: "Интервью", count: cumulativeCount(FUNNEL_THRESHOLDS.interview), color: "#8b5cf6" },
+    { stage: "Решение", count: cumulativeCount(FUNNEL_THRESHOLDS.decision), color: "#f59e0b" },
+    { stage: "Оффер", count: cumulativeCount(FUNNEL_THRESHOLDS.offer), color: "#10b981" },
+    { stage: "Нанят/Вышел", count: cumulativeCount(FUNNEL_THRESHOLDS.hiredOrStarted), color: "#22c55e" },
   ]
 
   // ── Источники: count + avg по РЕАЛЬНОМУ ai_score (NULL не в среднем) ──

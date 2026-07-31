@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -27,12 +28,12 @@ import {
   Heading1, Heading2, Heading3, List as ListIcon, ListOrdered, Link2, Hash,
   Type, ImageIcon, Video, Music, FileText, Info, MousePointerClick, CheckSquare,
   ChevronLeft, ChevronRight, Mic, Highlighter, Loader2, Clapperboard,
-  Undo2, Redo2, ArchiveRestore,
+  Undo2, Redo2, ArchiveRestore, FolderInput, ArrowRightLeft,
 } from "lucide-react"
 import { renderButtonIcon } from "@/lib/button-icons"
 import { toast } from "sonner"
 import type { Demo, Block, BlockType, Lesson, StoriesCard } from "@/lib/course-types"
-import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT, STORIES_CARD_DEFAULT_DURATION_SEC} from "@/lib/course-types"
+import {BLOCK_TYPE_META, createBlock, STORIES_CTA_DEFAULT_TEXT, STORIES_CARD_DEFAULT_DURATION_SEC, cloneLessonWithNewIds} from "@/lib/course-types"
 import { StoriesPlayer } from "@/components/vacancies/stories-player"
 import { PdfSlidesViewer } from "@/components/vacancies/pdf-slides-viewer"
 import { resolveOptionPoints } from "@/lib/score-test-objective"
@@ -80,6 +81,30 @@ function structuralKey(lessons: Lesson[]): string {
 const HISTORY_LIMIT = 60          // максимум снимков в стеке undo
 const TRASH_TTL_MS = 24 * 60 * 60 * 1000   // корзина хранит удалённое 24 часа
 
+// ─── Буфер обмена уроков («Копировать» → «Вставить») ─────────────────────────
+// Раньше жил в локальном useState — NotionEditor размонтируется/монтируется
+// заново при каждом переключении блока (key={selectedBlock.id} в
+// content-blocks-tab.tsx) и при переходе в другую вакансию, поэтому буфер
+// обнулялся именно в момент, когда HR открывал ЦЕЛЕВОЙ блок/вакансию и хотел
+// нажать «Вставить» (жалоба владельца: «скопировать можно, Вставить неактивна»).
+// localStorage переживает размонтирование компонента, переход между
+// блоками/вакансиями и перезагрузку страницы — «Вставить» доступно везде,
+// где открыт редактор любого демо-блока любой вакансии, пока буфер непуст.
+const LESSON_CLIPBOARD_KEY = "demo-editor-copied-lesson"
+
+function readClipboardLesson(): Lesson | null {
+  try {
+    const raw = localStorage.getItem(LESSON_CLIPBOARD_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === "object" && typeof parsed.id === "string" ? (parsed as Lesson) : null
+  } catch { return null }
+}
+
+function writeClipboardLesson(lesson: Lesson) {
+  try { localStorage.setItem(LESSON_CLIPBOARD_KEY, JSON.stringify(lesson)) } catch { /* приватный режим и т.п. — не критично */ }
+}
+
 // «N минут/часов назад» для меток корзины.
 function fmtAgo(ts: number): string {
   const m = Math.floor((Date.now() - ts) / 60000)
@@ -125,6 +150,13 @@ interface NotionEditorProps {
   onNavButtonChange?: (color: string | null, text: string | null) => void
   showSystemNav?: boolean
   onShowSystemNavChange?: (value: boolean) => void
+  /** Другие блоки контента ЭТОЙ вакансии — пункт меню урока «Скопировать в
+   *  блок…» (быстрый путь без сети). Пусто/undefined — пункт не показывается. */
+  otherBlocks?: { id: string; title: string }[]
+  /** Скопировать урок в другой блок ЭТОЙ ЖЕ вакансии (append в конец уроков). */
+  onCopyLessonToBlock?: (lesson: Lesson, targetBlockId: string) => void
+  /** Открыть диалог «Скопировать в другую вакансию…» для конкретного урока. */
+  onCopyLessonToOtherVacancy?: (lesson: Lesson) => void
 }
 
 const NAV_BUTTON_PRESET_COLORS = [
@@ -153,12 +185,14 @@ const SLASH_ITEMS = [
 
 // ─── Main component ────────────────────────────────────────────────────────
 
-export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor, navButtonText, onNavButtonChange, showSystemNav, onShowSystemNavChange }, ref) {
+export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(function NotionEditorInner({ demo, onBack, onUpdate, onSaveStatusChange, hideToolbar = false, showSidebar = true, vacancyId, onOpenLibrary, navButtonColor, navButtonText, onNavButtonChange, showSystemNav, onShowSystemNavChange, otherBlocks, onCopyLessonToBlock, onCopyLessonToOtherVacancy }, ref) {
   const [activeLessonId, setActiveLessonId] = useState(demo.lessons[0]?.id || "")
   const [previewMode, setPreviewMode] = useState(false)
   const [previewIdx, setPreviewIdx] = useState(0)
   const [renamingLessonId, setRenamingLessonId] = useState<string | null>(null)
-  const [copiedLesson, setCopiedLesson] = useState<Lesson | null>(null)
+  // Ленивая инициализация из localStorage — при монтировании (в т.ч. после
+  // переключения блока/вакансии) сразу подхватывает уже скопированный урок.
+  const [copiedLesson, setCopiedLesson] = useState<Lesson | null>(() => readClipboardLesson())
   const [contextMenuLessonId, setContextMenuLessonId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "idle">("saved")
@@ -537,8 +571,11 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
   }
 
   const duplicateLesson = (idx: number) => {
-    const orig = demo.lessons[idx]; const ts = Date.now()
-    const copy: Lesson = { ...orig, id: `les-${ts}`, title: `${orig.title} (копия)`, blocks: orig.blocks.map((b) => ({ ...b, id: `${b.id}-c${ts}` })) }
+    const orig = demo.lessons[idx]
+    // cloneLessonWithNewIds — глубокая копия с перегенерацией id урока, всех
+    // блоков И вопросов внутри (id вопросов q-* иначе коллизировали бы с
+    // оригиналом — они участвуют в anketa_answers/скоринге).
+    const copy = cloneLessonWithNewIds(orig)
     const nl = [...demo.lessons]; nl.splice(idx + 1, 0, copy)
     save(nl); setActiveLessonId(copy.id); toast.success("Урок дублирован")
   }
@@ -548,10 +585,19 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
     const nl = [...demo.lessons];[nl[idx], nl[t]] = [nl[t], nl[idx]]; save(nl)
   }
 
+  // «Копировать» — кладёт урок и в стейт (для мгновенной реакции этого же
+  // инстанса), и в localStorage (переживает переключение блока/вакансии).
+  const copyLessonToClipboard = (lesson: Lesson) => {
+    setCopiedLesson(lesson)
+    writeClipboardLesson(lesson)
+    toast.success(`Урок «${lesson.title}» скопирован`)
+  }
+
   const pasteLesson = () => {
-    if (!copiedLesson) return; const ts = Date.now()
-    const pasted: Lesson = { ...copiedLesson, id: `les-${ts}`, title: `${copiedLesson.title} (вставлен)`, blocks: copiedLesson.blocks.map((b) => ({ ...b, id: `${b.id}-p${ts}` })) }
-    save([...demo.lessons, pasted]); setActiveLessonId(pasted.id); toast.success("Урок вставлен")
+    if (!copiedLesson) return
+    const pasted = cloneLessonWithNewIds(copiedLesson, " (вставлен)")
+    save([...demo.lessons, pasted]); setActiveLessonId(pasted.id)
+    toast.success(`Урок «${copiedLesson.title}» вставлен`)
   }
 
   const deleteLesson = (id: string) => {
@@ -787,6 +833,17 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
               >
                 <ChevronRight className="w-4 h-4" />
               </Button>
+              {copiedLesson && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 text-primary hover:text-primary"
+                  title={`Вставить урок «${copiedLesson.title}»`}
+                  onClick={pasteLesson}
+                >
+                  <ClipboardPaste className="w-3.5 h-3.5" />
+                </Button>
+              )}
               {/* Мини-список уроков: иконка (если есть) или первая буква названия —
                   чтобы было видно, что внутри список, а не пустая полоса. Клик —
                   выбрать урок и раскрыть. */}
@@ -830,7 +887,23 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </Button>
-                <h4 className="text-sm font-semibold text-foreground">Уроки</h4>
+                <h4 className="text-sm font-semibold text-foreground flex-1">Уроки</h4>
+                {/* «Вставить» доступна ВСЕГДА, пока буфер (localStorage) непуст —
+                    в т.ч. когда в блоке ещё нет ни одного урока (некуда кликнуть
+                    правой кнопкой). Требование владельца: вставка в пустой
+                    новый блок другой вакансии должна работать сразу. */}
+                {copiedLesson && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 gap-1 text-primary hover:text-primary shrink-0"
+                    title={`Вставить урок «${copiedLesson.title}»`}
+                    onClick={pasteLesson}
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-medium">Вставить</span>
+                  </Button>
+                )}
               </div>
 
               <div className="overflow-y-auto px-1.5 py-1" style={{ height: lessonListHeight }}>
@@ -900,19 +973,47 @@ export const NotionEditor = forwardRef<NotionEditorHandle, NotionEditorProps>(fu
                         )}
                       </div>
                       <DropdownMenuTrigger className="sr-only" />
-                      <DropdownMenuContent align="start" className="w-44">
+                      <DropdownMenuContent align="start" className="w-56">
                         <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); renamingOriginalTitle.current = lesson.title; setRenamingLessonId(lesson.id) }}>
                           <Pencil className="w-3.5 h-3.5 mr-2" />Переименовать
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); setCopiedLesson(lesson); toast.success("Скопировано") }}>
+                        <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); copyLessonToClipboard(lesson) }}>
                           <Copy className="w-3.5 h-3.5 mr-2" />Копировать
                         </DropdownMenuItem>
-                        <DropdownMenuItem disabled={!copiedLesson} onClick={() => { setContextMenuLessonId(null); pasteLesson() }}>
-                          <ClipboardPaste className="w-3.5 h-3.5 mr-2" />Вставить
+                        <DropdownMenuItem
+                          disabled={!copiedLesson}
+                          title={copiedLesson ? `Вставить урок «${copiedLesson.title}»` : "Сначала скопируйте урок"}
+                          onClick={() => { setContextMenuLessonId(null); pasteLesson() }}
+                        >
+                          <ClipboardPaste className="w-3.5 h-3.5 mr-2" />
+                          <span className="truncate">{copiedLesson ? `Вставить урок «${copiedLesson.title}»` : "Вставить"}</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); duplicateLesson(i) }}>
                           <Copy className="w-3.5 h-3.5 mr-2" />Дублировать
                         </DropdownMenuItem>
+                        {otherBlocks && otherBlocks.length > 0 && (
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                              <FolderInput className="w-3.5 h-3.5" />Скопировать в блок…
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              {otherBlocks.map((b) => (
+                                <DropdownMenuItem
+                                  key={b.id}
+                                  className="cursor-pointer"
+                                  onClick={() => { setContextMenuLessonId(null); onCopyLessonToBlock?.(lesson, b.id) }}
+                                >
+                                  {b.title}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        )}
+                        {onCopyLessonToOtherVacancy && (
+                          <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); onCopyLessonToOtherVacancy(lesson) }}>
+                            <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />Скопировать в другую вакансию…
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => { setContextMenuLessonId(null); moveLessonDir(i, -1) }} disabled={i === 0}>
                           <ArrowUp className="w-3.5 h-3.5 mr-2" />Переместить вверх

@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
-import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, FilterX, X, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
+import {Clock, Settings, BookOpen, BarChart3, Kanban, Pencil, MessageCircle, MessageSquare, MessageSquareText, Zap, Globe, AlertTriangle, CheckCircle2, TrendingUp, Filter, FilterX, Link2, Copy, Save, Sparkles, Eye, Check, Loader2, Download, ExternalLink, ClipboardList, ChevronLeft, ChevronRight, ChevronDown, Users, Upload, Plus, RefreshCw, Bot, Workflow, FilePlus, UserSearch, Trash2, Target, Inbox, CalendarDays, Plug} from "lucide-react"
 import { InterviewsView } from "@/app/(modules)/hr/interviews/page"
 import { AiChatbotSettings } from "@/components/vacancies/ai-chatbot-settings"
 import { ApplyRoleTemplateDialog } from "@/components/vacancies/apply-role-template-dialog"
@@ -80,6 +80,9 @@ import { VacancyStopWordsSettings } from "@/components/vacancies/vacancy-stop-wo
 import { FinalScreensSettings, type FinalScreensConfig } from "@/components/vacancies/final-screens-settings"
 import { RecoveryMessageSettings } from "@/components/vacancies/recovery-message-settings"
 import { ScheduleInviteSettings } from "@/components/vacancies/schedule-invite-settings"
+import { Demo3BeforeInterviewSettings } from "@/components/vacancies/demo3-before-interview-settings"
+import { InterviewNotificationMessagesSettings } from "@/components/vacancies/interview-notification-messages-settings"
+import { InterviewBookedScreenSettings } from "@/components/vacancies/interview-booked-screen-settings"
 import { FirstMessagesChainEditor } from "@/components/vacancies/first-messages-chain-editor"
 import { FirstContactSettings } from "@/components/vacancies/first-contact-settings"
 import { RejectionTextsSummary } from "@/components/vacancies/rejection-texts-summary"
@@ -219,6 +222,8 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     demoAnswersScore: c.demoAnswersScore ?? null,
     anketaPartsAnswered: c.anketaPartsAnswered,
     anketaPartsTotal: c.anketaPartsTotal,
+    completedDemoBlockIndexes: (c as { completedDemoBlockIndexes?: number[] }).completedDemoBlockIndexes ?? [],
+    demoBlockTooltip: (c as { demoBlockTooltip?: string | null }).demoBlockTooltip ?? null,
     nameUncertain: c.nameUncertain === true,
     testScore: c.testScore ?? null,
     testStatus: c.testStatus ?? null,
@@ -234,7 +239,13 @@ function apiCandidateToCard(c: ApiCandidate, columnId: string): Candidate {
     createdAt: c.createdAt,
     lastRespondedAt: c.lastRespondedAt ?? null,
     pendingRejectionReason: (c as { pendingRejectionReason?: string | null }).pendingRejectionReason ?? null,
+    pendingRejectionAt: (c as { pendingRejectionAt?: string | null }).pendingRejectionAt ?? null,
+    // Разведка 14.07: см. Candidate.autoProcessingStoppedReason (candidate-card.tsx).
+    autoProcessingStoppedReason: (c as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason ?? null,
     stage: c.stage ?? null,
+    // Заявка Юрия 15.07: колонка «Демо» различает «отправлено»/«открыл» до
+    // появления прогресса по шагам (см. list-view.tsx, id="progress").
+    demoOpenedAt: c.demoOpenedAt ?? null,
     // HR-020: фильтр-поля
     birthDate: c.birthDate ?? undefined,
     experienceYears: c.experienceYears ?? null,
@@ -292,9 +303,10 @@ export default function VacancyPage() {
       if (hd && Array.isArray(hd.brandCompanies)) {
         setBrandCompaniesData(hd.brandCompanies.filter((c: { id: string; name: string; description?: string }) => c?.name?.trim()))
       }
-      // B5: колонки списка кандидатов единые для компании
+      // B5: колонки списка кандидатов — company-default для всей компании
+      // (личный override поверх него — состояние personalColumnsOverride, см. ниже).
       if (hd?.candidateColumns && typeof hd.candidateColumns === "object" && Object.keys(hd.candidateColumns).length > 0) {
-        setCardSettingsLocal((prev) => ({ ...prev, ...hd.candidateColumns } as typeof prev))
+        setCompanyColumns(hd.candidateColumns as Record<string, boolean>)
       }
       // Уровень 2: сохраняем company webhook URL для отображения в секции интеграций вакансии
       if (typeof hd?.webhooks?.url === "string") {
@@ -609,7 +621,7 @@ export default function VacancyPage() {
   // Стадия из URL (?stage=slug,slug) — для перехода из отчёта по клику на число.
   const stageFromUrl = searchParams?.get("stage")
   const initialFunnelStatuses = stageFromUrl ? stageFromUrl.split(",").filter(Boolean) : DEFAULT_FUNNEL_STATUSES.slice()
-  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, scoreMinTest: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoAnswered: false, demoProgress: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
+  const [filters, setFilters] = useState<FilterState>({ searchText: "", cities: [], salaryMin: 0, salaryMax: 250000, scoreMin: 0, scoreMinResume: 0, scoreMinAnketa: 0, scoreMinTest: 0, sources: [], workFormats: [], relocation: "any", businessTrips: "any", experienceMin: 0, experienceMax: 20, funnelStatuses: initialFunnelStatuses, hideRejected: true, hideNoSalary: false, activeNow: false, reviewQueue: false, demoAnswered: false, demoProgress: [], demoBlock: [], dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65, education: [], languages: [], otherLanguages: [], skills: [], industries: [] })
   // #18: фасеты фильтра (города/источники) по ВСЕЙ вакансии — серверная агрегация.
   const [candidateFacets, setCandidateFacets] = useState<{ cities: { city: string; count: number }[]; sources: { source: string; count: number }[] } | null>(null)
   useEffect(() => {
@@ -670,6 +682,7 @@ export default function VacancyPage() {
     ctaClicked: filters.ctaClicked,
     hhPublication: filters.hhPublication,
     reviewQueue: filters.reviewQueue,
+    demoBlock: filters.demoBlock,
   }), [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Legacy pipeline текущей вакансии — для кастомных лейблов стадий в ListView. */
@@ -691,6 +704,24 @@ export default function VacancyPage() {
     return (stages as Array<{ id?: string; title?: string | null }>)
       .filter((s) => typeof s.id === "string")
       .map((s) => ({ id: s.id as string, title: s.title ?? null }))
+  }, [apiVacancy?.descriptionJson])
+
+  /** 14.07 (витрина «Отказы»): сколько стадий Воронки v2 имеют свой текст
+   *  отказа — либо rule.rejectText (обычный редактор, funnel-v2-builder.tsx),
+   *  либо top-level rejectText (Воронка 3, funnel-v3-editor.tsx). 0 → строку
+   *  в RejectionTextsSummary не показываем (см. компонент). */
+  const funnelV2RejectStagesCount = useMemo(() => {
+    const raw = (apiVacancy?.descriptionJson as Record<string, unknown> | undefined)?.funnelV2
+    if (!raw || typeof raw !== "object") return 0
+    const stages = (raw as { stages?: unknown }).stages
+    if (!Array.isArray(stages)) return 0
+    return (stages as Array<{ rejectText?: unknown; rule?: { rejectText?: unknown } }>)
+      .filter((s) => {
+        const top = typeof s.rejectText === "string" ? s.rejectText.trim() : ""
+        const rule = typeof s.rule?.rejectText === "string" ? s.rule.rejectText.trim() : ""
+        return top.length > 0 || rule.length > 0
+      })
+      .length
   }, [apiVacancy?.descriptionJson])
 
   /** Вид встречи по умолчанию для диалога «Пригласить на интервью» — из первой
@@ -841,8 +872,12 @@ export default function VacancyPage() {
   const HEADER_STAT_STAGE_MAP: Record<string, string[]> = {
     demoOpened: DEMO_OPENED_STAGE_SLUGS,
     interview:  ["scheduled", "interview", "interviewed"],
+    // Пост-interview стадии — точечно по своей стадии (канон lib/stages.ts).
+    referenceCheck: ["reference_check"],
+    decision:       ["decision"],
     offer:      ["offer_sent", "offer"],
     hired:      ["hired", "started_work"],
+    startedWork:    ["started_work"],
     rejected:   ["rejected"],
   }
   // Спец-флаги (НЕ стадии воронки) — каждый счётчик активирует ровно один
@@ -1015,12 +1050,26 @@ export default function VacancyPage() {
       return { ...col, candidates: colCandidates, count: colCandidates.length }
     }))
   }, [apiCandidates])
-  // B5: persistColumns намеренно убран — колонки per-company хранятся
-  // в hiring-defaults, не в user-preferences. setColumns из хука не вызываем.
-  const { prefs: userPrefs, loaded: userPrefsLoaded, setViewMode: persistViewMode, setListSort: persistListSort } = useUserPreferences()
+  const {
+    prefs: userPrefs, loaded: userPrefsLoaded,
+    setViewMode: persistViewMode, setListSort: persistListSort,
+    setCandidateColumns: persistCandidateColumns,
+  } = useUserPreferences()
   // viewMode объявлен выше (перед useCandidates) для условного отключения запроса.
   const [sortMode, setSortMode] = useState<CandidateSortMode>("date_desc")
-  const [cardSettings, setCardSettingsLocal] = useState(defaultSettings)
+  // B5 (10.06): колонки company-level в hiring-defaults.candidateColumns.
+  // Решение владельца 17.07: тумблеры активны у ВСЕХ ролей (было read-only для
+  // не-директоров) — director/client/platform_admin/admin по-прежнему задают
+  // company-default, остальные роли получили личный override поверх него
+  // (userPrefs.candidateColumns). Базы держим раздельно и мерджим в cardSettings
+  // (см. useMemo ниже), чтобы будущие правки директора по НЕ-тронутым override'ом
+  // ключам всё равно доходили до пользователя.
+  const [companyColumns, setCompanyColumns] = useState<Record<string, boolean>>({})
+  const [personalColumnsOverride, setPersonalColumnsOverride] = useState<Record<string, boolean>>({})
+  const cardSettings = useMemo(
+    () => ({ ...defaultSettings, ...companyColumns, ...personalColumnsOverride }) as CardDisplaySettings,
+    [companyColumns, personalColumnsOverride],
+  )
 
   // ─── При первой загрузке user-prefs — гидратируем UI ─────────────────────
   useEffect(() => {
@@ -1031,8 +1080,9 @@ export default function VacancyPage() {
     // Виды Канбан/Плитки/Воронка — owner-only (Юрий 03.07 оставил под гейтом).
     const canAllViews = isOwnerEmail(user?.email)
     setViewModeLocal((canAllViews ? userPrefs.viewMode : "list") as ViewMode)
-    // B5: колонки теперь per-company (hiring-defaults), не per-user.
-    // userPrefs.columns намеренно НЕ гидратируем в cardSettings.
+    // Личный override колонок гидратируем ВСЕМ ролям (ограничение canAllViews
+    // выше — только про режимы Канбан/Плитки/Воронка, к колонкам не относится).
+    setPersonalColumnsOverride(userPrefs.candidateColumns as Record<string, boolean>)
   }, [userPrefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setViewMode = useCallback((mode: ViewMode) => {
@@ -1041,17 +1091,38 @@ export default function VacancyPage() {
   }, [persistViewMode])
 
   const setCardSettings = useCallback((next: CardDisplaySettings) => {
-    setCardSettingsLocal(next)
-    // B5: колонки per-company — сохраняем в hiring-defaults только если директор/platform_admin.
-    // Остальные HR могут видеть колонки, но менять не могут (гард также на сервере).
     if (["director", "client", "platform_admin", "admin"].includes(role)) {
+      // B5: колонки per-company — сохраняем в hiring-defaults, как раньше.
+      // Плюс чистим личный override (решение 17.07) — иначе старый персональный
+      // override директора маскировал бы новый company-default на его же экране.
+      setCompanyColumns(next as unknown as Record<string, boolean>)
       fetch("/api/modules/hr/company/hiring-defaults", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ candidateColumns: next as unknown as Record<string, boolean> }),
       }).catch(() => {})
+      setPersonalColumnsOverride({})
+      persistCandidateColumns({})
+    } else {
+      // Остальные роли (17.07): личный override поверх company-default.
+      // Сохраняем ТОЛЬКО реально изменившиеся относительно текущего эффективного
+      // вида ключи — иначе полный снэпшот заглушил бы будущие правки директора
+      // по колонкам, которые этот пользователь не трогал. Сравниваем по
+      // видимости (!== false), не по строгому equality — некоторые тумблеры
+      // (см. CardSettings в card-settings.tsx) пишут undefined для «включено».
+      setPersonalColumnsOverride((prevOverride) => {
+        const changed: Record<string, boolean> = {}
+        for (const key of Object.keys(next) as (keyof CardDisplaySettings)[]) {
+          const wasVisible = cardSettings[key] !== false
+          const isVisible = next[key] !== false
+          if (isVisible !== wasVisible) changed[key] = isVisible
+        }
+        const merged = { ...prevOverride, ...changed }
+        persistCandidateColumns(merged)
+        return merged
+      })
     }
-  }, [role])
+  }, [role, cardSettings, persistCandidateColumns])
 // filters перемещён выше — см. строку перед useCandidates
   const [drawerCandidateId, setDrawerCandidateId] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -1474,6 +1545,10 @@ export default function VacancyPage() {
     // #15: интервью (scheduled + interview + legacy interviewed) и оферы
     // (offer_sent + legacy offer) — считаются из byStage стадий кандидатов.
     interview: number; offer: number;
+    // Пост-interview стадии воронки (канон lib/stages.ts, sortOrder 10/11/14).
+    // Показываются в шапке только при count>0 (нулевые скрыты). Считаются из
+    // byStage напрямую — точечно по стадии, как interview/offer.
+    referenceCheck: number; decision: number; startedWork: number;
     ctaClicked: number;
     // «2-я часть демо» (Путь менеджера): приглашены / прошли (балл 2-го блока).
     secondDemoInvited: number; secondDemoPassed: number;
@@ -1506,6 +1581,12 @@ export default function VacancyPage() {
       const bs = stats.byStage ?? {}
       const interviewCount = (bs["scheduled"] ?? 0) + (bs["interview"] ?? 0) + (bs["interviewed"] ?? 0)
       const offerCount = (bs["offer_sent"] ?? 0) + (bs["offer"] ?? 0)
+      // Пост-interview стадии (канон lib/stages.ts): «Рекомендации»,
+      // «Решение» между интервью и офером, «Выход на работу» после найма.
+      // Точечно по стадии (byStage), как interview/offer.
+      const referenceCheckCount = bs["reference_check"] ?? 0
+      const decisionCount = bs["decision"] ?? 0
+      const startedWorkCount = bs["started_work"] ?? 0
       setHeaderStats({
         total:        stats.total,
         pending:      cand.pending,
@@ -1524,6 +1605,9 @@ export default function VacancyPage() {
         demoAnswered: stats.demoAnswered,
         interview:    interviewCount,
         offer:        offerCount,
+        referenceCheck: referenceCheckCount,
+        decision:       decisionCount,
+        startedWork:    startedWorkCount,
         ctaClicked:   stats.ctaClicked ?? 0,
         secondDemoInvited: stats.secondDemoInvited ?? 0,
         secondDemoPassed:  stats.secondDemoPassed ?? 0,
@@ -2444,29 +2528,6 @@ export default function VacancyPage() {
     handleListSortChange(toApply)
   }, [userPrefsLoaded, useListPaginated, userPrefs.listSort, searchParams, handleListSortChange])
 
-  // ─── Unified 6-stage metrics (single source of truth) ───
-  const allCandidates = columns.flatMap((c) => c.candidates)
-  const newCol = columns.find((c) => c.id === "new")
-  const demoCol = columns.find((c) => c.id === "demo")
-  const decisionCol = columns.find((c) => c.id === "decision")
-  const interviewCol = columns.find((c) => c.id === "interview")
-  const finalDecisionCol = columns.find((c) => c.id === "final_decision")
-  const hiredCol = columns.find((c) => c.id === "hired")
-
-  const afterDecision = [interviewCol, finalDecisionCol, hiredCol]
-    .reduce((acc, col) => acc + (col?.candidates.length || 0), 0)
-
-  const funnelStages = [
-    { stage: "Новый", count: totalCandidates, color: "#94a3b8" },
-    { stage: "Демо", count: totalCandidates - (newCol?.candidates.length || 0), color: "#3b82f6" },
-    { stage: "Решение", count: (decisionCol?.candidates.length || 0) + afterDecision, color: "#ef4444" },
-    { stage: "Интервью", count: (interviewCol?.candidates.length || 0) + (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#8b5cf6" },
-    { stage: "Передан", count: (finalDecisionCol?.candidates.length || 0) + (hiredCol?.candidates.length || 0), color: "#f97316" },
-    { stage: "Нанято", count: hiredCol?.candidates.length || 0, color: "#22c55e" },
-  ]
-
-  const funnelData = funnelStages
-
   // ── AI Screening ──
   const [screeningIds, setScreeningIds] = useState<Set<string>>(new Set())
   const [bulkScreening, setBulkScreening] = useState(false)
@@ -2573,28 +2634,10 @@ export default function VacancyPage() {
     }
   }
 
-  // ── Talent Pool Radar ──
-  const [talentMatches, setTalentMatches] = useState<{ id: string; name: string; matchPercent: number; aiScore: number | null; city: string | null }[]>([])
-  const [talentRadarHidden, setTalentRadarHidden] = useState(false)
-  const [talentRadarLoaded, setTalentRadarLoaded] = useState(false)
-
-  useEffect(() => {
-    if (!id || apiCandidates.length > 0 || talentRadarLoaded) return
-    setTalentRadarLoaded(true)
-    fetch(`/api/modules/hr/talent-pool/match?vacancy_id=${id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { id: string; name: string; matchPercent: number; aiScore: number | null; city: string | null }[] | null) => {
-        if (data && data.length > 0) setTalentMatches(data)
-      })
-      .catch(() => {})
-  }, [id, apiCandidates.length, talentRadarLoaded])
-
-  const inviteFromPool = async (candidateId: string) => {
-    await updateStage(candidateId, "new")
-    setTalentMatches(prev => prev.filter(c => c.id !== candidateId))
-    toast.success("Кандидат приглашён из резерва")
-    refetchCandidates()
-  }
+  // ── Talent Pool Radar убран (14.07): плашка «В резерве найдено N» была
+  //    мёртвой — клик по строке не открывал карточку, «Пригласить» толком не
+  //    привязывал, а /talent-pool/match игнорировал реальный пул
+  //    talent_pool_entries. Полноценный резерв живёт на /hr/talent-pool. ──
 
   // ── Health check ──
   const [healthScore, setHealthScore] = useState<number | null>(null)
@@ -3062,11 +3105,14 @@ export default function VacancyPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
                   {activeTab === "candidates" && <>
-                    {/* #15: счётчики шапки. Порядок: откликов → новых → демо →
-                        анкет → интервью → оферы → нанято → отказ.
+                    {/* #15: счётчики шапки. Порядок (канон lib/stages.ts):
+                        откликов → новых → демо → анкет → демо-2 → перешли →
+                        интервью → рекомендации → решение → оферы → нанято →
+                        работает → отказ.
                         HIDE-AT-ZERO: всегда показываем «откликов всего»,
-                        «новых», «открыли демо» (даже 0); анкет/интервью/оферы/
-                        нанято/отказ — только если >0.
+                        «новых», «открыли демо» (даже 0); анкет/демо-2/интервью/
+                        рекомендации/решение/оферы/нанято/работает/отказ —
+                        только если >0.
                         Разделитель «·» рендерит каждый видимый элемент ПЕРЕД
                         собой, кроме первого (isFirst), чтобы не было висячих
                         точек при скрытых метриках. */}
@@ -3207,6 +3253,23 @@ export default function VacancyPage() {
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты на стадии интервью — назначено или уже прошло — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
+                      // Пост-interview стадии (канон lib/stages.ts, только >0):
+                      // «Рекомендации» (reference_check) и «Решение» (decision)
+                      // между интервью и офером.
+                      if ((s?.referenceCheck ?? 0) > 0) push("referenceCheck",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            {clickableLabel("referenceCheck", s!.referenceCheck, "рекомендации")}
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты на стадии «Рекомендации» — проверка рекомендаций — нажмите, чтобы отфильтровать</TooltipContent>
+                        </UITooltip>)
+                      if ((s?.decision ?? 0) > 0) push("decision",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            {clickableLabel("decision", s!.decision, "решение")}
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты на стадии «Решение» — по ним принимается решение о найме — нажмите, чтобы отфильтровать</TooltipContent>
+                        </UITooltip>)
                       if ((s?.offer ?? 0) > 0) push("offer",
                         <UITooltip>
                           <TooltipTrigger asChild>
@@ -3220,6 +3283,20 @@ export default function VacancyPage() {
                             {clickableLabel("hired", s!.hired, "нанято")}
                           </TooltipTrigger>
                           <TooltipContent>Кандидаты, нанятые по этой вакансии — нажмите, чтобы отфильтровать</TooltipContent>
+                        </UITooltip>)
+                      // Пост-найм стадия (канон lib/stages.ts, только >0):
+                      // «Выход на работу» (started_work) — подмножество «нанято»
+                      // (счётчик «нанято» = hired + started_work, не ломаем).
+                      // Показываем ТОЛЬКО когда несёт информацию: если все нанятые
+                      // уже вышли (startedWork === hired), цифра дублирует «нанято»
+                      // («5 нанято · 5 работает») — шум (Юрий 15.07). Расходятся
+                      // (нанят, но ещё не вышел) → показываем, это уже сигнал.
+                      if ((s?.startedWork ?? 0) > 0 && s!.startedWork !== s!.hired) push("startedWork",
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            {clickableLabel("startedWork", s!.startedWork, "работает")}
+                          </TooltipTrigger>
+                          <TooltipContent>Кандидаты, вышедшие на работу — из числа нанятых уже приступили — нажмите, чтобы отфильтровать</TooltipContent>
                         </UITooltip>)
                       // Только >0: отказ.
                       if ((s?.rejected ?? 0) > 0) push("rejected",
@@ -3793,27 +3870,6 @@ export default function VacancyPage() {
               </TabsContent>
 
               <TabsContent value="candidates">
-                {/* Talent Pool radar */}
-                {talentMatches.length > 0 && !talentRadarHidden && (
-                  <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />В резерве найдено {talentMatches.length} подходящих кандидатов</p>
-                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setTalentRadarHidden(true)}><X className="w-3 h-3" /></Button>
-                    </div>
-                    <div className="space-y-1.5">
-                      {talentMatches.map(c => (
-                        <div key={c.id} className="flex items-center gap-3 bg-white dark:bg-gray-950 rounded-md px-3 py-2 border">
-                          <span className="text-sm font-medium flex-1">{c.name}</span>
-                          {c.city && <span className="text-xs text-muted-foreground">{c.city}</span>}
-                          <Badge variant="secondary" className="text-xs">{c.matchPercent}% совпадение</Badge>
-                          {c.aiScore != null && <Badge variant="outline" className="text-xs">AI {c.aiScore}</Badge>}
-                          <Button size="sm" className="h-7 text-xs gap-1" onClick={() => inviteFromPool(c.id)}>Пригласить</Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {bulkScreening && <div className="mb-3 text-xs text-muted-foreground">AI анализирует кандидатов...</div>}
                 <KanbanBoard
                   settings={cardSettings}
@@ -4013,7 +4069,11 @@ export default function VacancyPage() {
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                 <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[0, funnelData[0]?.count || 1]} allowDataOverflow />
                                 <YAxis type="category" dataKey="stage" tick={{ fontSize: 11 }} width={140} stroke="var(--muted-foreground)" />
-                                <Tooltip contentStyle={ttStyle} />
+                                {/* Recharts по умолчанию рисует cursor во всю ширину/высоту
+                                    категории — на близких к нулю стадиях это выглядит как
+                                    гигантская полоса-призрак под курсором (15.07). Ненавязчивая
+                                    подсветка вместо дефолтной. */}
+                                <Tooltip contentStyle={ttStyle} cursor={{ fill: "var(--muted)", fillOpacity: 0.3 }} />
                                 <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                                   {funnelData.map((e, i) => <Cell key={i} fill={e.color} />)}
                                   <LabelList
@@ -4168,7 +4228,8 @@ export default function VacancyPage() {
                               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                               <XAxis dataKey="range" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                               <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                              <Tooltip contentStyle={ttStyle} />
+                              {/* Та же полоса-призрак, что и в воронке выше (15.07) — тот же фикс. */}
+                              <Tooltip contentStyle={ttStyle} cursor={{ fill: "var(--muted)", fillOpacity: 0.3 }} />
                               <Bar dataKey="count" name="Кандидатов" radius={[6, 6, 0, 0]}>
                                 {scoreRanges.map((s, i) => <Cell key={i} fill={s.color} />)}
                               </Bar>
@@ -4805,6 +4866,28 @@ export default function VacancyPage() {
                     initialText={(apiVacancy as { scheduleInviteText?: string } | undefined)?.scheduleInviteText ?? ""}
                     onSaved={() => refetchVacancy()}
                   />
+                  {/* Мягкое напоминание «пройдите Демо-3 до интервью» (14.07). */}
+                  <Demo3BeforeInterviewSettings
+                    vacancyId={id}
+                    initialText={(apiVacancy as { demo3BeforeInterviewText?: string } | undefined)?.demo3BeforeInterviewText ?? ""}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* 14.07 (осиротевшие настройки, Ф.А): шаблоны «ссылка на встречу
+                      добавлена» и «интервью отменено менеджером» — API уже принимал
+                      оба поля (aiProcessSettings), редактора не было. */}
+                  <InterviewNotificationMessagesSettings
+                    vacancyId={id}
+                    initial={apiVacancy?.aiProcessSettings ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
+                  {/* 14.07: экран «Вы записаны» на публичной странице записи
+                      (descriptionJson.interviewBookedScreen) — API читал поле с
+                      #26.4, редактора не было. */}
+                  <InterviewBookedScreenSettings
+                    vacancyId={id}
+                    initial={(apiVacancy?.descriptionJson as { interviewBookedScreen?: { title?: string; text?: string } } | undefined)?.interviewBookedScreen ?? null}
+                    onSaved={() => refetchVacancy()}
+                  />
 
                   {/* 5 · Отказы */}
                   <div className="pt-2">
@@ -4817,6 +4900,22 @@ export default function VacancyPage() {
                       setSettingsSection("spec")
                       const sp = new URLSearchParams(window.location.search)
                       sp.set("tab", "settings"); sp.set("section", "spec")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      window.scrollTo({ top: 0, behavior: "smooth" })
+                    }}
+                    chatbotRejectionMessages={(apiVacancy as { aiChatbotSettings?: { rejectionMessages?: { injection?: string; severeAbuse?: string; repeatedAbuse?: string; unstable?: string } } } | undefined)?.aiChatbotSettings?.rejectionMessages}
+                    onNavigateToChatbot={() => {
+                      setSettingsSection("aichatbot")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "aichatbot")
+                      router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
+                      window.scrollTo({ top: 0, behavior: "smooth" })
+                    }}
+                    funnelV2RejectStagesCount={funnelV2RejectStagesCount}
+                    onNavigateToFunnelV2={() => {
+                      setSettingsSection("funnel-v2")
+                      const sp = new URLSearchParams(window.location.search)
+                      sp.set("tab", "settings"); sp.set("section", "funnel-v2")
                       router.replace(`${window.location.pathname}?${sp.toString()}`, { scroll: false })
                       window.scrollTo({ top: 0, behavior: "smooth" })
                     }}
@@ -4885,7 +4984,7 @@ export default function VacancyPage() {
                 {/* ───────── Воронка v2 (beta, видна всем) ───────── */}
                 {settingsSection === "funnel-v2" && (
                 <SettingsTabShell width="full" className="space-y-6">
-                  <FunnelV2Builder vacancyId={id} onOpenPortrait={() => {
+                  <FunnelV2Builder vacancyId={id} isOwner={isOwnerEmail(user?.email)} onOpenPortrait={() => {
                     setSettingsSection("spec")
                     const sp = new URLSearchParams(window.location.search)
                     sp.set("tab", "settings"); sp.set("section", "spec")
@@ -5401,6 +5500,14 @@ export default function VacancyPage() {
               </span>
             </span>
           </label>
+          {closeRejectRemaining && (
+            <div className="mx-1 -mt-1 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+              В резерв на будущее? Отказ необратим — ценных кандидатов имеет смысл
+              сначала сохранить в резерв (кнопка «В резерв» в карточке или
+              массовое действие на вкладке «Кандидаты»), чтобы вернуться к ним на
+              следующих вакансиях. Полный список — на странице «Резерв».
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={closeBusy}>Отмена</AlertDialogCancel>
             <AlertDialogAction onClick={(e) => { e.preventDefault(); handleCloseVacancyConfirm() }} disabled={closeBusy}>

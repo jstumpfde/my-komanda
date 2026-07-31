@@ -212,6 +212,49 @@ export function createBlock(type: BlockType): Block {
   }
 }
 
+// ─── Глубокое копирование с перегенерацией id ────────────────────────────────
+// Используется при дублировании/копировании блоков контента и уроков (между
+// блоками одной вакансии и между вакансиями). id вопросов (q-*) участвуют в
+// anketa_answers и скоринге (correctOptions/aiCriteria) — коллизия id между
+// двумя разными сущностями (оригинал + копия) сломает гейт анкеты/скоринг,
+// поэтому КАЖДЫЙ уровень (урок → блок → вопрос/карточка) получает новый id.
+// Работает и на клиенте, и на сервере (structuredClone — стандартный Node/Web API).
+
+function uniqueIdSuffix(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Глубокая копия вопроса с новым id (для дублирования task-блоков). */
+export function cloneQuestionWithNewId(question: Question): Question {
+  return { ...structuredClone(question), id: `q-${uniqueIdSuffix()}` }
+}
+
+/** Глубокая копия элемента урока (Block) с новым id и новыми id всех вопросов
+ *  (task) и карточек сторис внутри. Контент (текст/медиа/настройки/баллы) —
+ *  1-в-1, оригинал не мутируется. */
+export function cloneBlockWithNewIds(block: Block): Block {
+  const cloned = structuredClone(block)
+  cloned.id = `blk-${uniqueIdSuffix()}`
+  cloned.questions = (cloned.questions ?? []).map((q) => ({ ...q, id: `q-${uniqueIdSuffix()}` }))
+  if (cloned.storiesCards) {
+    cloned.storiesCards = cloned.storiesCards.map((c) => ({ ...c, id: `card-${uniqueIdSuffix()}` }))
+  }
+  return cloned
+}
+
+/** Глубокая копия урока с новым id и перегенерацией id всех вложенных блоков
+ *  и вопросов. titleSuffix добавляется к заголовку (по умолчанию « (копия)»,
+ *  для копирования урока в другой блок/вакансию передавайте "" — заголовок
+ *  остаётся как есть, копии различает целевой контекст). */
+export function cloneLessonWithNewIds(lesson: Lesson, titleSuffix: string = " (копия)"): Lesson {
+  return {
+    id: `les-${uniqueIdSuffix()}`,
+    emoji: lesson.emoji,
+    title: `${lesson.title}${titleSuffix}`,
+    blocks: (lesson.blocks ?? []).map((b) => cloneBlockWithNewIds(b)),
+  }
+}
+
 function lesson(id: string, emoji: string, title: string, blocks: Block[]): Lesson {
   return { id, emoji, title, blocks }
 }

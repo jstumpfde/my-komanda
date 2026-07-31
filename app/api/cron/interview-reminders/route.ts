@@ -8,6 +8,7 @@ import { sendToCompanyChannel } from "@/lib/telegram/send-to-company"
 import { sendManagerBotMessage } from "@/lib/telegram/manager-bot"
 import { sendCandidateMessage } from "@/lib/prequalification/start"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
+import { renderReminderText, REMINDER_LEAD_PHRASES, type ReminderKind } from "@/lib/hr/interview-reminder-texts"
 
 // C6 + #27 + Юрий 09.07: напоминания об интервью — 4 порога, одинаковые для
 // кандидата/HR-канала и для менеджера: за сутки / утром в 9:00 / за час / за 15 минут.
@@ -44,6 +45,14 @@ import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 // при часовом интервале это окно почти всегда проскакивает):
 //   */5 * * * * curl -s -X POST -H "X-Cron-Secret: $CRON_SECRET" \
 //     https://company24.pro/api/cron/interview-reminders >> /var/log/interview-reminders.log 2>&1
+//
+// Тексты сообщений (14.07, задача editable-interview-reminder-texts):
+// companies.hiringDefaultsJson.schedule.reminderTexts.{candidate|hr|manager}.
+// {24h|morning|1h|15m} — редактируется в /hr/calendar?settings=1. Пусто →
+// DEFAULT_REMINDER_TEXTS (lib/hr/interview-reminder-texts.ts), байт-в-байт
+// как исходный хардкод. Короткая лид-фраза («через час» и т.п.) для
+// notifications.title и первой строки Telegram-сообщений — REMINDER_LEAD_PHRASES,
+// сознательно осталась в коде (см. комментарий в lib/hr/interview-reminder-texts.ts).
 //
 // Protected by X-Cron-Secret header.
 
@@ -84,8 +93,6 @@ function fmt(d: Date, tz: string): string {
     }).format(d) + " (МСК)"
   }
 }
-
-type ReminderKind = "24h" | "morning" | "1h" | "15m"
 
 async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: number; sent1h: number; sent15m: number; skipped: number; sentManager: number }> {
   const now = new Date()
@@ -152,6 +159,28 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
     const startAt = new Date(ev.startAt!)
     const when    = fmt(startAt, tz)
 
+    // #14: адрес/ссылка — общая для всех трёх каналов (кандидат/HR/менеджер).
+    const locationLine = ev.interviewFormat === "Офис" && ev.location
+      ? `\n📍 ${ev.location}`
+      : ev.interviewFormat === "Онлайн" && ev.meetingUrl
+        ? `\n🔗 ${ev.meetingUrl}`
+        : ""
+    // #27: ссылка на перезапись — тем же токеном, что и приглашение (short_id → token).
+    // Используется только в кандидатском тексте, но считаем один раз на событие.
+    const tokenForUrl = ev.candShortId ?? ev.candToken ?? null
+    const rescheduleLine = tokenForUrl
+      ? `\n\nНе получается в это время? Выберите другое: ${APP_ORIGIN}/schedule/${tokenForUrl}`
+      : ""
+    // Плейсхолдеры для reminderTexts (lib/hr/interview-reminder-texts.ts) —
+    // одинаковый набор для всех каналов, неиспользуемые в конкретном
+    // шаблоне ключи просто не встречаются в тексте.
+    const vars: Record<string, string> = {
+      event_title:     ev.title,
+      interview_at:    when,
+      location:        locationLine,
+      reschedule_link: rescheduleLine,
+    }
+
     const within1h      = startAt <= in1h15
     const within15m     = startAt <= in15m
     const sameLocalDay  = localYMD(startAt, tz) === localYMD(now, tz)
@@ -198,20 +227,8 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
     // 0) Напоминание менеджеру — не зависит от тумблеров companies.hiringDefaultsJson
     // (те гейтят только кандидата/канал); привязка бота = согласие получать все 4 порога.
     if (managerKind) {
-      const managerLead =
-        managerKind === "24h"     ? "через 24 часа"
-        : managerKind === "morning" ? "сегодня"
-        : managerKind === "1h"    ? "через час"
-        : "через 15 минут"
-      const managerLocation = ev.interviewFormat === "Офис" && ev.location
-        ? `\n📍 ${ev.location}`
-        : ev.interviewFormat === "Онлайн" && ev.meetingUrl
-          ? `\n🔗 ${ev.meetingUrl}`
-          : ""
-      await sendManagerBotMessage(
-        ev.managerChatId!,
-        `⏰ <b>Интервью ${managerLead}</b>\n«${ev.title}» — ${when}${managerLocation}`,
-      ).catch(() => {})
+      const managerText = renderReminderText("manager", managerKind, sched.reminderTexts, vars)
+      await sendManagerBotMessage(ev.managerChatId!, managerText).catch(() => {})
       await db.update(calendarEvents).set(managerMarkField).where(eq(calendarEvents.id, ev.id))
       sentManager++
     }
@@ -232,19 +249,11 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
       continue
     }
 
-    const lead =
-      kind === "24h"     ? "через 24 часа"
-      : kind === "morning" ? "сегодня"
-      : kind === "15m"   ? "через 15 минут"
-      : "через час"
-    const title = `Интервью ${lead}`
-    // #14: добавляем адрес или ссылку к тексту напоминания
-    const locationLine = ev.interviewFormat === "Офис" && ev.location
-      ? `\n📍 ${ev.location}`
-      : ev.interviewFormat === "Онлайн" && ev.meetingUrl
-        ? `\n🔗 ${ev.meetingUrl}`
-        : ""
-    const body = `«${ev.title}» — ${when}${locationLine}`
+    // Короткая лид-фраза заголовка (НЕ редактируется через reminderTexts —
+    // см. комментарий в lib/hr/interview-reminder-texts.ts); само сообщение
+    // (body) — полностью редактируемо через reminderTexts.hr.
+    const title = `Интервью ${REMINDER_LEAD_PHRASES[kind]}`
+    const body  = renderReminderText("hr", kind, sched.reminderTexts, vars)
 
     // 1) In-app уведомление организатору (или всем HR тенанта, если автор неизвестен).
     await db.insert(notifications).values({
@@ -264,23 +273,7 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
 
     // 3) Сообщение кандидату в hh-чат (если событие привязано к кандидату).
     if (ev.candidateId) {
-      const candidateLead =
-        kind === "24h"     ? "завтра"
-        : kind === "morning" ? "сегодня"
-        : kind === "15m"   ? "через 15 минут"
-        : "через час"
-      const candidateLocation = ev.interviewFormat === "Офис" && ev.location
-        ? `\n📍 ${ev.location}`
-        : ev.interviewFormat === "Онлайн" && ev.meetingUrl
-          ? `\n🔗 ${ev.meetingUrl}`
-          : ""
-      // #27: ссылка на перезапись — тем же токеном, что и приглашение (short_id → token).
-      const tokenForUrl = ev.candShortId ?? ev.candToken ?? null
-      const rescheduleLine = tokenForUrl
-        ? `\n\nНе получается в это время? Выберите другое: ${APP_ORIGIN}/schedule/${tokenForUrl}`
-        : ""
-      const candidateText =
-        `Здравствуйте! Напоминаем, что ${candidateLead} в ${when} запланировано собеседование.${candidateLocation}${rescheduleLine}`
+      const candidateText = renderReminderText("candidate", kind, sched.reminderTexts, vars)
       await sendCandidateMessage(ev.candidateId, candidateText).catch(() => {})
     }
 

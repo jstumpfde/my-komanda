@@ -1,0 +1,13 @@
+-- Настраиваемый текст мягкого напоминания «пройдите Демо-3 до интервью».
+--
+-- Ставится кандидату (ветка follow_up demo3_before_interview), когда он
+-- записался на интервью / переведён в стадию interview, но НЕ прошёл последний
+-- демо-блок вакансии (нет его ключа в candidates.demo_block_scores) — и только
+-- если у вакансии больше одного демо-блока, а последний скорируемый.
+--
+-- Пусто → используется DEFAULT_DEMO3_BEFORE_INTERVIEW_TEXT
+-- (lib/messaging/demo3-before-interview.ts). Плейсхолдеры:
+-- {{name}} {{vacancy}} {{company}} {{manager}} {{demo3_link}}.
+-- Паттерн — как vacancies.schedule_invite_text (миграция 0238): отдельная
+-- колонка, чтобы не зависеть от общего PUT descriptionJson.
+ALTER TABLE vacancies ADD COLUMN IF NOT EXISTS demo3_before_interview_text text NOT NULL DEFAULT '';

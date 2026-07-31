@@ -55,6 +55,31 @@ function apiBlockToBlock(d: ApiContentBlock): ContentBlock {
   }
 }
 
+/**
+ * Видимость блоков в конструкторе — вынесено из ContentBlocksTab, чтобы тот же
+ * фильтр применялся при выборе целевого блока в диалоге «Скопировать в
+ * вакансию…» (иначе пикер показал бы legacy-дубли, скрытые в основной ленте).
+ * - block:* — всегда видны (новый формат).
+ * - Легаси kind='demo'/'test' — прячем, когда есть боевой block:* того же типа
+ *   (dual-write уже управляет им); иначе показываем (13 вакансий живут только
+ *   на легаси-записях).
+ */
+export function visibleContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
+  const liveTestBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType === "test" && b.isLiveBattle)
+  const liveDemoBlockExists = blocks.some(b => b.kind.startsWith("block:") && b.contentType === "presentation" && b.isLiveBattle)
+  return blocks
+    .filter(b =>
+      b.kind.startsWith("block:")
+      || (b.kind === "test" && !liveTestBlockExists)
+      || (b.kind === "demo" && !liveDemoBlockExists)
+    )
+    .map(b =>
+      b.kind === "demo" ? { ...b, contentType: "presentation" as ContentType, isLiveBattle: true }
+      : b.kind === "test" ? { ...b, contentType: "test" as ContentType, isLiveBattle: true }
+      : b
+    )
+}
+
 export type BlockPatch = {
   title?: string
   contentType?: ContentType

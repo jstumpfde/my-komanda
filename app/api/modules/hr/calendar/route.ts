@@ -66,6 +66,13 @@ export async function GET(req: NextRequest) {
         candPhone: candidates.phone,
         candStage: candidates.stage,
         candAnketa: candidates.anketaAnswers,
+        // Обогащение карточки интервью: город, желаемая зарплата, прогресс демо,
+        // источник — те же поля, что показывает карточка кандидата на канбане.
+        candCity: candidates.city,
+        candSalaryMin: candidates.salaryMin,
+        candSalaryMax: candidates.salaryMax,
+        candDemoProgressJson: candidates.demoProgressJson,
+        candSource: candidates.source,
       })
       .from(calendarEvents)
       .leftJoin(candidates, eq(candidates.id, calendarEvents.candidateId))

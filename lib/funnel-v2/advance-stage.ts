@@ -16,6 +16,7 @@ import { candidates, followUpMessages, followUpCampaigns } from "@/lib/db/schema
 import type { FunnelV2Stage } from "@/lib/funnel-v2/types"
 import type { CandidateForExecutor, VacancyForExecutor } from "@/lib/funnel-v2/runtime-executor"
 import type { FunnelV2State } from "@/lib/db/schema"
+import { FUNNEL_V2_ACTION_TO_SLUG } from "@/lib/stages"
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Чистая логика (без БД, без IO — легко тестируется)
@@ -161,22 +162,17 @@ async function cancelPrevDozhim(candidateId: string, prevStageId: string): Promi
  * Маппинг action стадии → legacy-поле candidates.stage.
  * Используется для синхронизации легаси-UI/фильтров/отчётов при v2-advance.
  * Решение Юрия: синкать legacy-stage при advance (В4).
+ *
+ * B9-фикс (14.07): раньше здесь была отдельная копия карты, разошедшаяся с
+ * канонической (offer писал legacy 'final_decision' вместо 'offer_sent';
+ * security_check/reference_check оба схлопывались в 'interview' — терялась
+ * разница). Теперь ЕДИНЫЙ источник — FUNNEL_V2_ACTION_TO_SLUG в lib/stages.ts
+ * (см. её комментарий там за полным обоснованием каждого маппинга и
+ * причинами, почему message/prequalification оставлены как есть). Экспортна
+ * для юнит-теста (lib/funnel-v2/action-to-stage-mapping.test.ts).
  */
-function mapActionToLegacyStage(action: string): string | null {
-  const MAP: Record<string, string> = {
-    "prequalification": "primary_contact",
-    "demo":             "demo_opened",
-    "test":             "test_task_sent",
-    "task":             "test_task_sent",
-    "interview":        "interview",
-    "decision":         "decision",
-    "offer":            "final_decision",
-    "hired":            "hired",
-    "security_check":   "interview",
-    "reference_check":  "interview",
-    "message":          "primary_contact",
-  }
-  return MAP[action] ?? null
+export function mapActionToLegacyStage(action: string): string | null {
+  return FUNNEL_V2_ACTION_TO_SLUG[action] ?? null
 }
 
 /**

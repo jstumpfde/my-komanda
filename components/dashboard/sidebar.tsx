@@ -101,6 +101,7 @@ const MODULE_SHORT: Record<ModuleId, string> = {
   qc:        'ОКК',
   email_marketing: 'ЕМЛ',
   price_monitor:   'Цены',
+  business_assistant: 'БА',
   ai_rop:          'РОП',
 }
 
@@ -120,6 +121,7 @@ const MODULE_COLORS: Record<ModuleId, string> = {
   qc:        'text-indigo-500',
   email_marketing: 'text-rose-500',
   price_monitor:   'text-lime-500',
+  business_assistant: 'text-teal-500',
   ai_rop:          'text-pink-500',
 }
 
@@ -138,6 +140,7 @@ const MODULE_BG_COLORS: Record<ModuleId, string> = {
   qc:        'bg-indigo-500/10',
   email_marketing: 'bg-rose-500/10',
   price_monitor:   'bg-lime-500/10',
+  business_assistant: 'bg-teal-500/10',
   ai_rop:          'bg-pink-500/10',
 }
 
@@ -156,6 +159,7 @@ const MODULE_BORDER_COLORS: Record<ModuleId, string> = {
   qc:        '#6366f1',
   email_marketing: '#f43f5e',
   price_monitor:   '#84cc16',
+  business_assistant: '#14b8a6',
   ai_rop:          '#ec4899',
 }
 
@@ -351,7 +355,7 @@ export function DashboardSidebar() {
   //   непустой массив → компания видит ИМЕННО эти ключи модулей (с hr как минимум).
   // НЕ применяется для платформенных ролей, owner-полигона и демо-витрины
   // (fullModulesCompany) — они всегда видят всё.
-  const ALL_MODULE_KEYS = useRef(new Set<ModuleId>(['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b'])).current
+  const ALL_MODULE_KEYS = useRef(new Set<ModuleId>(['hr', 'knowledge', 'learning', 'tasks', 'sales', 'marketing', 'warehouse', 'logistics', 'booking', 'dialer', 'qc', 'b2b', 'business_assistant'])).current
   // Источник истины — живой ответ /api/companies (применяется без релогина);
   // пока он не загружен (undefined) — fallback на значение из сессии.
   const companyModulesRaw = companyModulesLive !== undefined ? companyModulesLive : (user?.enabledModules ?? null)
@@ -408,6 +412,13 @@ export function DashboardSidebar() {
     const finalModules = companyEnabledModules
       ? newModules.filter((m) => companyEnabledModules.includes(m) || (m === 'price_monitor' && priceMonitorEnabled) || (m === 'ai_rop' && aiRopEnabled))
       : newModules
+    // Бизнес-ассистент отсутствует в базовых списках ролей (скрыт по умолчанию),
+    // поэтому пересечение выше его отбрасывает. Показываем аддитивно — ТОЛЬКО когда
+    // компания явно включила его в enabled_modules. Компании без оверрайда
+    // (companyEnabledModules === null) модуль не видят.
+    if (companyEnabledModules?.includes('business_assistant' as ModuleId) && !finalModules.includes('business_assistant' as ModuleId)) {
+      finalModules.push('business_assistant' as ModuleId)
+    }
     // Защита: если фильтр случайно опустошил список — оставляем hr (никогда пусто).
     const safeModules = finalModules.length > 0 ? finalModules : (['hr'] as ModuleId[])
     setActiveModules(prev => {

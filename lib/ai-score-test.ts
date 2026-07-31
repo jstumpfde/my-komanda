@@ -17,6 +17,7 @@ import { resolveOptionPoints, type ObjectiveResult, type StructuredAnswer } from
 import type { Question } from "@/lib/course-types"
 import { callClaudeHaikuWithUsage } from "@/lib/ai/client"
 import { logAiCall } from "@/lib/ai/usage-log"
+import { logAiCallFailure } from "@/lib/ai/failure-log"
 import { AI_MODEL_FAST } from "@/lib/ai/models"
 
 const SYSTEM_PROMPT =
@@ -102,7 +103,11 @@ async function scoreWithRetry(
       if (delay != null) await new Promise((r) => setTimeout(r, delay))
     }
   }
-  console.error("[test scoring] AI все ретраи исчерпаны:", lastErr instanceof Error ? lastErr.message : lastErr)
+  const lastErrMsg = lastErr instanceof Error ? lastErr.message : String(lastErr)
+  console.error("[test scoring] AI все ретраи исчерпаны:", lastErrMsg)
+  // Сторож найма (drizzle/0277): платформенный детектор массового сбоя AI —
+  // логируем один раз ПОСЛЕ исчерпания ретраев (не на каждую попытку).
+  void logAiCallFailure({ source: "score-test", errorMessage: lastErrMsg, companyId: args.tenantId ?? null })
   return null
 }
 

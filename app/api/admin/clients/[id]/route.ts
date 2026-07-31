@@ -16,6 +16,7 @@ const MODULE_KEYS = [
   "hr", "knowledge", "learning", "tasks", "sales", "marketing",
   "b2b", "warehouse", "logistics", "booking", "dialer", "qc",
   "price_monitor",
+  "business_assistant",
 ] as const
 
 // GET /api/admin/clients/[id] — полная информация о компании

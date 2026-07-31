@@ -11,7 +11,11 @@ interface ListSortPref {
 
 interface PreferencesPayload {
   viewMode?: string | null
-  columns?: Record<string, boolean> | null
+  // Личный override колонок списка кандидатов (Портрет/Демо/Анкета/…) поверх
+  // company-default (hiring-defaults.candidateColumns) — решение владельца
+  // 17.07: тумблеры активны у ВСЕХ, не только у директора (было B5 10.06).
+  // Partial — храним только реально переключённые ключи.
+  candidateColumns?: Record<string, boolean> | null
   // null — явный сброс выбора (вернёмся к серверному дефолту).
   listSort?: ListSortPref | null
 }
@@ -25,6 +29,16 @@ const ALLOWED_LIST_SORT_KEYS = new Set([
   "responseDate", "status", "city", "source",
 ])
 
+// Whitelist должен совпадать с CardDisplaySettings из
+// components/dashboard/card-settings.tsx (дублирую константой по той же
+// причине, что и ALLOWED_LIST_SORT_KEYS — не тянуть UI-импорт в API-роут).
+const ALLOWED_CANDIDATE_COLUMN_KEYS = new Set([
+  "showSalary", "showSalaryFull", "showScore", "showResumeScore", "showPortraitScore",
+  "showAnswersScore", "showTestScore", "showNextInterview", "showAge", "showSource",
+  "showCity", "showExperience", "showSkills", "showActions", "showProgress",
+  "showResponseDate", "showNameWarning",
+])
+
 function normalizeListSort(raw: unknown): ListSortPref | null | undefined {
   if (raw === null) return null
   if (!raw || typeof raw !== "object") return undefined
@@ -32,6 +46,17 @@ function normalizeListSort(raw: unknown): ListSortPref | null | undefined {
   if (typeof r.key !== "string" || !ALLOWED_LIST_SORT_KEYS.has(r.key)) return undefined
   if (r.dir !== "asc" && r.dir !== "desc") return undefined
   return { key: r.key, dir: r.dir }
+}
+
+// Фильтруем произвольный объект до known-boolean-ключей (защита от мусора/
+// огромных payload'ов в jsonb-колонке — по аналогии с normalizeListSort).
+function normalizeCandidateColumns(raw: unknown): Record<string, boolean> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const out: Record<string, boolean> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (ALLOWED_CANDIDATE_COLUMN_KEYS.has(k) && typeof v === "boolean") out[k] = v
+  }
+  return out
 }
 
 async function loadOrCreate(userId: string) {
@@ -44,7 +69,7 @@ async function loadOrCreate(userId: string) {
 function serialize(row: typeof userPreferences.$inferSelect) {
   return {
     viewMode: row.candidatesViewMode ?? "list",
-    columns: (row.candidatesColumnsJson as Record<string, boolean> | null) ?? {},
+    candidateColumns: (row.candidatesColumnsJson as Record<string, boolean> | null) ?? {},
     listSort: (row.candidatesListSortJson as ListSortPref | null) ?? null,
   }
 }
@@ -71,8 +96,9 @@ export async function PATCH(req: NextRequest) {
     if (typeof body.viewMode === "string" && ALLOWED_VIEW_MODES.has(body.viewMode)) {
       patch.candidatesViewMode = body.viewMode
     }
-    if (body.columns && typeof body.columns === "object") {
-      patch.candidatesColumnsJson = body.columns
+    if (body.candidateColumns && typeof body.candidateColumns === "object") {
+      const normalized = normalizeCandidateColumns(body.candidateColumns)
+      if (normalized) patch.candidatesColumnsJson = normalized
     }
     if ("listSort" in body) {
       // null → явный сброс; объект → валидируем; всё остальное игнорируем.

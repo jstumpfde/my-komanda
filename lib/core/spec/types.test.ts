@@ -13,7 +13,7 @@
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { CandidateSpecSchema, ResumeThresholdsSchema, AnketaPassInviteSchema } from "./types"
+import { CandidateSpecSchema, ResumeThresholdsSchema, AnketaPassInviteSchema, normalizeLegacyInviteHhStage } from "./types"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // rejectAction ⇄ autoRejectEnabled (лёгаси-маппинг)
@@ -133,4 +133,88 @@ test("AnketaPassInviteSchema: failAction отсутствует → дефолт
 test("AnketaPassInviteSchema: невалидное значение failAction → safeParse падает (Zod enum), НЕ тихо подменяется на 'none'", () => {
   const result = AnketaPassInviteSchema.safeParse({ failAction: "something_else" })
   assert.equal(result.success, false)
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// inviteHhStage: фикс инцидента 13.07 — "consider" удалён из допустимых значений
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("CandidateSpecSchema: inviteHhStage не принимает устаревшее значение 'consider' (фикс инцидента 13.07 — consider='Подумать' на hh, не 'Первичный контакт')", () => {
+  const raw = {
+    resumeThresholds: {
+      inviteHhStage: "consider",
+    },
+  }
+  const result = CandidateSpecSchema.safeParse(raw)
+  assert.equal(result.success, false)
+})
+
+test("CandidateSpecSchema: inviteHhStage по умолчанию — phone_interview", () => {
+  const parsed = CandidateSpecSchema.parse({})
+  assert.equal(parsed.resumeThresholds.inviteHhStage, "phone_interview")
+})
+
+test("CandidateSpecSchema: inviteHhStage принимает interview и assessment (легитимные альтернативы)", () => {
+  const parsedInterview = CandidateSpecSchema.parse({ resumeThresholds: { inviteHhStage: "interview" } })
+  assert.equal(parsedInterview.resumeThresholds.inviteHhStage, "interview")
+  const parsedAssessment = CandidateSpecSchema.parse({ resumeThresholds: { inviteHhStage: "assessment" } })
+  assert.equal(parsedAssessment.resumeThresholds.inviteHhStage, "assessment")
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// normalizeLegacyInviteHhStage() — защитная нормализация ЧТЕНИЯ (store.ts::getSpec()
+// вызывает её ДО safeParse). Продолжение теста выше: раз схема больше не
+// принимает "consider", записи из БД, сохранённые ДО фикса 13.07, должны
+// чиниться на входе, иначе safeParse проваливается целиком (см. store.ts).
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("normalizeLegacyInviteHhStage: 'consider' в resumeThresholds заменяется на 'phone_interview'", () => {
+  const raw = { resumeThresholds: { inviteHhStage: "consider", upperThreshold: 55 } }
+  const fixed = normalizeLegacyInviteHhStage(raw) as { resumeThresholds: { inviteHhStage: string; upperThreshold: number } }
+  assert.equal(fixed.resumeThresholds.inviteHhStage, "phone_interview")
+  // Остальные поля resumeThresholds не задеты.
+  assert.equal(fixed.resumeThresholds.upperThreshold, 55)
+})
+
+test("normalizeLegacyInviteHhStage: результат проходит CandidateSpecSchema.safeParse() (сквозной сценарий getSpec())", () => {
+  const raw = { resumeThresholds: { inviteHhStage: "consider" } }
+  const fixed = normalizeLegacyInviteHhStage(raw)
+  const result = CandidateSpecSchema.safeParse(fixed)
+  assert.equal(result.success, true)
+  if (result.success) {
+    assert.equal(result.data.resumeThresholds.inviteHhStage, "phone_interview")
+  }
+})
+
+test("normalizeLegacyInviteHhStage: легитимные значения (interview/assessment/phone_interview) не трогает", () => {
+  for (const stage of ["interview", "assessment", "phone_interview"]) {
+    const raw = { resumeThresholds: { inviteHhStage: stage } }
+    const fixed = normalizeLegacyInviteHhStage(raw) as { resumeThresholds: { inviteHhStage: string } }
+    assert.equal(fixed.resumeThresholds.inviteHhStage, stage)
+  }
+})
+
+test("normalizeLegacyInviteHhStage: не мутирует вход, возвращает новый объект при замене", () => {
+  const raw = { resumeThresholds: { inviteHhStage: "consider" } }
+  const fixed = normalizeLegacyInviteHhStage(raw)
+  assert.notEqual(fixed, raw) // новый объект
+  assert.equal(raw.resumeThresholds.inviteHhStage, "consider") // исходный не тронут
+})
+
+test("normalizeLegacyInviteHhStage: без изменений возвращает тот же объект (ссылочно) — нет лишних аллокаций", () => {
+  const raw = { resumeThresholds: { inviteHhStage: "phone_interview" } }
+  const fixed = normalizeLegacyInviteHhStage(raw)
+  assert.equal(fixed, raw)
+})
+
+test("normalizeLegacyInviteHhStage: неожиданные формы входа (null/массив/без resumeThresholds/строка) не падают", () => {
+  assert.equal(normalizeLegacyInviteHhStage(null), null)
+  assert.equal(normalizeLegacyInviteHhStage(undefined), undefined)
+  assert.equal(normalizeLegacyInviteHhStage("не объект"), "не объект")
+  const arr: unknown[] = []
+  assert.equal(normalizeLegacyInviteHhStage(arr), arr)
+  const noThresholds = { idealProfile: "x" }
+  assert.equal(normalizeLegacyInviteHhStage(noThresholds), noThresholds)
+  const nullThresholds = { resumeThresholds: null }
+  assert.equal(normalizeLegacyInviteHhStage(nullThresholds), nullThresholds)
 })

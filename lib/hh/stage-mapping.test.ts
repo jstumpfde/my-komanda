@@ -66,7 +66,9 @@ test("входящий: hh-состояние → наша стадия", () => 
   assert.equal(hhStateToPlatformStage("phone_interview"), "primary_contact")
   assert.equal(hhStateToPlatformStage("consider"), "primary_contact")
   assert.equal(hhStateToPlatformStage("assessment"), "test_task_sent")
-  assert.equal(hhStateToPlatformStage("interview"), "interview")
+  // hh-папка «Собеседование» НЕ двигает нашу стадию (Юрий 15.07) — interview
+  // ставится только ручным переводом HR, не входящим синком.
+  assert.equal(hhStateToPlatformStage("interview"), null)
   assert.equal(hhStateToPlatformStage("discard_by_employer"), "rejected")
   assert.equal(hhStateToPlatformStage("discard_by_applicant"), "rejected")
   assert.equal(hhStateToPlatformStage("hired"), "hired")
@@ -89,14 +91,19 @@ test("candidate-declined только для discard_by_applicant", () => {
 
 test("двусторонняя согласованность (round-trip для основных стадий)", () => {
   // Стадия → hh-state → обратно в стадию должно давать эквивалент.
-  for (const stage of ["primary_contact", "test_task_sent", "interview", "rejected", "hired"] as const) {
+  // interview исключён из round-trip: исходящий пуш есть (наш interview → hh
+  // "interview"), а обратный маппинг с 15.07 = null (входящий синк не двигает
+  // нашу стадию в interview — только ручной перевод HR).
+  for (const stage of ["primary_contact", "test_task_sent", "rejected", "hired"] as const) {
     const st = platformStageToHhState(stage)
     assert.ok(st, `нет hh-state для ${stage}`)
     const back = hhStateToPlatformStage(st)
-    // interview↔interview, test↔test, rejected↔rejected, primary_contact↔primary_contact, hired↔hired
     if (stage === "rejected") assert.equal(back, "rejected")
     else assert.equal(back, stage)
   }
+  // interview: исходящий есть, входящий = null (не трогаем нашу стадию).
+  assert.equal(platformStageToHhState("interview"), "interview")
+  assert.equal(hhStateToPlatformStage("interview"), null)
   // started_work → hh "hired" → обратно наша стадия "hired" (НЕ started_work,
   // т.к. у hh только одно состояние на обе наши терминальные стадии).
   assert.equal(hhStateToPlatformStage(platformStageToHhState("started_work")), "hired")

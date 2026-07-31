@@ -883,7 +883,16 @@ export default function DemoPage() {
 
   // Fetch demo data
   useEffect(() => {
-    fetch(`/api/public/demo/${token}`)
+    // Явный ?block=<id> (рассылка «Демо-3»): пробрасываем в GET — сервер
+    // валидирует принадлежность блока вакансии кандидата и отдаёт именно его.
+    // Без параметра — легаси-запрос и легаси-восстановление без изменений.
+    const rawBlock = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("block")
+      : null
+    const blockParam = rawBlock && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawBlock)
+      ? rawBlock
+      : null
+    fetch(`/api/public/demo/${token}${blockParam ? `?block=${encodeURIComponent(blockParam)}` : ""}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
@@ -898,7 +907,23 @@ export default function DemoPage() {
           const isPreviewToken = typeof token === "string" && token.startsWith("test-demo-preview-")
           if (!isPreviewToken && d.progress?.schemaVersion === 2) {
             const maxLessonIdx = Math.max(0, (d.lessons?.length || 1) - 1)
-            if (typeof d.progress.currentLesson === "number" && d.progress.currentLesson > 0) {
+            // При явном ?block: currentLesson в прогрессе — ГЛОБАЛЬНЫЙ (мог быть
+            // записан во время прохождения ДРУГОГО демо, например Демо-1) —
+            // восстанавливаем номер урока только если кандидат уже отвечал на
+            // блоки ИМЕННО этого демо (id блоков уникальны между демо). Иначе
+            // адресная ссылка открыла бы новый блок с середины/конца.
+            let lessonRestoreAllowed = true
+            if (blockParam) {
+              const servedIds = new Set<string>()
+              for (const l of (Array.isArray(d.lessons) ? d.lessons : [])) {
+                for (const b of (Array.isArray(l?.blocks) ? l.blocks : [])) {
+                  if (b?.id) servedIds.add(b.id)
+                }
+              }
+              lessonRestoreAllowed = Array.isArray(d.progress.blocks) &&
+                d.progress.blocks.some((pb: { blockId?: string }) => pb?.blockId != null && servedIds.has(pb.blockId))
+            }
+            if (lessonRestoreAllowed && typeof d.progress.currentLesson === "number" && d.progress.currentLesson > 0) {
               setCurrentIndex(Math.min(d.progress.currentLesson, maxLessonIdx))
             }
             if (Array.isArray(d.progress.blocks)) {

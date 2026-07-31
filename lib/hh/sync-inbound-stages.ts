@@ -28,6 +28,7 @@ import {
   isCandidateInitiatedDiscard,
   type HhNegotiationState,
 } from "@/lib/hh/stage-mapping"
+import { PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
 
 const HH_API_BASE = "https://api.hh.ru"
 const USER_AGENT = "Company24/1.0 (company24.pro)"
@@ -35,7 +36,62 @@ const HH_FETCH_TIMEOUT_MS = 15_000
 const PER_CANDIDATE_DELAY_MS = 200 // вежливо к rate-limit hh
 
 // Стадии, которые НЕ откатываем входящим сигналом (кроме отказа).
-const NON_REGRESSABLE = new Set(["hired", "started_work", "rejected"])
+// Используется как fallback, когда порядок текущей стадии в каноне неизвестен
+// (экзотический/side-slug). Основная защита — сравнение по каноническому
+// порядку (см. shouldMoveForward ниже).
+// talent_pool/pending (predeploy-guard 14.07) — живые ручные side-branch
+// стадии (кнопки «В резерв»/«Подумаем», авто-резерв funnel-v2 score-gate) —
+// у них нет канонического sortOrder (не входят в PLATFORM_STAGES/
+// LEGACY_STAGE_ALIAS), поэтому без явной защиты попадали в permissive
+// fallback ниже и утекали в тот же класс регрессии, что и demo_opened.
+const NON_REGRESSABLE = new Set(["hired", "started_work", "rejected", "talent_pool", "pending"])
+
+// Legacy-slug'и второй системы статусов (см. lib/stages.ts LEGACY_STAGE_LABELS)
+// приводим к каноническому «родственнику», чтобы сравнение порядка работало и
+// для исторических кандидатов, а не только для канонических стадий.
+const LEGACY_STAGE_ALIAS: Record<string, StageSlug> = {
+  demo: "demo_opened",
+  interviewed: "interview",
+  final_decision: "decision",
+  offer: "offer_sent",
+  preboarding: "offer_sent", // между оффером и наймом — не откатываем
+}
+
+/** Канонический sortOrder стадии (с учётом legacy-алиасов). null = неизвестна. */
+function resolveStageOrder(slug: string | null | undefined): number | null {
+  if (!slug) return null
+  if (slug in PLATFORM_STAGES) return PLATFORM_STAGES[slug as StageSlug].sortOrder
+  const alias = LEGACY_STAGE_ALIAS[slug]
+  if (alias) return PLATFORM_STAGES[alias].sortOrder
+  return null
+}
+
+/**
+ * Двигать ли нашу стадию `current` к hh-целевой `target` ВХОДЯЩИМ сигналом.
+ *
+ * Инвариант (#23, инцидент 14.07): входящий синк никогда не откатывает
+ * прогресс воронки — двигаем стадию ТОЛЬКО строго вперёд по каноническому
+ * порядку lib/stages.ts. hh-папка (consider/phone_interview/assessment) часто
+ * отражает лишь раннее состояние отклика, тогда как наш внутренний прогресс
+ * (demo_opened → anketa_filled → … → decision → interview → offer_sent) hh-папкой
+ * вообще не двигался. Раньше защищались лишь терминальные hired/started_work/
+ * rejected (NON_REGRESSABLE), поэтому суточный крон массово сбрасывал
+ * demo_opened→primary_contact (610 кандидатов Revoluterra) и плодил
+ * critical-алерты hh_stage_mismatch.
+ *
+ * Отказ (target=rejected/discard) сюда НЕ попадает — он авторитетен и
+ * обрабатывается отдельно (отклик реально закрыт на hh).
+ */
+export function shouldMoveForward(current: string, target: StageSlug): boolean {
+  if (current === target) return false // идемпотентность (обрабатывается выше)
+  const curOrder = resolveStageOrder(current)
+  const tgtOrder = PLATFORM_STAGES[target].sortOrder
+  // Порядок обеих стадий известен → двигаем ТОЛЬКО строго вперёд.
+  if (curOrder !== null) return tgtOrder > curOrder
+  // Порядок текущей стадии неизвестен (экзотический/legacy-side slug) —
+  // fallback на прежнюю защиту: блокируем только терминальные.
+  return !NON_REGRESSABLE.has(current)
+}
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -50,7 +106,9 @@ export interface InboundSyncResult {
 
 // Резолвим negotiation id кандидата (тот же двухшаговый lookup, что и в
 // channel-stage/route.ts и sync-stage.ts).
-async function resolveNegotiationId(candidateId: string, companyId: string): Promise<string | null> {
+// Экспортировано (13.07): переиспользуется watchdog-сверкой
+// lib/hiring-watchdog/hh-reconcile.ts — тот же поиск актуального negotiationId.
+export async function resolveNegotiationId(candidateId: string, companyId: string): Promise<string | null> {
   const [direct] = await db
     .select({ hhResponseId: hhResponses.hhResponseId })
     .from(hhResponses)
@@ -75,17 +133,34 @@ async function resolveNegotiationId(candidateId: string, companyId: string): Pro
   return resp?.hhResponseId ?? null
 }
 
-// Живой запрос текущего состояния negotiation. Возвращает state.id либо null
-// (403/404/сеть/таймаут — штатное «не получилось», синк не падает).
-async function fetchNegotiationState(accessToken: string, negotiationId: string): Promise<string | null> {
+// Живой запрос текущей hh-ПАПКИ (коллекции работодателя) negotiation.
+// Возвращает employer_state.id либо null (403/404/сеть/таймаут — штатное
+// «не получилось», синк не падает).
+//
+// ВАЖНО (fix 13.07): читаем `employer_state.id`, а НЕ `state.id`.
+// GET /negotiations/{id} (деталь) отдаёт ДВА поля состояния:
+//   - state.id          — ГРУБЫЙ lifecycle отклика (response/interview/…),
+//                         обращённый к кандидату; НЕ совпадает с папкой HR.
+//   - employer_state.id  — реальная папка/коллекция работодателя
+//                         (phone_interview/consider/assessment/interview/
+//                         discard_by_employer/hired) — то, что HR видит и
+//                         настраивает, и под что спроектирован
+//                         hhStateToPlatformStage (см. lib/hh/stage-mapping.ts).
+// До фикса функция читала state.id → грубый статус не совпадал с папкой и
+// (а) двигал candidates.stage мимо реальной hh-папки во входящем синке,
+// (б) генерил ложные critical-алерты в lib/hiring-watchdog/hh-reconcile.ts.
+// Список /negotiations/{collection} (import-responses) — другой случай: там
+// item.state.id уже равен коллекции, поэтому тот путь трогать не нужно.
+// Экспортировано (13.07): переиспользуется watchdog-сверкой (см. выше).
+export async function fetchNegotiationState(accessToken: string, negotiationId: string): Promise<string | null> {
   try {
     const res = await fetch(`${HH_API_BASE}/negotiations/${negotiationId}`, {
       headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(HH_FETCH_TIMEOUT_MS),
     })
     if (!res.ok) return null
-    const data = (await res.json()) as { state?: { id?: string } }
-    return data?.state?.id ?? null
+    const data = (await res.json()) as { employer_state?: { id?: string } }
+    return data?.employer_state?.id ?? null
   } catch {
     return null
   }
@@ -151,15 +226,16 @@ export async function syncInboundHhStages(vacancyId: string): Promise<InboundSyn
 
       const isDiscard = target === "rejected"
 
-      // Не откатываем терминальные наши стадии входящим сигналом — КРОМЕ отказа
-      // (hh-discard закрыл отклик, это авторитетно). Пример: у нас offer_sent,
-      // а hh вернул assessment — не двигаем назад в тест.
-      if (!isDiscard && NON_REGRESSABLE.has(current)) {
-        await sleep(PER_CANDIDATE_DELAY_MS)
-        continue
-      }
-      // Если мы уже rejected — не «воскрешаем» кандидата не-отказным сигналом.
-      if (current === "rejected" && !isDiscard) {
+      // Отказ (discard) всегда авторитетен — отклик реально закрыт на hh,
+      // применяем даже если это «назад» (в т.ч. воскрешать rejected не-отказом
+      // нельзя — см. ниже). Все прочие входящие сигналы двигают нашу стадию
+      // ТОЛЬКО вперёд по каноническому порядку: hh-папка часто отражает лишь
+      // раннее состояние, а внутренний прогресс (demo/anketa/test/interview)
+      // hh-папкой не двигался. Раньше откатывались все не-терминальные стадии
+      // (NON_REGRESSABLE защищал только hired/started_work/rejected) — суточный
+      // крон массово сбрасывал demo_opened→primary_contact и плодил
+      // critical-алерты (инцидент 14.07, вакансия Revoluterra: moved 610).
+      if (!isDiscard && !shouldMoveForward(current, target)) {
         await sleep(PER_CANDIDATE_DELAY_MS)
         continue
       }

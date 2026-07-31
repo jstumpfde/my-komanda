@@ -233,6 +233,31 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
 
     const localVac = localVacancies.find(v => v.hhVacancyId === resp.hhVacancyId) || null
 
+    // ── Воронка v2: нормализованный конфиг + нативная Стадия 1 (движок включён) ──
+    // Вычисляем ОДИН раз за итерацию, чтобы переиспользовать: РАНО — в off-hours-
+    // гейте ниже (Стадия 1 = «нерабочее время»), затем в блоке авто-отказа Стадии 1
+    // и во входе в воронку. resolveStage1 фоллбэчит на Портрет (spec), если stage1
+    // ещё не сохранён нативно (симметрично resolveEffectiveAnketaPassInvite и др.).
+    // При выключенном движке ОБЕ переменные остаются null → легаси-путь не меняется.
+    let v2Config: import("@/lib/funnel-v2/types").FunnelV2Config | null = null
+    let v2NativeStage1: import("@/lib/funnel-v2/native-config").EffectiveStage1 | null = null
+    if (localVac?.funnelV2RuntimeEnabled) {
+      try {
+        const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
+        const { resolveStage1 } = await import("@/lib/funnel-v2/native-config")
+        const cfg = normalizeFunnelV2((localVac.descriptionJson as Record<string, unknown> | null)?.funnelV2)
+        v2Config = cfg
+        if (cfg.enabled) {
+          // Портрет (spec) — источник фоллбэка, если stage1 ещё не настроен нативно.
+          // Ошибка чтения spec не должна ломать v2-вход: тихий null → платформенные
+          // дефолты в resolveStage1 (как было до переноса Стадии 1 в native).
+          let specForStage1: Awaited<ReturnType<typeof getSpec>> = null
+          try { specForStage1 = await getSpec(localVac.id) } catch { specForStage1 = null }
+          v2NativeStage1 = resolveStage1(specForStage1, cfg, true)
+        }
+      } catch { v2Config = null; v2NativeStage1 = null }
+    }
+
     // Проверка расписания — для cron'а: если нерабочее время / выходной /
     // праздник — обычно оставляем status='response', следующий cron подберёт.
     //
@@ -250,8 +275,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
         const offText = (typeof localVac.firstMessageOffHoursText === "string" && localVac.firstMessageOffHoursText.trim())
           ? localVac.firstMessageOffHoursText.trim()
           : md.offHoursMessage
+        // Флаг «слать в нерабочее время»: при включённом движке v2 — из нативной
+        // Стадии 1 (funnelV2.stage1.offHoursEnabled, с фоллбэком на Портрет), НЕ из
+        // легаси-колонки. Иначе (движок выключен) — прежняя легаси-колонка, байт-в-байт.
+        const offHoursSoftEnabled = (localVac.funnelV2RuntimeEnabled && v2Config?.enabled)
+          ? v2NativeStage1?.offHoursEnabled === true
+          : localVac.firstMessageOffHoursEnabled === true
         if (
-          localVac.firstMessageOffHoursEnabled === true &&
+          offHoursSoftEnabled &&
           offText.length > 0 &&
           // Phase 3: «бот выключен» — через адаптер (флаг off → прежнее legacy).
           !isBlockEnabled(localVac, "ai_chatbot", localVac.aiChatbotEnabled === true)
@@ -351,6 +382,12 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
     let botClarifyOn = false
     // Мягкое письмо отказа из «Портрета» (spec.rejectLetter) — уходит при авто-отказе.
     let rejectLetterText: string | null = null
+    // Стадия 1 воронки v2: при включённом движке текст/задержку авто-отказа берём
+    // из funnelV2.stage1 (перенос из Портрета 14.07). resolveStage1 фоллбэчит на
+    // Портрет (spec), если stage1 ещё НЕ настроен нативно — поэтому дефолт платформы
+    // 60 мин больше не перебивает задержку, заданную в Портрете (было: находка-2).
+    // Вычислено единожды выше (v2NativeStage1); null при выключенном движке.
+    const nativeStage1ForReject: import("@/lib/funnel-v2/native-config").EffectiveStage1 | null = v2NativeStage1
     // Авто-приглашение (spec.resumeThresholds.autoInviteEnabled, контур «Портрет»):
     // по умолчанию ВЫКЛ (решение Юрия) — сильных/прошедших середину НЕ зовём сами,
     // паркуем на ручной разбор. Приглашаем только при явном autoInviteEnabled===true
@@ -767,6 +804,14 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 console.warn(`[spec-scoring] vacancy=${localVac.id} — ошибка чтения Spec, fallback на legacy:`, specErr)
               }
             }
+            // v2: нативный текст отказа Стадии 1 побеждает Портрет (если задан).
+            // БЕЗ гейта isSpecScoringEnabled/portraitOn (предеплой-гард 14.07,
+            // находка после фикса 1/2) — иначе для вакансий вне spec-скоринга с
+            // включённым движком v2 rejectLetterText оставался null и в hh уходил
+            // общий дефолтный текст вместо настроенного в Стадии 1 письма.
+            if (nativeStage1ForReject && nativeStage1ForReject.rejectLetter.trim().length > 0) {
+              rejectLetterText = nativeStage1ForReject.rejectLetter.trim()
+            }
 
             // Осевой результат (если сработал) заменяет screenResume: его форма
             // (score/verdict/summary) совместима с ResumeScreenResult для гейтинга.
@@ -1109,7 +1154,9 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
               // belowThreshold.delayMinutes, guard-minor 06.07); legacy-настройки —
               // только если Spec задержку не содержит (не должно случаться:
               // Zod-дефолт 60 бэкфиллит поле на чтении).
-              delayMinutes: belowThreshold.delayMinutes ?? rejectionDelayMinutes(effAiSettings),
+              // v2: при включённом движке задержку отказа даёт native Стадии 1.
+              delayMinutes: nativeStage1ForReject?.rejectionDelayMinutes
+                ?? belowThreshold.delayMinutes ?? rejectionDelayMinutes(effAiSettings),
             })
           } else if (belowThreshold.action === "portrait_pending_manual") {
             // Входной гейт Портрета, сценарий "pending_manual" (дополнение 06.07,
@@ -1279,15 +1326,18 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
       //
       // Единственная точка ветвления; легаси-ветка не трогается вообще.
       let funnelV2Handled = false
-      if (candidateId && localVac && localVac.funnelV2RuntimeEnabled) {
+      if (candidateId && localVac && localVac.funnelV2RuntimeEnabled && v2Config?.enabled) {
         try {
-          const descJson = localVac.descriptionJson as Record<string, unknown> | null
-          const { normalizeFunnelV2 } = await import("@/lib/funnel-v2/types")
-          const funnelV2 = normalizeFunnelV2(descJson?.funnelV2)
+          // Конфиг и нативная Стадия 1 вычислены единожды в начале итерации
+          // (v2Config / v2NativeStage1). Стадия 1 = Портрет: нерабочее время/
+          // задержку первого сообщения берём из native (funnelV2.stage1) с
+          // фоллбэком на Портрет, а не из vacancy-колонок-зеркал.
+          const funnelV2 = v2Config
+          const nativeStage1 = v2NativeStage1
           // Вход кандидата — ПЕРВАЯ ВКЛЮЧЁННАЯ стадия (enabled===false пропускаем;
           // отсутствие поля = включена, прежнее поведение).
           const firstStageEnabled = funnelV2.stages.find(s => s.enabled !== false)
-          if (funnelV2.enabled && firstStageEnabled) {
+          if (nativeStage1 && firstStageEnabled) {
             const firstStage = firstStageEnabled
             const nowIso = new Date().toISOString()
             // Читаем token кандидата для CandidateForExecutor
@@ -1335,7 +1385,37 @@ export async function processHhQueue(opts: ProcessQueueOptions): Promise<Process
                 scheduleWorkingDays:        localVac.scheduleWorkingDays,
                 scheduleExcludedHolidayIds: localVac.scheduleExcludedHolidayIds,
               }
-              await executeStageEntry(candidateForV2, vacancyForV2, firstStage)
+
+              // ── Портрет-паритет: нерабочий режим перед ПЕРВЫМ сообщением v2 ──
+              // Стадия 1 воронки = Портрет. Его spec.resumeThresholds.
+              // offHoursDelaySeconds (зеркало vacancy.first_message_off_hours_
+              // delay_seconds) даёт «человеческую» паузу перед первым сообщением
+              // в нерабочее время — ровно как legacy-ветка offHoursSoftMode ниже.
+              // Рабочая задержка inviteDelaySeconds уже выдержана deferral'ом
+              // (shouldDeferFirstMessage) ДО этой точки — здесь её НЕ спим,
+              // иначе задержка удвоится. См. lib/funnel-v2/first-message-timing.ts.
+              // КРОМЕ паузы — в off-hours слаём НЕ обычное приглашение, а мягкое
+              // подтверждение спец-текстом (firstMessageOffHoursText / дефолт
+              // компании), БЕЗ демо-ссылки/дожима: паритет с legacy-веткой ниже.
+              // Раньше здесь читались vacancy-колонки-зеркала Портрета; теперь при
+              // включённом движке v2 источник — native (funnelV2.stage1).
+              let offHoursSoftText: string | null = null
+              if (offHoursSoftMode) {
+                const { resolveV2FirstMessageDelayMs } =
+                  await import("@/lib/funnel-v2/first-message-timing")
+                const offDelayMs = resolveV2FirstMessageDelayMs(localVac, {
+                  enabled:      nativeStage1.offHoursEnabled,
+                  delaySeconds: nativeStage1.offHoursDelaySeconds,
+                })
+                if (offDelayMs > 0) await sleep(offDelayMs)
+                // Текст мягкого подтверждения: нативный (stage1.offHoursText) либо,
+                // если пуст, эффективный дефолт компании (md.offHoursMessage).
+                offHoursSoftText = nativeStage1.offHoursText.trim().length > 0
+                  ? nativeStage1.offHoursText
+                  : md.offHoursMessage
+              }
+
+              await executeStageEntry(candidateForV2, vacancyForV2, firstStage, { offHoursSoftText })
 
               // Помечаем отклик как обработанный
               await db.update(hhResponses)

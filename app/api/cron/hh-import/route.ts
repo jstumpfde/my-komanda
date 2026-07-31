@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { hhVacancies, vacancies, hhResponses } from "@/lib/db/schema"
-import { and, eq, inArray, count, sql } from "drizzle-orm"
+import { and, eq, inArray, count, sql, or, isNull } from "drizzle-orm"
 import { getValidToken } from "@/lib/hh-helpers"
 import { importHhResponsesForVacancy } from "@/lib/hh/import-responses"
 import { checkCronAuth } from "@/lib/cron/auth"
@@ -116,6 +116,17 @@ export async function POST(req: NextRequest) {
         // через /publish — обоих формата засчитываем как «живая вакансия».
         inArray(hhVacancies.status, ["active", "open"]),
         eq(vacancies.autoProcessingEnabled, true),
+        // Гард архива (владелец 15.07: «не тянуть по вакансиям, неактивным на
+        // hh»). Одного hhVacancies.status мало — он ПРОТУХАЕТ: пишется при
+        // линковке/публикации и дальше не обновляется. Замер на проде 15.07:
+        // у всех 7 hh-вакансий он говорил active/open, тогда как на hh живой
+        // была ОДНА (Revoluterra) — то есть 5 архивных опрашивались каждый
+        // прогон впустую. vacancies.hh_archived — свежий сигнал, его ставит
+        // крон hh-vacancy-sync из ДЕТАЛИ /vacancies/{id} (404 = удалена).
+        // Пропускаем только ЯВНЫЙ архив: NULL (ещё не синкали) продолжаем
+        // тянуть — иначе новая вакансия молча не импортировалась бы до
+        // первого прогона hh-vacancy-sync.
+        or(isNull(vacancies.hhArchived), eq(vacancies.hhArchived, false)),
       ))
 
     // Группируем по компании — каждой компании один токен и один проход разбора.
@@ -124,6 +135,41 @@ export async function POST(req: NextRequest) {
       const list = byCompany.get(row.companyId) ?? []
       list.push(row)
       byCompany.set(row.companyId, list)
+    }
+
+    // Компании с накопленной очередью добираем в проход, даже если живых
+    // hh-вакансий у них не осталось. Иначе гард архива выше молча заморозил
+    // бы их отклики: «Шаг 2 — разбор накопленных откликов» ниже привязан к
+    // КОМПАНИИ, но живёт внутри этого прохода, а проход строился только из
+    // неархивных вакансий — компания, заархивировавшая последнюю вакансию с
+    // непустой очередью, выпала бы из карты навсегда. Список вакансий для
+    // таких компаний пустой: Шаг 1 (импорт) для них ничего не делает, Шаг 2
+    // (разбор очереди) отрабатывает как обычно.
+    //
+    // ОБЯЗАТЕЛЬНО с eq(autoProcessingEnabled, true) — снимаем ТОЛЬКО гард
+    // архива, ради которого добор и сделан (находка predeploy-guard 15.07,
+    // blocker). Без этого условия добор ловил бы и компании, где HR СОЗНАТЕЛЬНО
+    // выключил авто-разбор: processHhQueue зовётся без localVacancyId и внутри
+    // (lib/hh/process-queue.ts) autoProcessingEnabled не проверяет вообще —
+    // то есть крон разослал бы приглашения реальным кандидатам вопреки
+    // выключенному тумблеру. Тумблер выключен по умолчанию (schema.ts:1072),
+    // а строки status='response' создаются независимо от него (ручной синк и
+    // GET /api/integrations/hh/responses при открытии вкладки) — то есть это
+    // был бы не экзотический, а рядовой сценарий.
+    const pendingCompanies = await db
+      .select({ companyId: hhResponses.companyId })
+      .from(hhResponses)
+      .innerJoin(vacancies, and(
+        eq(vacancies.companyId, hhResponses.companyId),
+        eq(vacancies.hhVacancyId, hhResponses.hhVacancyId),
+      ))
+      .where(and(
+        eq(hhResponses.status, "response"),
+        eq(vacancies.autoProcessingEnabled, true),
+      ))
+      .groupBy(hhResponses.companyId)
+    for (const { companyId } of pendingCompanies) {
+      if (!byCompany.has(companyId)) byCompany.set(companyId, [])
     }
 
     // Параллельная обработка компаний — каждая компания идёт своим потоком.

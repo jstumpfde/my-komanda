@@ -41,6 +41,11 @@ const NESTED_KEYS: (keyof CompanyHiringDefaults)[] = [
   // категории не затирал остальные. (sendPriorityOrder / messageCategoryOrder —
   // массивы, НЕ здесь: заменяются целиком.)
   "messageWindows",
+  // Задача 13.07: ручные теги интервью — Record<stageId, interviewId[]>, патч
+  // по одной стадии не должен затирать назначения остальных стадий в этой мапе.
+  // interviewStages — НЕ здесь: это массив, сохраняется/заменяется целиком
+  // (как и раньше в localStorage saveStages — весь список одним снимком).
+  "interviewManualAssignments",
 ];
 
 function mergeDefaults(

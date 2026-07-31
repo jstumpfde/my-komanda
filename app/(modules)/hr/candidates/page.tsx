@@ -31,6 +31,7 @@ import { StageMessageControl } from "@/components/candidates/stage-message-contr
 import { getStageLabel, ALL_STAGE_SLUGS, PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
 import { BulkActionsBar, type BulkAction } from "@/components/dashboard/bulk-actions-bar"
 import { useAuth } from "@/lib/auth"
+import { useUserPreferences } from "@/hooks/use-user-preferences"
 
 interface FacetsData {
   cities: { city: string; count: number }[]
@@ -51,6 +52,8 @@ interface GlobalCandidate {
   lastRespondedAt?: string | null
   source: string | null
   city: string | null
+  // Заявка Юрия 15.07: см. Candidate.demoOpenedAt (candidate-card.tsx).
+  demoOpenedAt?: string | null
   demoTotalBlocks: number
   demoCompletedBlocks: number
   progressPercent: number | null
@@ -74,6 +77,13 @@ interface GlobalCandidate {
   demoProgressJson?: unknown
   // Скоркарта интервью (миграция 0258) — см. lib/candidates/interview-scorecard.ts.
   interviewScore?: number | null
+  pendingRejectionReason?: string | null
+  pendingRejectionAt?: string | null
+  // Разведка 14.07: см. Candidate.autoProcessingStoppedReason (candidate-card.tsx).
+  autoProcessingStoppedReason?: string | null
+  // Задача 4 (14.07, корректировка v2): см. Candidate.completedDemoBlockIndexes (candidate-card.tsx).
+  completedDemoBlockIndexes?: number[]
+  demoBlockTooltip?: string | null
 }
 
 // ─── Константы ────────────────────────────────────────────────────────────────
@@ -142,7 +152,12 @@ function toListCandidate(c: GlobalCandidate): Candidate & { vacancyTitle: string
     createdAt: c.createdAt,
     lastRespondedAt: c.lastRespondedAt ?? null,
     pendingRejectionReason: (c as { pendingRejectionReason?: string | null }).pendingRejectionReason ?? null,
+    pendingRejectionAt: (c as { pendingRejectionAt?: string | null }).pendingRejectionAt ?? null,
+    autoProcessingStoppedReason: (c as { autoProcessingStoppedReason?: string | null }).autoProcessingStoppedReason ?? null,
+    completedDemoBlockIndexes: c.completedDemoBlockIndexes ?? [],
+    demoBlockTooltip: c.demoBlockTooltip ?? null,
     stage: c.stage,
+    demoOpenedAt: c.demoOpenedAt ?? null,
     photoUrl: c.photoUrl ?? null,
     vacancyTitle: c.vacancyTitle,
     vacancyId: c.vacancyId,
@@ -155,10 +170,14 @@ function ColumnToggles({
   settings,
   onSettingsChange,
   onReset,
+  canEditColumns,
 }: {
   settings: CardDisplaySettings
   onSettingsChange: (s: CardDisplaySettings) => void
   onReset: () => void
+  /** Директор/platform_admin меняют company-default; остальные роли — свой
+   *  личный вид (решение владельца 17.07, см. комментарий у setSettings выше). */
+  canEditColumns: boolean
 }) {
   const handleToggle = (key: keyof CardDisplaySettings) => {
     const next = { ...settings, [key]: settings[key] === false ? undefined : false }
@@ -178,6 +197,11 @@ function ColumnToggles({
       </PopoverTrigger>
       <PopoverContent className="w-52 p-3" align="end">
         <div className="space-y-2">
+          {!canEditColumns && (
+            <p className="text-[11px] text-muted-foreground pb-1">
+              Ваш личный вид; общий для компании задаёт директор
+            </p>
+          )}
           {CANDIDATE_COLUMN_TOGGLES.map(({ key, label }) => {
             const checked = settings[key] !== false
             return (
@@ -246,7 +270,7 @@ export default function CandidatesPage() {
     funnelStatuses: [],
     // По умолчанию отказы скрыты — аналогично странице вакансии
     hideRejected: true,
-    hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [],
+    hideNoSalary: false, activeNow: false, reviewQueue: false, demoProgress: [], demoBlock: [],
     dateRange: "", dateFrom: "", dateTo: "", ageMin: 18, ageMax: 65,
     education: [], languages: [], otherLanguages: [], skills: [], industries: [],
   })
@@ -281,8 +305,68 @@ export default function CandidatesPage() {
   // Выделение (bulk)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  // Настройки колонок
-  const [settings, setSettings] = useState<CardDisplaySettings>(DEFAULT_SETTINGS)
+  // Настройки колонок — та же модель, что и на странице вакансии (17.07,
+  // приведено в соответствие view-settings.tsx/vacancies/[id]/page.tsx):
+  // company-default (hiring-defaults.candidateColumns, задаёт директор) +
+  // личный override (userPrefs.candidateColumns, ОБЩИЙ с страницей вакансии —
+  // это персональная настройка отображения, а не per-вакансийная).
+  const [companyColumns, setCompanyColumns] = useState<Record<string, boolean>>({})
+  const [personalColumnsOverride, setPersonalColumnsOverride] = useState<Record<string, boolean>>({})
+  const {
+    prefs: userPrefs, loaded: userPrefsLoaded,
+    setCandidateColumns: persistCandidateColumns,
+  } = useUserPreferences()
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...companyColumns, ...personalColumnsOverride }) as CardDisplaySettings,
+    [companyColumns, personalColumnsOverride],
+  )
+
+  // Company-default колонок (hiring-defaults) — то же, что и на странице вакансии.
+  useEffect(() => {
+    fetch("/api/modules/hr/company/hiring-defaults").then(r => r.ok ? r.json() : null).then(j => {
+      const hd = j?.hiringDefaults
+      if (hd?.candidateColumns && typeof hd.candidateColumns === "object" && Object.keys(hd.candidateColumns).length > 0) {
+        setCompanyColumns(hd.candidateColumns as Record<string, boolean>)
+      }
+    }).catch(() => {})
+  }, [])
+
+  // Личный override колонок — гидратируем при загрузке user-prefs (все роли).
+  useEffect(() => {
+    if (!userPrefsLoaded) return
+    setPersonalColumnsOverride(userPrefs.candidateColumns as Record<string, boolean>)
+  }, [userPrefsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setSettings = useCallback((next: CardDisplaySettings) => {
+    if (["director", "client", "platform_admin", "admin"].includes(role)) {
+      // Директор/platform_admin — company-default, как в настройках вакансии.
+      // Плюс чистим личный override, чтобы директор видел ровно то, что задал.
+      setCompanyColumns(next as unknown as Record<string, boolean>)
+      fetch("/api/modules/hr/company/hiring-defaults", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateColumns: next as unknown as Record<string, boolean> }),
+      }).catch(() => {})
+      setPersonalColumnsOverride({})
+      persistCandidateColumns({})
+    } else {
+      // Остальные роли — личный override поверх company-default. Сохраняем
+      // только реально изменившиеся ключи (см. комментарий в vacancies/[id]/page.tsx).
+      // Сравниваем по видимости (!== false), а не по строгому equality —
+      // ColumnToggles.handleToggle выше пишет undefined (не true) для «включено».
+      setPersonalColumnsOverride((prevOverride) => {
+        const changed: Record<string, boolean> = {}
+        for (const key of Object.keys(next) as (keyof CardDisplaySettings)[]) {
+          const wasVisible = settings[key] !== false
+          const isVisible = next[key] !== false
+          if (isVisible !== wasVisible) changed[key] = isVisible
+        }
+        const merged = { ...prevOverride, ...changed }
+        persistCandidateColumns(merged)
+        return merged
+      })
+    }
+  }, [role, settings, persistCandidateColumns])
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -371,6 +455,9 @@ export default function CandidatesPage() {
     if (filters.dateTo) ps.set("dateTo", filters.dateTo)
     // Анкета (контактная форма после демо)
     if (filters.anketaFilled) ps.set("anketaFilled", filters.anketaFilled)
+    // Задача 4 (14.07): «Демо: ДN / не проходил» — post-fetch на сервере
+    // (multi-vacancy список, см. route.ts).
+    if (filters.demoBlock.length > 0) ps.set("demoBlock", filters.demoBlock.join(","))
     return ps
   }, [debouncedSearch, vacancyFilter, filters])
 
@@ -524,32 +611,37 @@ export default function CandidatesPage() {
     setStageDialogOpen(true)
   }
 
-  const confirmStageChange = async () => {
-    if (!pendingStage) return
-    const override = stageMessageText.trim() || null
+  // stageOverride — «В резерв вместо отказа» из напоминания перед отказом:
+  // тот же путь смены стадии, но в talent_pool и без reject-текста.
+  const confirmStageChange = async (stageOverride?: string) => {
+    const targetStage = stageOverride ?? pendingStage
+    if (!targetStage) return
+    // Кастомный текст относится к исходной стадии (отказ) — при переводе в
+    // резерв его не отправляем.
+    const override = (targetStage === pendingStage ? stageMessageText.trim() : "") || null
     setStageDialogLoading(true)
     try {
       if (pendingCandidateId) {
         const res = await fetch(`/api/modules/hr/candidates/${pendingCandidateId}/stage`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage: pendingStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
+          body: JSON.stringify({ stage: targetStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
         })
         if (!res.ok) throw new Error()
-        setCandidates(prev => prev.map(c => c.id === pendingCandidateId ? { ...c, stage: pendingStage } : c))
-        toast.success(`${pendingCandidateName ?? "Кандидат"}: ${getStageLabel(pendingStage)}`)
+        setCandidates(prev => prev.map(c => c.id === pendingCandidateId ? { ...c, stage: targetStage } : c))
+        toast.success(`${pendingCandidateName ?? "Кандидат"}: ${getStageLabel(targetStage)}`)
       } else {
         const ids = [...selected]
         await Promise.all(ids.map(id =>
           fetch(`/api/modules/hr/candidates/${id}/stage`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stage: pendingStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
+            body: JSON.stringify({ stage: targetStage, sendMessage, ...(override ? { messageOverride: override } : {}) }),
           })
         ))
-        setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage: pendingStage } : c))
+        setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, stage: targetStage } : c))
         setSelected(new Set())
-        toast.success(`${ids.length} кандидатов: ${getStageLabel(pendingStage)}`)
+        toast.success(`${ids.length} кандидатов: ${getStageLabel(targetStage)}`)
       }
       setStageDialogOpen(false)
       setPendingStage(null)
@@ -753,6 +845,7 @@ export default function CandidatesPage() {
                   settings={settings}
                   onSettingsChange={setSettings}
                   onReset={() => setSettings(DEFAULT_SETTINGS)}
+                  canEditColumns={["director", "client", "platform_admin", "admin"].includes(role)}
                 />
               </div>
             </div>
@@ -999,18 +1092,37 @@ export default function CandidatesPage() {
               onMessageTextChange={setStageMessageText}
             />
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => { setStageDialogOpen(false); setPendingStage(null); setPendingCandidateId(null) }}
-              disabled={stageDialogLoading}
-            >
-              Отмена
-            </Button>
-            <Button onClick={confirmStageChange} disabled={stageDialogLoading}>
-              {stageDialogLoading ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
-              Подтвердить
-            </Button>
+          {/* Напоминание «в резерв на будущее?» перед отказом (14.07). */}
+          {pendingStage === "rejected" && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+              Кого-то в резерв на будущее? Отказ необратим — ценных кандидатов
+              можно сохранить в резерв и вернуться к ним на следующих вакансиях.
+            </div>
+          )}
+          <DialogFooter className={pendingStage === "rejected" ? "sm:justify-between" : undefined}>
+            {pendingStage === "rejected" && (
+              <Button
+                variant="outline"
+                onClick={() => confirmStageChange("talent_pool")}
+                disabled={stageDialogLoading}
+                className="border-primary/40 text-primary hover:text-primary"
+              >
+                В резерв вместо отказа
+              </Button>
+            )}
+            <div className="flex gap-2 sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => { setStageDialogOpen(false); setPendingStage(null); setPendingCandidateId(null) }}
+                disabled={stageDialogLoading}
+              >
+                Отмена
+              </Button>
+              <Button onClick={() => confirmStageChange()} disabled={stageDialogLoading}>
+                {stageDialogLoading ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
+                Подтвердить
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

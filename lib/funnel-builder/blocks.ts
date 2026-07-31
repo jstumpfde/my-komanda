@@ -255,6 +255,21 @@ export const BLOCK_META: Record<FunnelBlockType, FunnelBlockMeta> = {
   },
 }
 
+// Живой список блоков: из него строятся дефолтная воронка
+// (getDefaultFunnelConfig), досып недостающих при нормализации и пересборка
+// при применении шаблона.
+//
+// «Реф-чек» (reference_check) ВЫВЕДЕН из списка 15.07 по решению владельца —
+// стадия не нужна в рабочем процессе (тогда же убрана из меню «Двигать к
+// стадии» в /hr/interviews). Намеренно убран ТОЛЬКО отсюда, а в BLOCK_META
+// оставлен: normalizeFunnelConfig пропускает сохранённый блок по проверке
+// `obj.type in BLOCK_META` (см. ниже), поэтому пять вакансий, у которых блок
+// уже лежит в конфиге (Revoluterra, Орлинк, две ИП Штумпф, демо), сохранят
+// его нетронутым — их настройки не трогаем. Новые воронки блок больше не
+// получат, в палитре его нет.
+// Слаг reference_check из канона lib/stages.ts НЕ удаляем: он служит
+// предохранителем в стоп-листах автоматики (крон дожимов, followup/should-stop)
+// — без него кандидат на этой стадии начал бы получать дожимы.
 export const BLOCK_TYPES: FunnelBlockType[] = [
   "ai_resume_score",
   "stop_factors_resume",
@@ -276,7 +291,6 @@ export const BLOCK_TYPES: FunnelBlockType[] = [
   "faq_templates",
   "ai_chatbot",
   "interview",
-  "reference_check",
   "offer",
   "thank_you_screen",
 ]
@@ -430,7 +444,11 @@ export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
   },
   full_with_test: {
     name:        "Полный с тестовым",
-    description: "С видео-визиткой, тестовым заданием и реф-чеком",
+    // «реф-чек» убран из описания и из enabledBlocks 15.07 вместе с выводом
+    // блока из BLOCK_TYPES: применение шаблона пересобирает список по
+    // BLOCK_TYPES, поэтому блок всё равно не появился бы, а описание
+    // обещало бы несуществующий шаг.
+    description: "С видео-визиткой и тестовым заданием",
     enabledBlocks: [
       "ai_resume_score",
       "first_message",
@@ -438,7 +456,6 @@ export const FUNNEL_TEMPLATES: Record<string, FunnelTemplate> = {
       "video_intro",
       "anketa",
       "test_task",
-      "reference_check",
       "interview",
       "offer",
       "thank_you_screen",
