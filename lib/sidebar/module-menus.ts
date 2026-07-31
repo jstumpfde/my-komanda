@@ -72,7 +72,7 @@ const MODULE_GROUP_DEFS: Partial<Record<ModuleId, { label: string; hrefs: string
       '/ai-rop/leaderboard', '/ai-rop/reports', '/ai-rop/discrepancies',
     ] },
     { label: 'Управление', hrefs: [
-      '/ai-rop/queue', '/ai-rop/upload', '/ai-rop/knowledge', '/ai-rop/settings',
+      '/ai-rop/queue', '/ai-rop/upload', '/ai-rop/knowledge', '/ai-rop/connectors', '/ai-rop/settings',
     ] },
   ],
 }
