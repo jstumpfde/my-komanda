@@ -26,12 +26,17 @@ import { db } from "@/lib/db"
 import { hhIntegrations } from "@/lib/db/schema"
 import { refreshAccessToken } from "@/lib/hh-api"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "hh-token-refresh"
 
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = Date.now()
+  try {
 
   // Только активные интеграции с УЖЕ истёкшим токеном — hh не даёт обновить
   // не-истёкший (400 "token not expired").
@@ -75,5 +80,12 @@ export async function POST(req: NextRequest) {
 
   const summary = { tag: "cron/hh-token-refresh", checked: rows.length, refreshed, failed, ts: new Date(now).toISOString() }
   console.log(JSON.stringify(summary))
+  if (run) await finishCronRun(run.id, "ok", { checked: rows.length, refreshed, failed })
   return NextResponse.json({ ok: true, ...summary })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (run) await finishCronRun(run.id, "error", null, msg)
+    console.error("[cron/hh-token-refresh]", msg)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }
