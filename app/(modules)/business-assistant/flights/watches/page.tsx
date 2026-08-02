@@ -238,6 +238,9 @@ export default function FlightWatchesPage() {
                   </Button>
                 </div>
               )}
+              <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
+                Ежедневный дайджест дешёвых билетов приходит в привязанный чат автоматически (~09:00 МСК).
+              </p>
             </CardContent>
           </Card>
 
