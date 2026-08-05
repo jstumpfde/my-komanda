@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       limit:        LIMIT_PER_RUN,
       staleMinutes: STALE_MINUTES,
     })
-    if (run) await finishCronRun(run.id, "ok", result as Record<string, unknown>)
+    if (run) await finishCronRun(run.id, "ok", { ...result })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
