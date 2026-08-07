@@ -228,7 +228,15 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
     // (те гейтят только кандидата/канал); привязка бота = согласие получать все 4 порога.
     if (managerKind) {
       const managerText = renderReminderText("manager", managerKind, sched.reminderTexts, vars)
-      await sendManagerBotMessage(ev.managerChatId!, managerText).catch(() => {})
+      // Вторично: сбой этой дорожки не должен ронять cron, но и не должен
+      // молча теряться — фиксируем в лог с контекстом (событие/компания/порог),
+      // чтобы было видно в логах, кто и почему не получил.
+      await sendManagerBotMessage(ev.managerChatId!, managerText).catch(err => {
+        console.error("[cron/interview-reminders] manager bot send failed", {
+          eventId: ev.id, companyId: ev.companyId, kind: managerKind,
+          err: err instanceof Error ? err.message : String(err),
+        })
+      })
       await db.update(calendarEvents).set(managerMarkField).where(eq(calendarEvents.id, ev.id))
       sentManager++
     }
@@ -269,12 +277,64 @@ async function run(): Promise<{ scanned: number; sent24h: number; sentMorning: n
     })
 
     // 2) Telegram-канал компании (если подключён — иначе тихо пропускается).
-    await sendToCompanyChannel(ev.companyId, `⏰ <b>${title}</b>\n${body}`, { parseMode: "HTML" }).catch(() => {})
+    // Вторично относительно кандидата — сбой не должен ронять cron, но фиксируем
+    // в лог с контекстом вместо полного глотания.
+    await sendToCompanyChannel(ev.companyId, `⏰ <b>${title}</b>\n${body}`, { parseMode: "HTML" }).catch(err => {
+      console.error("[cron/interview-reminders] company channel send failed", {
+        eventId: ev.id, companyId: ev.companyId, kind,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    })
 
     // 3) Сообщение кандидату в hh-чат (если событие привязано к кандидату).
+    // Кейс Храмцова (14 дней ждал с нерабочей ссылкой, никто не узнал): раньше
+    // ошибка/отказ отправки глотались .catch(() => {}), а событие всё равно
+    // помечалось «отправлено» — недоставка была невидима. Теперь при неуспехе
+    // (throw ИЛИ sendCandidateMessage вернул false, напр. истёкший hh-токен)
+    // фиксируем это как реальный сбой: лог с контекстом + видимый HR алерт
+    // (in-app notifications, severity=warning — та же таблица, что уже читает
+    // /hr; ссылка ведёт на карточку интервью) + тот же Telegram-канал компании,
+    // что используют guard-алерты (lib/messaging/guard-alert.ts). Отдельного
+    // столбца/JSONB под статус доставки в calendar_events нет — миграцию не
+    // заводим, статус живёт в notifications (сообщение полностью отражает факт).
     if (ev.candidateId) {
       const candidateText = renderReminderText("candidate", kind, sched.reminderTexts, vars)
-      await sendCandidateMessage(ev.candidateId, candidateText).catch(() => {})
+      let candidateDelivered = false
+      try {
+        candidateDelivered = await sendCandidateMessage(ev.candidateId, candidateText)
+      } catch (err) {
+        console.error("[cron/interview-reminders] candidate send threw", {
+          eventId: ev.id, companyId: ev.companyId, candidateId: ev.candidateId, kind,
+          err: err instanceof Error ? err.message : String(err),
+        })
+      }
+      if (!candidateDelivered) {
+        console.error("[cron/interview-reminders] candidate send failed (not delivered)", {
+          eventId: ev.id, companyId: ev.companyId, candidateId: ev.candidateId, kind,
+        })
+        const failTitle = `Не удалось отправить напоминание кандидату (${REMINDER_LEAD_PHRASES[kind]})`
+        const failBody  = `Интервью «${ev.title}» ${when}. Сообщение кандидату не ушло (нет активного hh-чата или сбой отправки) — свяжитесь с кандидатом другим способом.`
+        await db.insert(notifications).values({
+          tenantId:   ev.companyId,
+          userId:     ev.createdBy ?? null,
+          type:       "interview_reminder_delivery_failed",
+          title:      failTitle,
+          body:       failBody,
+          severity:   "warning",
+          sourceType: "calendar_event",
+          sourceId:   ev.id,
+          href:       "/hr/interviews?tab=calendar",
+        }).catch(err => {
+          console.error("[cron/interview-reminders] failed to record delivery-failure notification", {
+            eventId: ev.id, err: err instanceof Error ? err.message : String(err),
+          })
+        })
+        await sendToCompanyChannel(ev.companyId, `⚠️ <b>${failTitle}</b>\n${failBody}`, { parseMode: "HTML" }).catch(err => {
+          console.error("[cron/interview-reminders] delivery-failure channel alert failed", {
+            eventId: ev.id, err: err instanceof Error ? err.message : String(err),
+          })
+        })
+      }
     }
 
     // 4) Метка отправки — против повторов.
