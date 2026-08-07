@@ -6,13 +6,27 @@
 // записей в БД и отправок в hh.ru.
 
 import { useEffect, useRef, useState } from "react"
-import { Bot, Loader2, Send, Trash2, FlaskConical, AlertTriangle, X } from "lucide-react"
+import { Bot, Loader2, Send, Trash2, FlaskConical, AlertTriangle, X, UserRound } from "lucide-react"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+
+interface SandboxCandidateOption {
+  id:         string
+  name:       string | null
+  stage:      string | null
+  stageLabel: string | null
+}
 
 interface ChatMessage {
   id:               string
@@ -32,6 +46,12 @@ interface ChatMessage {
 
 interface FunnelDecision { action: string; reason: string; confidence: number }
 
+interface SandboxCandidateContext {
+  name:       string | null
+  stage:      string | null
+  stageLabel: string | null
+}
+
 interface SandboxApiResponse {
   action:            string
   reply:             string | null
@@ -42,6 +62,7 @@ interface SandboxApiResponse {
   confidence:        number | null
   escalationReason:  string | null
   funnelDecision:    FunnelDecision | null
+  candidateContext:  SandboxCandidateContext | null
   diagnostics:       Record<string, unknown>
 }
 
@@ -73,6 +94,32 @@ export function AiChatbotSandbox({
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
+
+  // Группа 37: опциональный выбор реального кандидата — песочница тогда
+  // подгружает его реальный контекст (резюме/стадия/прогресс) read-only.
+  const [candidateOptions, setCandidateOptions] = useState<SandboxCandidateOption[]>([])
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string>("")
+  const [candidateContext, setCandidateContext] = useState<SandboxCandidateContext | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/modules/hr/vacancies/${vacancyId}/ai-chatbot/sandbox-candidates`)
+      .then(res => res.ok ? res.json() : null)
+      .then((data: { candidates?: SandboxCandidateOption[] } | null) => {
+        if (!cancelled && data?.candidates) setCandidateOptions(data.candidates)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [vacancyId])
+
+  const selectCandidate = (value: string) => {
+    const v = value === "__none__" ? "" : value
+    setSelectedCandidateId(v)
+    setCandidateContext(null)
+    // Смена «собеседника» — контекст диалога больше не актуален.
+    setMessages([])
+    setInput("")
+  }
 
   // Группа 36: если последнее assistant-сообщение завершилось action=rejected,
   // ввод блокируется — в реале кандидата перевели в "Отказ" и его сообщения
@@ -106,6 +153,7 @@ export function AiChatbotSandbox({
         body:    JSON.stringify({
           message: text,
           history: messages.map(m => ({ role: m.role, content: m.content })),
+          candidateId: selectedCandidateId || undefined,
         }),
       })
       if (!res.ok) {
@@ -113,6 +161,7 @@ export function AiChatbotSandbox({
         throw new Error(data?.error || `status_${res.status}`)
       }
       const data = await res.json() as SandboxApiResponse
+      if (data.candidateContext) setCandidateContext(data.candidateContext)
 
       // Имитируем тайминги. Если есть preMessage — показываем его сначала
       // через preMessageDelayMs, потом reply. Cap-им до 8 сек на UI чтобы
@@ -164,6 +213,7 @@ export function AiChatbotSandbox({
     if (sending) return
     setMessages([])
     setInput("")
+    setCandidateContext(null)
   }
 
   return (
@@ -192,6 +242,38 @@ export function AiChatbotSandbox({
             На UI задержки cap-нуты до 8 сек для удобства тестирования (реальные могут быть больше).
           </AlertDescription>
         </Alert>
+      </div>
+
+      <div className="px-4 pt-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            Тестировать от лица кандидата (опционально):
+          </span>
+          <Select
+            value={selectedCandidateId || "__none__"}
+            onValueChange={selectCandidate}
+            disabled={sending}
+          >
+            <SelectTrigger size="sm" className="h-7 text-xs w-[220px]">
+              <SelectValue placeholder="Синтетический кандидат" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Синтетический кандидат</SelectItem>
+              {candidateOptions.map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name || "Без имени"}{c.stageLabel ? ` — ${c.stageLabel}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {candidateContext && (
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 text-violet-800 px-2.5 py-1 text-[11px]">
+            <UserRound className="w-3 h-3" />
+            Контекст: {candidateContext.name || "Без имени"}
+            {candidateContext.stageLabel ? `, стадия «${candidateContext.stageLabel}»` : ""}
+          </div>
+        )}
       </div>
 
       <div ref={scrollerRef} className="flex-1 overflow-y-auto p-4 space-y-3">

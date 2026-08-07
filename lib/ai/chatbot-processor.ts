@@ -200,6 +200,16 @@ export interface ProcessInput {
    *  задана и dryRun=true — context пустой. Если dryRun=false —
    *  игнорируется, контекст подгружается из ai_chatbot_messages. */
   sandboxHistory?: Array<{ role: "user" | "assistant"; text: string }>
+  /** Группа 37: песочница «от лица реального кандидата» (read-only).
+   *  Роут sandbox-message уже проверил, что этот candidateId принадлежит
+   *  вакансии/компании текущей сессии. Задаётся ТОЛЬКО вместе с dryRun=true —
+   *  используется исключительно чтобы подгрузить реальный контекст
+   *  (loadCandidateContext — только SELECT'ы) для system-prompt'а. Никак не
+   *  влияет на side-effect-пути (они по-прежнему гейтятся `dryRun`, не этим
+   *  полем) — запись в БД/уведомления/квоты остаются выключены. */
+  sandboxRealCandidateId?:    string
+  sandboxRealCandidateStage?: string | null
+  sandboxRealCandidateName?:  string | null
 }
 
 export interface ProcessResult {
@@ -1107,14 +1117,21 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // SAFETY_RULES прокидываются ВСЕГДА перед user-prompt'ом. Offtopic-hint
   // добавляем только на ход с offtopic — это локальная инструкция, не
   // глобальное правило.
-  // Фаза 1 «бот прозревает»: контекст кандидата (выжимка резюме + стадия) кладём
-  // в system-prompt; историю диалога передаём как полноценные turns. В sandbox
-  // (dryRun) резюме/стадии нет — берём только историю из UI.
+  // Фаза 1 «бот прозревает»: контекст кандидата (выжимка резюме + стадия +
+  // прогресс по воронке — демо/анкета/тест/интервью) кладём в system-prompt;
+  // историю диалога передаём как полноценные turns. В sandbox (dryRun) у
+  // кандидата фиктивный id — резюме/стадии/прогресса нет, берём только
+  // историю из UI (см. app/api/.../sandbox-message/route.ts).
   let candidateContextBlock = ""
-  let candCtx: CandidateContext = { resumeSummary: null, stageLabel: null }
+  let candCtx: CandidateContext = { resumeSummary: null, stageLabel: null, progress: null }
   if (!dryRun) {
     candCtx = await loadCandidateContext(candidateId, candidateStage)
     candidateContextBlock = formatCandidateContextBlock(candCtx, candidateInfo?.name ?? null)
+  } else if (input.sandboxRealCandidateId) {
+    // Группа 37: sandbox «от лица реального кандидата» — только чтение,
+    // dryRun остаётся true (см. комментарий у sandboxRealCandidateId).
+    candCtx = await loadCandidateContext(input.sandboxRealCandidateId, input.sandboxRealCandidateStage ?? null)
+    candidateContextBlock = formatCandidateContextBlock(candCtx, input.sandboxRealCandidateName ?? null)
   }
 
   // Фаза 4 «человеческое ведение»: когда HR включил автономность, разрешаем боту
