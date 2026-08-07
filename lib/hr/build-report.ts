@@ -10,6 +10,12 @@ import { getVacancyLifecycle } from "@/lib/vacancies/lifecycle"
 import { REJECTION_REASONS, REJECTION_INITIATORS, autoReasonKey, autoReasonLabel } from "@/lib/hr/rejection-reasons"
 import { PLATFORM_STAGES, ALL_STAGE_SLUGS } from "@/lib/stages"
 import { CONTACT_CHANNELS, CONTACT_OUTCOMES } from "@/lib/hr/contacts"
+import {
+  hiredEventAtSql,
+  rejectionEventAtSql,
+  demoCompletedEventAtSql,
+  autoStoppedEventAtSql,
+} from "@/lib/hr/metrics"
 
 export type ReportPeriod =
   | "today" | "yesterday"
@@ -204,14 +210,14 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
       hhFunnel:     vacancies.hhFunnelJson,
       // Платформенные подсчёты (fallback для вакансий без hh-счётчиков).
       total:        sql<number>`count(*) filter (where ${inPeriod(candidates.createdAt, from, to)})`.mapWith(Number),
-      hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired' and ${inPeriod(sql`coalesce(${candidates.hiredAt}, ${candidates.createdAt})`, from, to)})`.mapWith(Number),
-      rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} is distinct from 'candidate' and ${inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to)})`.mapWith(Number),
-      selfRejected: sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} = 'candidate' and ${inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to)})`.mapWith(Number),
+      hired:        sql<number>`count(*) filter (where ${candidates.stage} = 'hired' and ${inPeriod(hiredEventAtSql, from, to)})`.mapWith(Number),
+      rejected:     sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} is distinct from 'candidate' and ${inPeriod(rejectionEventAtSql, from, to)})`.mapWith(Number),
+      selfRejected: sql<number>`count(*) filter (where ${candidates.stage} = 'rejected' and ${candidates.rejectionInitiator} = 'candidate' and ${inPeriod(rejectionEventAtSql, from, to)})`.mapWith(Number),
       interview:    sql<number>`count(*) filter (where ${candidates.stage} in ('scheduled','interview','interviewed') and ${inPeriod(candidates.createdAt, from, to)})`.mapWith(Number),
       decision:     sql<number>`count(*) filter (where ${candidates.stage} in ('decision','final_decision') and ${inPeriod(candidates.createdAt, from, to)})`.mapWith(Number),
       // Гейт «событие было» (coalesce is not null) обязателен: без периода
       // inPeriod() = true, и без гейта в «Демо» засчитались бы ВСЕ кандидаты.
-      demoCompleted: sql<number>`count(*) filter (where coalesce((${candidates.demoProgressJson} ->> 'completedAt')::timestamptz, ${candidates.secondDemoInvitedAt}, case when ${candidates.overrideContentBlockId} is not null then ${candidates.createdAt} end) is not null and ${inPeriod(sql`coalesce((${candidates.demoProgressJson} ->> 'completedAt')::timestamptz, ${candidates.secondDemoInvitedAt}, case when ${candidates.overrideContentBlockId} is not null then ${candidates.createdAt} end)`, from, to)})`.mapWith(Number),
+      demoCompleted: sql<number>`count(*) filter (where ${demoCompletedEventAtSql} is not null and ${inPeriod(demoCompletedEventAtSql, from, to)})`.mapWith(Number),
       testDone:      sql<number>`count(*) filter (where exists (select 1 from test_submissions ts where ts.candidate_id = ${candidates.id} and ts.submitted_at is not null and ${inPeriod(sql`ts.submitted_at`, from, to)}))`.mapWith(Number),
     })
       .from(candidates)
@@ -253,7 +259,7 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
         isNull(vacancies.deletedAt),
         isNull(candidates.deletedAt),
         ...vacancyFilter,
-        inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to),
+        inPeriod(rejectionEventAtSql, from, to),
       ))
       .groupBy(candidates.rejectionReasonCategory),
 
@@ -270,7 +276,7 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
         isNull(vacancies.deletedAt),
         isNull(candidates.deletedAt),
         ...vacancyFilter,
-        inPeriod(sql`coalesce(${candidates.rejectionAt}, ${candidates.createdAt})`, from, to),
+        inPeriod(rejectionEventAtSql, from, to),
       ))
       .groupBy(candidates.rejectionInitiator),
 
@@ -330,7 +336,7 @@ async function buildReportInner(companyId: string, opts: BuildReportOptions = {}
         sql`${candidates.autoProcessingStoppedReason} is not null`,
         ...vacancyFilter,
         // Аудит 10.07: по дате события остановки (fallback created_at).
-        inPeriod(sql`coalesce(${candidates.autoProcessingStoppedAt}, ${candidates.createdAt})`, from, to),
+        inPeriod(autoStoppedEventAtSql, from, to),
       ))
       .groupBy(candidates.autoProcessingStoppedReason),
 

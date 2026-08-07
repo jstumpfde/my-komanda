@@ -100,11 +100,11 @@ const KPI_COLORS: Record<string, string> = {
   teal:    "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 sm:bg-teal-500 sm:text-white dark:sm:bg-teal-500 dark:sm:text-white",
 }
 
-function KpiCard({ icon: Icon, label, shortLabel, value, color, tv }: {
-  icon: React.ElementType; label: string; shortLabel?: string; value: number | string; color: string; tv?: boolean
+function KpiCard({ icon: Icon, label, shortLabel, value, color, tv, title }: {
+  icon: React.ElementType; label: string; shortLabel?: string; value: number | string; color: string; tv?: boolean; title?: string
 }) {
   return (
-    <div className={`rounded-xl shadow-sm hover:shadow-md transition-shadow ${tv ? "p-6" : "p-3 sm:p-4"} ${KPI_COLORS[color] ?? ""}`}>
+    <div title={title} className={`rounded-xl shadow-sm hover:shadow-md transition-shadow ${tv ? "p-6" : "p-3 sm:p-4"} ${KPI_COLORS[color] ?? ""}`}>
       <div className={`flex items-center gap-1.5 ${tv ? "mb-2" : "mb-1 sm:mb-2"}`}>
         <Icon className={tv ? "w-6 h-6" : "w-4 h-4 shrink-0"} />
         <span className={`font-semibold leading-tight ${tv ? "text-lg" : "text-xs sm:text-sm"}`}>
@@ -359,13 +359,13 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
               <th className={`${thR} px-3`}>Статус</th>
               <th className={`${thR} px-3`}>Опубл.</th>
               <th className={`${thR} px-3`}>Откликов</th>
-              <th className={`${thR} px-3`}>Демо</th>
-              <th className={`${thR} px-3`}>Тест</th>
+              <th className={`${thR} px-3`} title="Прошли демо (дата события) — определение отличается от шапки вакансии (там «демо» = открыл, здесь — завершил)">Демо</th>
+              <th className={`${thR} px-3`} title="Реально сдали тест (submitted_at), незавершённые попытки не считаются">Тест</th>
               <th className={`${thR} px-3`}>Собес.</th>
               <th className={`${thR} px-3`}>Решение</th>
-              <th className={`${thR} px-3`}>Нанято</th>
-              <th className={`${thR} px-3`}>Не подходит</th>
-              <th className={`${thR} pl-3`}>Отказался</th>
+              <th className={`${thR} px-3`} title="По дате найма (событие), не по дате отклика">Нанято</th>
+              <th className={`${thR} px-3`} title="По дате отказа (событие), не по дате отклика">Не подходит</th>
+              <th className={`${thR} pl-3`} title="По дате отказа (событие), не по дате отклика">Отказался</th>
             </tr>
           </thead>
           <tbody>
@@ -397,7 +397,7 @@ function VacancyTable({ rows, loading, tv, interactive }: { rows: VacancyRow[]; 
               <th className="text-center font-medium pb-2 px-1">Откл.</th>
               <th className="text-center font-medium pb-2 px-1">Собес.</th>
               <th className="text-center font-medium pb-2 px-1">Реш.</th>
-              <th className="text-center font-medium pb-2 pl-1">Нанято</th>
+              <th className="text-center font-medium pb-2 pl-1" title="По дате найма (событие)">Нанято</th>
             </tr>
           </thead>
           <tbody>
@@ -739,8 +739,8 @@ export function ReportView({
         <KpiCard icon={Users}        label="Откликов всего"     shortLabel="Откликов"  value={kpi?.totalCandidates ?? "—"}    color="blue"    tv={tv} />
         <KpiCard icon={CalendarDays} label="Назначено инт."     shortLabel="Назначено" value={kpi?.interviewScheduled ?? "—"} color="violet"  tv={tv} />
         <KpiCard icon={CheckCircle2} label="Проведено инт."     shortLabel="Проведено" value={kpi?.interviewConducted ?? "—"} color="indigo"  tv={tv} />
-        <KpiCard icon={UserCheck}    label="Нанято"             value={kpi?.totalHired ?? "—"}         color="teal"    tv={tv} />
-        <KpiCard icon={XCircle}      label="Отказов"            value={kpi?.totalRejected ?? "—"}      color="rose"    tv={tv} />
+        <KpiCard icon={UserCheck}    label="Нанято"             value={kpi?.totalHired ?? "—"}         color="teal"    tv={tv} title="По дате найма (событие), не по дате отклика" />
+        <KpiCard icon={XCircle}      label="Отказов"            value={kpi?.totalRejected ?? "—"}      color="rose"    tv={tv} title="По дате отказа (событие), не по дате отклика" />
       </div>
 
       {/* По вакансиям — на всю ширину, первым блоком */}
