@@ -1,12 +1,15 @@
 import { NextRequest } from "next/server"
 import { and, eq } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { vacancies } from "@/lib/db/schema"
+import { vacancies, candidates } from "@/lib/db/schema"
 import { requireCompany, apiError, apiSuccess } from "@/lib/api-helpers"
 import { processChatbotMessage, type ChatbotSettings } from "@/lib/ai/chatbot-processor"
 import { getSpec } from "@/lib/core/spec/store"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { checkAiRateLimit } from "@/lib/ai-safety"
+import { PLATFORM_STAGES, type StageSlug } from "@/lib/stages"
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Группа 33: песочница для тестирования AI чат-бота.
 // Получает текущее сообщение «от кандидата» + историю (в памяти UI),
@@ -15,8 +18,11 @@ import { checkAiRateLimit } from "@/lib/ai-safety"
 // отправки в hh.ru.
 
 interface SandboxBody {
-  message?:  string
-  history?:  Array<{ role: string; content: string }>
+  message?:     string
+  history?:     Array<{ role: string; content: string }>
+  /** Группа 37: опционально — тестировать «от лица реального кандидата»
+   *  (read-only, см. lib/ai/chatbot-processor.ts sandboxRealCandidateId). */
+  candidateId?: string
 }
 
 export async function POST(
@@ -64,6 +70,24 @@ export async function POST(
       return apiError("Сначала задайте системный промпт чат-бота", 400)
     }
 
+    // Группа 37: опциональный «от лица реального кандидата» режим.
+    // Изоляция тенанта: candidateId должен принадлежать ИМЕННО вакансии [id],
+    // которая уже проверена на companyId=user.companyId выше — значит любой
+    // чужой candidateId (или из другой компании) не пройдёт этот WHERE и
+    // вернёт 404, не раскрывая существование записи.
+    let realCandidate: { id: string; name: string | null; stage: string | null } | null = null
+    const requestedCandidateId = typeof body.candidateId === "string" ? body.candidateId.trim() : ""
+    if (requestedCandidateId) {
+      if (!UUID_RE.test(requestedCandidateId)) return apiError("Некорректный candidateId", 400)
+      const [c] = await db
+        .select({ id: candidates.id, name: candidates.name, stage: candidates.stage })
+        .from(candidates)
+        .where(and(eq(candidates.id, requestedCandidateId), eq(candidates.vacancyId, id)))
+        .limit(1)
+      if (!c) return apiError("Кандидат не найден", 404)
+      realCandidate = c
+    }
+
     // Бот-уточнение: даём HR протестировать поведение в песочнице.
     const sandboxClarify = (await getSpec(id).catch(() => null))?.botClarifyAmbiguous === true
 
@@ -106,9 +130,16 @@ export async function POST(
       },
       dryRun:         true,
       sandboxHistory,
+      sandboxRealCandidateId:    realCandidate?.id,
+      sandboxRealCandidateStage: realCandidate?.stage ?? null,
+      sandboxRealCandidateName:  realCandidate?.name ?? null,
     })
 
     const settings = (vacancy.aiChatbotSettings ?? {}) as ChatbotSettings
+
+    const realCandidateStageLabel = realCandidate?.stage
+      ? (PLATFORM_STAGES[realCandidate.stage as StageSlug]?.defaultLabel ?? realCandidate.stage)
+      : null
 
     return apiSuccess({
       action:           result.action,
@@ -122,6 +153,11 @@ export async function POST(
       // Фаза 2 (наблюдение): что бот РЕШИЛ БЫ сделать по воронке (если включена
       // автономность). Пока не исполняется — для проверки решений в песочнице.
       funnelDecision:   result.funnelDecision ?? null,
+      candidateContext: realCandidate ? {
+        name:       realCandidate.name,
+        stage:      realCandidate.stage,
+        stageLabel: realCandidateStageLabel,
+      } : null,
       diagnostics: {
         promptLength:    (vacancy.aiChatbotPrompt ?? "").length,
         triggers:        settings.triggers ?? {},
