@@ -28,6 +28,7 @@ import { startPrequalification } from "@/lib/prequalification/start"
 import { renderTemplate } from "@/lib/template-renderer"
 import type { FunnelV2State } from "@/lib/db/schema"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
+import { sanitizeRejectionText } from "@/lib/rejection/legal-guard"
 
 // ── Минимальные срезы строк БД, чтобы не тащить весь Drizzle InferSelect ───────
 
@@ -119,7 +120,14 @@ async function sendHhMessageToCandidate(
       // null = «не менять»: текст уходит, hh-папка не трогается.
       const action = hhActionForStatus(hhStatus)
       if (action) {
-        await changeNegotiationState(tokenResult.accessToken, hhRow.hhResponseId, action, text, undefined, undefined, companyId)
+        // Аудит 10.07: этот путь — единственный в funnel-v2, где ЛЮБОЙ
+        // stage-текст (обычное «message»-касание, не выделенный reject-путь
+        // score-gate/stage-completion-handler) может уйти вместе с
+        // action="discard" (HR настроил hhStatus стадии на «отказ»). Без
+        // юр-фильтра такой текст обходил sanitizeRejectionText — прикрываем
+        // здесь же, единой точкой всех discard-вызовов этого файла.
+        const outText = action === "discard" ? (sanitizeRejectionText(text) ?? text) : text
+        await changeNegotiationState(tokenResult.accessToken, hhRow.hhResponseId, action, outText, undefined, undefined, companyId)
       } else {
         await sendNegotiationMessage(tokenResult.accessToken, hhRow.hhResponseId, text, companyId)
       }

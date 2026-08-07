@@ -275,11 +275,18 @@ export async function POST(
     }
 
     // Fallback: нет кандидата с таким токеном — создаём нового.
-    // Берём первую активную вакансию из demos (исторический fallback).
+    // Берём вакансию из demos (исторический fallback, только для
+    // неаутентифицированного крафтового запроса без валидного токена —
+    // обычный путь всегда резолвится через `existing` выше). Раньше
+    // .limit(1) без order by брал первую попавшуюся демо-запись всей
+    // платформы в недетерминированном порядке — детерминируем по
+    // createdAt, чтобы поведение не плавало между вызовами; это не
+    // расширяет доступ (ветка и раньше писала в первую demos-запись).
     const [demo] = await db
       .select({ vacancyId: demos.vacancyId })
       .from(demos)
       .where(eq(demos.kind, "demo"))
+      .orderBy(demos.createdAt)
       .limit(1)
 
     if (!demo?.vacancyId) {
@@ -288,102 +295,36 @@ export async function POST(
 
     // Дедупликация: тот же человек мог уже быть импортирован
     // с hh, но открыл публичную демо-ссылку другим путём. Прежде чем
-    // создавать новую карточку — ищем существующую ТОЛЬКО по
-    // (vacancy_id, email). Телефон намеренно исключён — см. блок ⚠ IDOR
-    // ниже и memory apply-fallback-idor-p0.
+    // создавать новую карточку — проверяем, нет ли уже кандидата
+    // с этим email на этой вакансии.
+    //
+    // ⚠ IDOR ЗАКРЫТ 07.08 (P0, predeploy-guard 14.07 blocker): раньше при
+    // совпадении этот fallback ПЕРЕЗАПИСЫВАЛ PII/анкету/стадию найденного
+    // кандидата данными из НЕаутентифицированного запроса и возвращал его
+    // внутренний UUID вызывающему (→ ?c=<uuid>-bounce на чужую личную
+    // страницу). Модель исправлена на безопасную, как в
+    // /api/public/start/[token]: при совпадении по email мы НИЧЕГО не
+    // читаем из найденной карточки и НИЧЕГО в неё не пишем (ни PII, ни
+    // surveyResponses, ни стадию, ни v2/легаси хуки) — только факт "уже
+    // существует" определяет, что новую карточку создавать не нужно.
+    // Ответ — нейтральный success той же формы, что у обычного сабмита,
+    // но БЕЗ id (клиент demo-client.tsx id из ответа не использует —
+    // читает только v2PassScreen).
     const emailNorm = normalizeEmail(body.email)
     const dupConds = []
-    // ⚠ IDOR (predeploy-guard 14.07, blocker): этот fallback при совпадении
-    // ПЕРЕЗАПИСЫВАЕТ PII найденного кандидата данными из формы и возвращает его
-    // внутренний UUID неаутентифицированному вызывающему (→ ?c=-bounce на чужую
-    // личную страницу). Телефон/почта — НЕ секрет, значит матч по ним = дыра.
-    // Дедуп по ТЕЛЕФОНУ здесь НЕ включаем (раньше он молча не работал из-за
-    // '\D'-готчи; чинить его = расширять IDOR). Почтовый матч оставлен как был
-    // на проде (не расширяем и не сужаем этим деплоем). Полное закрытие —
-    // отдельная P0-задача: перевести весь fallback на безопасную модель /start
-    // (нейтральный ответ, без перезаписи и без выдачи id). Безопасная
-    // самоидентификация кандидата теперь есть в /api/public/start/[token].
     if (emailNorm) {
       dupConds.push(sql`lower(trim(coalesce(${candidates.email}, ''))) = ${emailNorm}`)
     }
     const [dup] = dupConds.length > 0
       ? await db
-          .select({
-            id:            candidates.id,
-            stage:         candidates.stage,
-            stageHistory:  candidates.stageHistory,
-            referralUuids: candidates.referralUuids,
-            consentAt:     candidates.consentAt,
-            hhResumeId:    hhCandidates.hhResumeId,
-          })
+          .select({ id: candidates.id })
           .from(candidates)
-          .leftJoin(hhCandidates, eq(hhCandidates.candidateId, candidates.id))
           .where(and(eq(candidates.vacancyId, demo.vacancyId), or(...dupConds)))
           .limit(1)
       : []
 
     if (dup) {
-      const now    = new Date().toISOString()
-      const currentStage = dup.stage ?? "new"
-      const stageHistory = (dup.stageHistory as StageHistoryEntry[] | null) || []
-      const refs   = (dup.referralUuids as string[] | null) ?? []
-      const refsNext = refs.includes(token) ? refs : [...refs, token]
-      const isFromHh = !!dup.hhResumeId
-
-      const updates: Record<string, unknown> = {
-        surveyResponses,
-        referralUuids: refsNext,
-        updatedAt:     new Date(),
-      }
-      if (!isFromHh) {
-        updates.name  = `${body.firstName} ${body.lastName}`
-        updates.email = body.email
-        updates.phone = body.phone
-        updates.city  = body.city || null
-      }
-      // 152-ФЗ: как и в основной ветке — только первое согласие.
-      if (consentGiven && !dup.consentAt) {
-        updates.consentAt = new Date()
-        updates.consentDocVersion = await resolveHrPolicyVersion(demo.vacancyId)
-      }
-      if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
-        updates.stage = "anketa_filled"
-        updates.stageHistory = [
-          ...stageHistory,
-          { from: currentStage, to: "anketa_filled", at: now, reason: "anketa_submitted_dedup" },
-        ]
-      }
-
-      await db.update(candidates).set(updates).where(eq(candidates.id, dup.id))
-
-      // F2/F3 (dedup-ветка): легаси и v2 — ВЗАИМОИСКЛЮЧАЮЩИЕ (см. основную ветку).
-      // При активном v2 — только v2 (ждём исход синхронно, с таймаутом); иначе
-      // легаси (с прежним условием по стадии, fire-and-forget).
-      let dupV2PassScreen: { title: string; text: string } | null = null
-      try {
-        const [vac] = await db
-          .select({ funnelV2RuntimeEnabled: vacancies.funnelV2RuntimeEnabled, funnelV2StateJson: candidates.funnelV2StateJson })
-          .from(vacancies)
-          .innerJoin(candidates, eq(candidates.vacancyId, vacancies.id))
-          .where(eq(candidates.id, dup.id))
-          .limit(1)
-        if (vac?.funnelV2RuntimeEnabled && vac?.funnelV2StateJson) {
-          const outcome = await withTimeout(onAnketaCompleted(dup.id), V2_ANKETA_OUTCOME_TIMEOUT_MS)
-          if (outcome && (outcome.type === "advanced" || outcome.type === "completed")) {
-            dupV2PassScreen = await buildV2PassScreen(demo.vacancyId)
-          }
-        } else if (!FINAL_STAGES.has(currentStage) && ANKETA_ELIGIBLE.has(currentStage)) {
-          void scheduleAnketaAutoReply({ candidateId: dup.id, vacancyId: demo.vacancyId })
-        }
-      } catch (err) {
-        console.error("[demo/apply] анкета авто-ответ dedup (v2/легаси) упал:", err instanceof Error ? err.message : err)
-      }
-
-      return NextResponse.json(
-        dupV2PassScreen
-          ? { success: true, id: dup.id, deduplicated: true, v2PassScreen: dupV2PassScreen }
-          : { success: true, id: dup.id, deduplicated: true }
-      )
+      return NextResponse.json({ success: true, deduplicated: true })
     }
 
     // 152-ФЗ: редакция политики — по компании вакансии, к которой создаём кандидата.

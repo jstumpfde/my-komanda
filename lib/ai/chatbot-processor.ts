@@ -29,7 +29,7 @@ import { callClaudeHaikuWithUsage, callClaudeSonnetMessagesWithUsage, type ChatT
 import { addVacancyTokens } from "@/lib/ai/token-usage"
 import { loadCandidateContext, formatCandidateContextBlock, type CandidateContext } from "@/lib/ai/candidate-context"
 import { decideFunnelNextStep, allowedActionsFromAutonomy, type FunnelDecision } from "@/lib/ai/funnel-decision"
-import { matchStopWordWith } from "@/lib/followup/stop-words"
+import { matchStopWordWith, matchStopWordList } from "@/lib/followup/stop-words"
 import { getBaselineStopWords } from "@/lib/followup/effective-stop-words"
 import { createNotification } from "@/lib/notifications"
 import { sendTelegramAlert } from "@/lib/notifications/telegram"
@@ -909,19 +909,23 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // 0g. mild_negativity / normal — стандартный пайплайн.
 
   // 1. Стоп-слова перебивают AI: без AI-вызова. Источник — список вакансии
-  //    (stopWordsJson из Портрета), с фолбэком на платформенный baseline,
-  //    если список пуст (фикс 02.07: раньше всегда читался baseline и список
-  //    Портрета игнорировался при включённом боте).
-  //    Реакция на срабатывание — настраиваемая (Юрий 02.07, единый блок
-  //    «Автоответы кандидату»): дефолт 'none' — стадию НЕ трогаем вообще,
-  //    только прощальное сообщение (если текст задан). Опт-ин на автопереход —
+  //    (stopWordsJson из Портрета) ОБЪЕДИНЁННЫЙ с платформенным baseline
+  //    (аудит 10.07: раньше кастомный список ЗАМЕЩАЛ baseline целиком — при
+  //    заданном кастомном списке, а он задан почти всегда, «не хочу»/
+  //    «нашел работу» из baseline переставали ловиться). Реакция на
+  //    срабатывание — настраиваемая (Юрий 02.07, единый блок «Автоответы
+  //    кандидату»): дефолт 'none' — стадию НЕ трогаем вообще, только
+  //    прощальное сообщение (если текст задан). Опт-ин на автопереход —
   //    'candidate_declined' (rejectionInitiator='candidate', «Сам отказ.» в
   //    отчёте) или 'reject' (обычный отказ работодателя, старое поведение).
   const vacStopWords = Array.isArray(vacancy.stopWordsJson)
     ? vacancy.stopWordsJson.filter((s): s is string => typeof s === "string")
     : []
-  const effectiveStopWords = vacStopWords.length > 0 ? vacStopWords : await getBaselineStopWords()
-  if (stopwordsOn && matchStopWordWith(incomingText, effectiveStopWords)) {
+  const stopWordHit = stopwordsOn && (
+    (vacStopWords.length > 0 && matchStopWordList(incomingText, vacStopWords) !== null)
+    || matchStopWordWith(incomingText, await getBaselineStopWords())
+  )
+  if (stopWordHit) {
     const stageAction = readStopWordStageAction(vacancy.stopWordStageAction)
     const farewellText = resolveStopWordFarewellText(vacancy.stopWordFarewellText)
     let farewellRendered: string | undefined
