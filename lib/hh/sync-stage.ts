@@ -22,6 +22,7 @@ import { renderTemplate } from "@/lib/template-renderer"
 import { rejectMessageVars } from "@/lib/funnel-v2/reject-vars"
 import { getAppBaseUrl } from "@/lib/funnel-v2/base-url"
 import { sanitizeRejectionText } from "@/lib/rejection/legal-guard"
+import { createNotification } from "@/lib/notifications"
 
 interface CandidateContext {
   id:        string
@@ -110,6 +111,37 @@ async function loadContext(candidateId: string): Promise<{
 }
 
 /**
+ * Аудит 10.07 «отказы в никуда»: раньше сбой синка в hh (исключение внутри
+ * trySync*ToHh) уходил только в console.warn — кандидат считался обработанным
+ * локально, а hh-чат оставался нетронутым без единого видимого следа.
+ * Оставляет след в notifications (та же таблица/канал, что уже показывает HR
+ * hh_reject_sync_failed из lib/rejection/execute.ts) — HR видит бейдж/уведомление
+ * и может закрыть действие на hh руками. Fire-and-forget, не бросает исключений
+ * (createNotification сам глотает свои ошибки) — не должно ронять caller.
+ */
+async function notifyHhSyncFailure(candidateId: string, action: string, errMsg: string): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ name: candidates.name, companyId: vacancies.companyId, vacancyTitle: vacancies.title })
+      .from(candidates)
+      .innerJoin(vacancies, eq(vacancies.id, candidates.vacancyId))
+      .where(eq(candidates.id, candidateId))
+      .limit(1)
+    if (!row?.companyId) return
+    await createNotification({
+      tenantId:   row.companyId,
+      type:       "hh_sync_failed",
+      title:      `⚠️ Действие не ушло на hh: ${row.name ?? "кандидат"}`,
+      body:       `${row.vacancyTitle ?? ""} · ${action} — сбой синка с hh (${errMsg}). Проверьте hh-чат вручную.`,
+      severity:   "warning",
+      href:       `/hr/candidates/${candidateId}`,
+      sourceType: "candidate",
+      sourceId:   candidateId,
+    })
+  } catch { /* след не должен ронять сам вызов */ }
+}
+
+/**
  * Отправляет в hh «отказ» (discard_by_employer) с шаблоном из
  * vacancies.ai_process_settings.rejectMessage. Вернёт false если
  * кандидат не привязан к hh-отклику или нет валидного токена —
@@ -160,6 +192,7 @@ export async function trySyncRejectToHh(candidateId: string, customMessage?: str
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[hh:sync-stage] reject failed for cand ${candidateId}: ${msg}`)
+    void notifyHhSyncFailure(candidateId, "отказ (discard)", msg)
     return false
   }
 }
@@ -198,6 +231,7 @@ export async function trySyncInviteToHh(candidateId: string): Promise<boolean> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[hh:sync-stage] invite failed for cand ${candidateId}: ${msg}`)
+    void notifyHhSyncFailure(candidateId, "приглашение (invitation)", msg)
     return false
   }
 }
@@ -220,6 +254,7 @@ export async function trySyncTestStageToHh(candidateId: string): Promise<boolean
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[hh:sync-stage] assessment failed for cand ${candidateId}: ${msg}`)
+    void notifyHhSyncFailure(candidateId, "тестовое задание (assessment)", msg)
     return false
   }
 }
@@ -313,6 +348,7 @@ export async function trySyncStageToHh(candidateId: string, newStage: string): P
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[hh:sync-stage] stage-sync failed for cand ${candidateId} stage=${newStage}: ${msg}`)
+    void notifyHhSyncFailure(candidateId, `смена стадии (${newStage})`, msg)
     return false
   }
 }
