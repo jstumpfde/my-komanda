@@ -4,6 +4,8 @@ import type { BigLifeCover } from "@/lib/db/schema"
 // Дизайн-система и разметка — 1:1 с существующими Big Life .dc.html
 // страницами (шапка/футер/шрифты скопированы верстальщиком вручную при
 // первой генерации 09.07.2026), здесь только карточки данные-управляемые.
+// Шрифты — self-hosted: /fonts/fonts.css должен лежать в докруте biglife
+// (зеркало Google css2, деGoogle 11.07.2026; Google Fonts ограничен в РФ).
 
 function esc(s: string | null | undefined): string {
   if (!s) return ""
@@ -59,9 +61,7 @@ export function renderCoversPage(rows: BigLifeCover[]): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,600;0,6..96,700;0,6..96,800;0,6..96,900;1,6..96,400;1,6..96,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Great+Vibes&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/fonts/fonts.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
