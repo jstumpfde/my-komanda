@@ -1107,11 +1107,13 @@ export async function processChatbotMessage(input: ProcessInput): Promise<Proces
   // SAFETY_RULES прокидываются ВСЕГДА перед user-prompt'ом. Offtopic-hint
   // добавляем только на ход с offtopic — это локальная инструкция, не
   // глобальное правило.
-  // Фаза 1 «бот прозревает»: контекст кандидата (выжимка резюме + стадия) кладём
-  // в system-prompt; историю диалога передаём как полноценные turns. В sandbox
-  // (dryRun) резюме/стадии нет — берём только историю из UI.
+  // Фаза 1 «бот прозревает»: контекст кандидата (выжимка резюме + стадия +
+  // прогресс по воронке — демо/анкета/тест/интервью) кладём в system-prompt;
+  // историю диалога передаём как полноценные turns. В sandbox (dryRun) у
+  // кандидата фиктивный id — резюме/стадии/прогресса нет, берём только
+  // историю из UI (см. app/api/.../sandbox-message/route.ts).
   let candidateContextBlock = ""
-  let candCtx: CandidateContext = { resumeSummary: null, stageLabel: null }
+  let candCtx: CandidateContext = { resumeSummary: null, stageLabel: null, progress: null }
   if (!dryRun) {
     candCtx = await loadCandidateContext(candidateId, candidateStage)
     candidateContextBlock = formatCandidateContextBlock(candCtx, candidateInfo?.name ?? null)
