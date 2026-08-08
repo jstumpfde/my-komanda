@@ -20,7 +20,10 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
 import { db } from "@/lib/db"
+
+const CRON_NAME = "avito-incoming-messages"
 import { avitoIntegrations } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { getAvitoToken } from "@/lib/channels/avito"
@@ -35,6 +38,7 @@ const LOOKBACK_MINUTES = 20
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
+  const run = await startCronRun(CRON_NAME).catch(() => null)
 
   try {
     // Берём все активные Авито-интеграции.
@@ -144,10 +148,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (run) await finishCronRun(run.id, "ok", { integrations: totalResult.integrations, processed: totalResult.processed })
     return NextResponse.json({ ok: true, ...totalResult })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error("[cron/avito-incoming-messages]", msg)
+    if (run) await finishCronRun(run.id, "error", null, msg)
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
   }
 }
