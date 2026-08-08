@@ -26,11 +26,15 @@ import { db } from "@/lib/db"
 import { hhIntegrations } from "@/lib/db/schema"
 import { refreshAccessToken } from "@/lib/hh-api"
 import { checkCronAuth } from "@/lib/cron/auth"
+import { startCronRun, finishCronRun } from "@/lib/cron/record-run"
+
+const CRON_NAME = "hh-token-refresh"
 
 export async function POST(req: NextRequest) {
   const auth = checkCronAuth(req)
   if (!auth.ok) return auth.response
 
+  const run = await startCronRun(CRON_NAME).catch(() => null)
   const now = Date.now()
 
   // Только активные интеграции с УЖЕ истёкшим токеном — hh не даёт обновить
@@ -75,5 +79,6 @@ export async function POST(req: NextRequest) {
 
   const summary = { tag: "cron/hh-token-refresh", checked: rows.length, refreshed, failed, ts: new Date(now).toISOString() }
   console.log(JSON.stringify(summary))
+  if (run) await finishCronRun(run.id, "ok", { checked: rows.length, refreshed, failed })
   return NextResponse.json({ ok: true, ...summary })
 }
