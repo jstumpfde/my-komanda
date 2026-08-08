@@ -106,6 +106,19 @@ function ruBirthToIso(s: string): string {
   return `${m[3]}-${m[2]}-${m[1]}`
 }
 
+// Применяет маску +7 (XXX) XXX-XX-XX: оставляет только цифры, ведущая 8 → 7.
+function maskPhoneRu(input: string): string {
+  let digits = input.replace(/\D/g, "")
+  if (digits.startsWith("8")) digits = "7" + digits.slice(1)
+  digits = digits.slice(0, 11)
+  if (!digits) return ""
+  if (digits.length <= 1) return "+" + digits
+  if (digits.length <= 4) return `+${digits[0]} (${digits.slice(1)}`
+  if (digits.length <= 7) return `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4)}`
+  if (digits.length <= 9) return `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+  return `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`
+}
+
 // Применяет маску ДД.ММ.ГГГГ: оставляет только цифры, расставляет точки.
 function maskBirthDateRu(input: string): string {
   const digits = input.replace(/\D/g, "").slice(0, 8)
@@ -1655,7 +1668,16 @@ export default function DemoPage() {
                     {fieldPhone.enabled && (
                       <div className="space-y-1">
                         <Label className={labelClass}>Телефон {requiredMark(fieldPhone.required)}</Label>
-                        <Input value={formPhone} onChange={e => setFormPhone(e.target.value)} placeholder="+7 (999) 123-45-67" className={inputClass} style={inputStyle} />
+                        <Input
+                          value={formPhone}
+                          onChange={e => setFormPhone(maskPhoneRu(e.target.value))}
+                          placeholder="+7 (999) 123-45-67"
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={18}
+                          className={inputClass}
+                          style={inputStyle}
+                        />
                       </div>
                     )}
                     {fieldTelegram.enabled && (
